@@ -1191,7 +1191,7 @@ function loadMetars() {
   if(!document.getElementById('oMetar').checked) return;
   var CAT = {VFR:'#43a047',MVFR:'#1565c0',IFR:'#e53935',LIFR:'#ab47bc'};
   var ids = 'RJTT,ROAH,RCTP,VVDN,VTBS,VTBD,VHHH,RPLL,YSSY,YMML,PGUM,WSSS,AYPY';
-  fetch('https://aviationweather.gov/api/data/metar?ids='+ids+'&format=json')
+  fetch('https://aviationweather.gov/api/data/metar?ids='+ids+'&format=json&hours=2')
     .then(function(r){return r.json();})
     .then(function(d){
       d.forEach(function(m){
