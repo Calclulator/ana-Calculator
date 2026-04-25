@@ -1,0 +1,1417 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>AJX Calculator v2.5</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#0a0c16;color:#cfd8dc;font-family:'Courier New',monospace;font-size:12px;height:100vh;overflow:hidden;}
+  #tab-bar{background:#060810;border-bottom:1px solid #1e2a38;display:flex;gap:0;flex-shrink:0;}
+  .tab-btn{padding:6px 18px;background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;color:#546e7a;font-family:'Courier New',monospace;font-size:12px;letter-spacing:.05em;}
+  .tab-btn:hover{color:#90a4ae;}
+  .tab-btn.active{color:#4fc3f7;border-bottom-color:#4fc3f7;}
+  #panels{display:flex;flex-direction:column;height:calc(100vh - 30px);}
+  .panel{display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
+  .panel.active{display:flex;}
+  .bar{background:#0d1117;border-bottom:1px solid #1e2a38;padding:4px 8px;display:flex;flex-wrap:wrap;align-items:center;gap:5px;flex-shrink:0;}
+  .lbl{color:#546e7a;font-size:10px;letter-spacing:.06em;white-space:nowrap;}
+  .btn{font-size:11px;font-family:inherit;padding:2px 8px;background:transparent;border:1px solid #2a3a4e;border-radius:3px;cursor:pointer;color:#90a4ae;}
+  .btn:hover{background:#1e2a38;color:#cfd8dc;}
+  .btn.on{background:#0d2a3e;border-color:#1565c0;color:#4fc3f7;}
+  .btn.go{background:#1a3a1a;border-color:#2e7d32;color:#66bb6a;font-size:13px;padding:4px 14px;}
+  select.btn{padding:2px 4px;}
+  .ck{display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#90a4ae;}
+  .ck input{margin:0;cursor:pointer;width:12px;height:12px;accent-color:#4fc3f7;}
+  #fpl-wrap{background:#060a12;border-bottom:1px solid #1e2a38;display:none;padding:6px 8px;flex-direction:column;gap:6px;flex-shrink:0;}
+  #fpl-wrap textarea{width:100%;height:100px;background:#030608;border:1px solid #1e2a38;border-radius:3px;color:#90a4ae;font-family:inherit;font-size:11px;padding:5px 7px;resize:vertical;line-height:1.5;}
+  #fpl-wrap textarea:focus{outline:none;border-color:#1565c0;color:#cfd8dc;}
+  #map-wrap{position:relative;flex:1;min-height:0;}
+  #map{height:100%;width:100%;background:#080a12;}
+  #vleg{position:absolute;right:8px;top:10px;z-index:900;background:rgba(8,10,20,.92);border:1px solid #1e2a38;border-radius:4px;padding:6px 24px 6px 5px;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:2px;}
+  #statusbar{background:#080a12;border-top:1px solid #1a2535;padding:3px 8px;display:flex;flex-wrap:wrap;gap:12px;font-size:10px;color:#546e7a;flex-shrink:0;}
+  #msg{color:#ffa726;}
+  #ac-lbl{color:#4fc3f7;}
+  /* Flight Plan */
+  .fp-wrap{flex:1;overflow-y:auto;}
+  .fp-table{width:100%;border-collapse:collapse;font-size:11px;}
+  .fp-table th{background:#0d1117;color:#546e7a;font-weight:normal;padding:5px 8px;text-align:left;border-bottom:1px solid #1e2a38;position:sticky;top:0;white-space:nowrap;z-index:10;}
+  .fp-table td{padding:3px 6px;border-bottom:.5px solid #0f1825;vertical-align:middle;white-space:nowrap;}
+  .fp-table tr:hover td{background:#0d1a28;}
+  .fp-in{background:transparent;border:none;border-bottom:.5px solid #1e2a38;color:#cfd8dc;font-family:'Courier New',monospace;font-size:11px;padding:1px 3px;width:56px;}
+  .fp-in:focus{outline:none;border-bottom-color:#4fc3f7;background:#060a14;}
+  .fp-in::placeholder{color:#2a3a4e;}
+  .fp-note{width:90px;}
+  .dp{color:#66bb6a;}
+  .dn{color:#ef5350;}
+  .leaflet-tooltip.wxt{background:rgba(6,8,18,.94)!important;border:.5px solid rgba(79,195,247,.35)!important;color:#e0f7fa!important;font-family:'Courier New',monospace!important;font-size:10px!important;padding:2px 6px!important;border-radius:2px!important;box-shadow:none!important;white-space:pre;}
+  .leaflet-tooltip.wxt::before{display:none!important;}
+  .leaflet-tooltip.wxt-wp{background:rgba(6,8,18,.88)!important;border:.5px solid rgba(79,195,247,.25)!important;color:#b0bec5!important;font-family:'Courier New',monospace!important;font-size:9px!important;padding:1px 4px!important;border-radius:2px!important;box-shadow:none!important;}
+  .leaflet-tooltip.wxt-wp::before{display:none!important;}
+  .leaflet-tooltip.sgx{background:rgba(18,4,4,.94)!important;border:.5px solid rgba(239,83,80,.4)!important;color:#ffcdd2!important;font-family:monospace!important;font-size:10px!important;padding:2px 6px!important;border-radius:2px!important;box-shadow:none!important;}
+  .leaflet-tooltip.sgx::before{display:none!important;}
+  .leaflet-control-zoom a{background:#0d1117!important;color:#90a4ae!important;border-color:#2a3a4e!important;}
+  @media print{
+    #tab-bar,.bar,#fpl-wrap,#statusbar{display:none!important;}
+    #wx-panel{display:none!important;}
+    #fp-panel{display:flex!important;}
+    .fp-wrap{overflow:visible!important;}
+    body{background:white!important;color:black!important;}
+    .fp-table th{background:#eee!important;color:#333!important;}
+    .fp-table td{color:#000!important;}
+  }
+</style>
+</head>
+<body>
+
+<div id="tab-bar">
+  <button class="tab-btn active" id="tab-wx" onclick="showTab('wx')">⛅ Weather Radar</button>
+  <button class="tab-btn" id="tab-fp" onclick="showTab('fp')">📋 Flight Plan</button>
+</div>
+
+<div id="panels">
+
+<!-- ===== WEATHER RADAR ===== -->
+<div id="wx-panel" class="panel active">
+
+  <!-- BAR1: メイン -->
+  <div class="bar">
+    <span style="color:#4fc3f7;font-size:13px;font-weight:bold;letter-spacing:.1em;">AJX WX</span>
+    <span style="color:#546e7a;font-size:10px;">v2.5</span>
+    <span id="route-lbl" style="color:#78909c;font-size:11px;margin:0 6px;">----→----</span>
+    <label class="ck"><input type="checkbox" id="dep" onchange="onDep(this)"> Flight has departed</label>
+    <button class="btn" onclick="map.zoomOut()">−</button>
+    <button class="btn" onclick="map.zoomIn()">＋</button>
+    <button class="btn" onclick="frameRoute()">Frame</button>
+    <button class="btn" onclick="refreshAll()">Now</button>
+    <span class="lbl" style="margin-left:6px;">SAT</span>
+    <select id="satSel" class="btn" onchange="loadSat(this.value)" style="max-width:210px;">
+      <option value="himawari">Himawari-9（アジア太平洋）</option>
+      <option value="rainviewer-radar">RainViewer Radar</option>
+      <option value="bom-radar">BOM Radar</option>
+      <option value="himawari-fd-vis">Himawari-9 可視光</option>
+      <option value="himawari-fd-wv">Himawari-9 水蒸気</option>
+      <option value="himawari-fd-sandwich">Himawari-9 雲頂強調</option>
+      <option value="iem-nexrad">NEXRAD Radar (US)</option>
+      <option value="none">衛星なし</option>
+    </select>
+    <span class="lbl">透過度</span>
+    <input type="range" id="satOp" min="0" max="100" value="80" step="5"
+           style="width:65px;" oninput="setSatOp(this.value)" onchange="setSatOp(this.value)">
+    <span id="satOpV" style="font-size:10px;min-width:26px;">80%</span>
+    <select id="baseSel" class="btn" onchange="setBase(this.value)">
+      <option value="dark">Dark</option>
+      <option value="sat">Satellite</option>
+      <option value="light">Light</option>
+    </select>
+    <label class="ck" style="margin-left:auto;">
+      <span class="lbl">LOW-BW</span>
+      <input type="checkbox" id="lowbw" onchange="toggleBw()" style="margin-left:3px;">
+    </label>
+  </div>
+
+  <!-- BAR2: SAT時刻スライダー -->
+  <div class="bar">
+    <span class="lbl">SAT TIME</span>
+    <input type="range" id="satTimeSlider" min="0" max="18" value="0" step="1"
+           style="width:120px;" oninput="onSatTimeSlide(this.value)">
+    <span id="satTimeLbl" style="font-size:10px;color:#4fc3f7;min-width:90px;">最新</span>
+    <button class="btn" onclick="onSatTimeLatest()" style="margin-left:4px;">最新</button>
+    <button class="btn" id="satPlayBtn" onclick="toggleSatPlay()" style="margin-left:2px;">▶</button>
+    <span class="lbl" style="margin-left:12px;">TURB FL</span>
+    <select id="flSel" class="btn" onchange="drawRoute()" style="max-width:80px;">
+      <option value="45">FL450</option>
+      <option value="43">FL430</option>
+      <option value="41">FL410</option>
+      <option value="39">FL390</option>
+      <option value="37">FL370</option>
+      <option value="35" selected>FL350</option>
+      <option value="34">FL340</option>
+      <option value="33">FL330</option>
+      <option value="31">FL310</option>
+      <option value="29">FL290</option>
+    </select>
+  </div>
+
+  <!-- BAR3: NAV LOG -->
+  <div class="bar">
+    <span class="lbl">NAV LOG</span>
+    <button class="btn" id="fplToggle" onclick="toggleFpl()">▼ 展開して貼り付け</button>
+    <span id="fpl-info" style="font-size:10px;color:#4fc3f7;margin-left:6px;"></span>
+  </div>
+  <div id="fpl-wrap">
+    <textarea id="fpl-txt"
+      placeholder="ナブログテキストをここに貼り付け&#10;機番・機材・ウェイポイント・ETOPS代替空港（RALT/行）・ETPを自動解析します"></textarea>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <button class="btn go" onclick="runParse()">▶ 解析する</button>
+      <button class="btn" onclick="clearFpl()">✕ クリア</button>
+      <span id="parse-result" style="font-size:10px;color:#66bb6a;margin-left:4px;"></span>
+    </div>
+  </div>
+
+  <!-- BAR4: OVERLAYS -->
+  <div class="bar">
+    <span class="lbl">OVERLAYS</span>
+    <label class="ck"><input type="checkbox" id="oEtops" checked onchange="drawEtops()"> ETOPS rings</label>
+    <select id="etopsSel" class="btn" onchange="drawEtops()" style="max-width:170px;">
+      <option value="NH8A">NH8A 435/1252NM</option>
+      <option value="NH8C">NH8C 429/1237NM</option>
+      <option value="NH9K">NH9K 431/1248NM</option>
+      <option value="NH9D">NH9D 420/1210NM</option>
+      <option value="NHXK">NHXK 431/1248NM</option>
+    </select>
+    <label class="ck"><input type="checkbox" id="oGlide" onchange="updateGlide()"> Glide (B787)</label>
+    <label class="ck"><input type="checkbox" id="oFir" checked onchange="drawFir()"> FIR</label>
+    <label class="ck"><input type="checkbox" id="oSig" checked onchange="loadSigmets()"> SIGMETs</label>
+    <label class="ck"><input type="checkbox" id="oTurb" checked onchange="drawRoute()"> Turbulence corridor</label>
+    <label class="ck"><input type="checkbox" id="oMetar" onchange="loadMetars()"> METAR</label>
+    <span class="lbl" style="margin-left:8px;">回避</span>
+    <button class="btn" id="avoidL" onclick="setAvoidSide('L')" style="padding:2px 6px;">L</button>
+    <button class="btn" id="avoidR" onclick="setAvoidSide('R')" style="padding:2px 6px;">R</button>
+    <input type="number" id="avoidNm" min="1" max="200" placeholder="NM"
+           style="width:52px;background:transparent;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:inherit;font-size:11px;padding:2px 4px;"
+           oninput="drawAvoidLine()">
+    <span id="sat-lbl" style="margin-left:auto;font-size:10px;color:#546e7a;"></span>
+  </div>
+
+  <!-- MAP -->
+  <div id="map-wrap">
+    <div id="map"></div>
+    <div id="vleg">
+      <div style="font-size:9px;color:#78909c;margin-bottom:2px;">VWS</div>
+      <div style="position:relative;width:14px;height:80px;">
+        <div style="width:14px;height:80px;
+             background:linear-gradient(to bottom,#b71c1c,#e53935 15%,#fb8c00 35%,#fdd835 55%,#43a047 75%,#1565c0);
+             border-radius:2px;"></div>
+        <div style="position:absolute;left:18px;top:0;font-size:8px;color:#999;white-space:nowrap;line-height:1;">
+          <div style="color:#e53935;margin-bottom:9px;">&gt;6</div>
+          <div style="color:#fb8c00;margin-bottom:9px;">4-6</div>
+          <div style="color:#fdd835;margin-bottom:9px;">2-4</div>
+          <div style="color:#43a047;">0-2</div>
+        </div>
+      </div>
+      <div id="rvsm-panel" style="margin-top:8px;pointer-events:auto;width:44px;"></div>
+    </div>
+  </div>
+
+  <div id="statusbar">
+    <span id="coord-lbl">--N --E</span>
+    <span id="ac-lbl"></span>
+    <span id="msg"></span>
+  </div>
+
+</div><!-- wx-panel -->
+
+<!-- ===== FLIGHT PLAN ===== -->
+<div id="fp-panel" class="panel">
+  <div class="bar">
+    <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.08em;">Flight Plan</span>
+    <span id="fp-route-lbl" style="color:#546e7a;margin-left:10px;font-size:11px;">----→----</span>
+    <button class="btn" onclick="window.print()" style="margin-left:auto;">🖨 Print / PDF</button>
+  </div>
+  <div class="fp-wrap">
+    <table class="fp-table">
+      <thead>
+        <tr>
+          <th>Waypoint</th>
+          <th>ZTME</th>
+          <th>ETO</th>
+          <th>ATO</th>
+          <th>Time Δ</th>
+          <th>Plan fuel</th>
+          <th>Actual fuel</th>
+          <th>Fuel Δ</th>
+          <th>Cross at</th>
+          <th>その他</th>
+        </tr>
+      </thead>
+      <tbody id="fp-tbody">
+        <tr>
+          <td colspan="10" style="color:#546e7a;padding:24px;text-align:center;">
+            NAV LOGを「Weather Radar」タブで貼り付けて解析してください
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div><!-- fp-panel -->
+
+
+</div><!-- #panels -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// =====================================================================
+// CONSTANTS
+// =====================================================================
+var NM = 1852;
+
+var ETOPS_DATA = {
+  NH8A:{nm60:435,nm180:1252},
+  NH8C:{nm60:429,nm180:1237},
+  NH9K:{nm60:431,nm180:1248},
+  NH9D:{nm60:420,nm180:1210},
+  NHXK:{nm60:431,nm180:1248}
+};
+
+var APT = {
+  RJTT:[35.553,139.781],RJOO:[34.786,135.438],RJBB:[34.433,135.244],
+  RJFF:[33.583,130.451],RJCC:[42.775,141.692],
+  VTBS:[13.690,100.750],VTBD:[13.907,100.607],VVDN:[16.044,108.202],
+  VVTS:[10.818,106.652],WSSS:[1.359,103.989],WMKK:[2.745,101.710],
+  VHHH:[22.309,113.915],RCTP:[25.077,121.233],RCKH:[22.578,120.350],
+  RPLL:[14.509,121.020],WADD:[-8.748,115.167],WIII:[-6.126,106.656],
+  YSSY:[-33.946,151.177],YMML:[-37.673,144.843],YBBN:[-27.384,153.118],
+  YPPH:[-31.940,115.967],YPAD:[-34.945,138.531],YBCS:[-16.886,145.755],
+  AYPY:[-9.443,147.220],NZAA:[-37.008,174.792],NZCH:[-43.490,172.532],
+  PGUM:[13.484,144.796],PHNL:[21.320,-157.924],PANC:[61.174,-149.996],
+  KLAX:[33.943,-118.408],KSFO:[37.619,-122.375],KJFK:[40.640,-73.779],
+  KORD:[41.980,-87.905],KSEA:[47.450,-122.309],KDEN:[39.857,-104.673],
+  EGLL:[51.477,-0.461],LFPG:[49.009,2.548],EDDF:[50.026,8.543],
+  EHAM:[52.308,4.764],LEMD:[40.472,-3.561],LIRF:[41.800,12.199],
+  OMDB:[25.253,55.364],OERK:[24.958,46.699],VABB:[19.089,72.868],
+  VIDP:[28.556,77.100],ZBAA:[40.080,116.585],ZSPD:[31.143,121.805]
+};
+
+var GIBS = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best';
+var SATS = {
+  'himawari':{jma:true,area:'fd',band:'B13',prod:'TBB',label:'Himawari-9 (IR)'},
+  'rainviewer-radar':{url:'https://tilecache.rainviewer.com/v2/radar/nowcast/256/{z}/{x}/{y}/4/1_1.png',label:'RainViewer Radar'},
+  'bom-radar':{url:'https://tilecache.rainviewer.com/v2/radar/nowcast/256/{z}/{x}/{y}/4/1_1.png',label:'BOM Radar'},
+  'iem-nexrad':{wms:true,url:'https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0r.cgi',layers:'nexrad-n0r-900913',label:'NEXRAD Radar (US)'},
+  'himawari-fd-vis':{jma:true,area:'fd',band:'B03',prod:'ALBD',label:'Himawari-9 可視光'},
+  'himawari-fd-wv':{jma:true,area:'fd',band:'B08',prod:'TBB',label:'Himawari-9 水蒸気'},
+  'himawari-fd-sandwich':{jma:true,area:'fd',band:'SND',prod:'ETC',label:'Himawari-9 雲頂強調'}
+};
+var BASES = {
+  dark:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  sat:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  light:'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+};
+
+// =====================================================================
+// STATE
+// =====================================================================
+var WP = [];
+var VWS = {};
+var VWS_BY_FL = {};
+var ALTS = [];
+var ETPS = [];
+var FP_ROWS = [];
+var DEP_ATO_MIN = null;
+var DEP_STD_MIN = null;
+var LY = {
+  base:null, sat:null, radar:null,
+  corridor:[], route:[], wpts:[], etops:[],
+  fir:null, sig:null, metar:[], glide:null, ac:null, avoidL:null, avoidR:null
+};
+var lowBw = false;
+var firGeoJSON = null;
+var radarOn = false;
+var satKey = 'himawari';
+var satOffsetMins = 0; // 0=最新, 10=10分前, ...最大180分前
+var acInt = null;
+var acPos = null;
+var acReg = '--';
+var acIcao = null;
+
+// =====================================================================
+// TABS
+// =====================================================================
+function showTab(name) {
+  ['wx','fp'].forEach(function(n) {
+    document.getElementById('tab-'+n).classList.remove('active');
+    document.getElementById(n+'-panel').classList.remove('active');
+  });
+  document.getElementById('tab-'+name).classList.add('active');
+  document.getElementById(name+'-panel').classList.add('active');
+  if(name==='wx') setTimeout(function(){map.invalidateSize();},100);
+}
+
+// =====================================================================
+// TIME UTILITIES
+// =====================================================================
+function minsToHHMM(mins) {
+  var m = ((Math.round(mins) % 1440) + 1440) % 1440;
+  return ('0'+Math.floor(m/60)).slice(-2)+':'+('0'+(m%60)).slice(-2);
+}
+function hhmmToMins(str) {
+  if(!str) return null;
+  str = str.replace(/[^0-9]/g,'');
+  if(str.length===3) str='0'+str;
+  if(str.length!==4) return null;
+  var h=parseInt(str.slice(0,2)), m=parseInt(str.slice(2));
+  if(isNaN(h)||isNaN(m)||m>59) return null;
+  return h*60+m;
+}
+function parseCTME(s) {
+  if(!s||s==='..') return null;
+  var p=s.split('.');
+  if(p.length!==2) return null;
+  var h=parseInt(p[0]),m=parseInt(p[1]);
+  if(isNaN(h)||isNaN(m)) return null;
+  return h*60+m;
+}
+
+// =====================================================================
+// SATELLITE TIME
+// =====================================================================
+function gibsTimeOffset(offsetMins) {
+  var now = new Date();
+  var ms = now.getTime() - (180 + offsetMins) * 60000;
+  var d = new Date(ms);
+  var mn10 = Math.floor(d.getUTCMinutes()/10)*10;
+  var yr = d.getUTCFullYear();
+  var mo = ('0'+(d.getUTCMonth()+1)).slice(-2);
+  var dy = ('0'+d.getUTCDate()).slice(-2);
+  var hr = ('0'+d.getUTCHours()).slice(-2);
+  var mn = ('0'+mn10).slice(-2);
+  console.log('GIBS time:', yr+'-'+mo+'-'+dy+'T'+hr+':'+mn+':00Z');
+  return yr+'-'+mo+'-'+dy+'T'+hr+':'+mn+':00Z';
+}
+
+function onSatTimeSlide(val) {
+  satOffsetMins = parseInt(val)*10;
+  var t = gibsTimeOffset(satOffsetMins);
+  document.getElementById('satTimeLbl').textContent =
+    satOffsetMins===0 ? '最新 ('+t.slice(11,16)+'Z)' : satOffsetMins+'分前 ('+t.slice(11,16)+'Z)';
+  loadSat(satKey);
+}
+function onSatTimeApply() {
+  loadSat(satKey);
+}
+function onSatTimeLatest() {
+  var sl = document.getElementById('satTimeSlider');
+  sl.value = 0;
+  onSatTimeSlide(0);
+}
+
+var satPlayInt = null;
+function toggleSatPlay() {
+  var btn = document.getElementById('satPlayBtn');
+  if(satPlayInt) {
+    clearInterval(satPlayInt);
+    satPlayInt = null;
+    btn.textContent = '▶';
+    return;
+  }
+  btn.textContent = '⏹';
+  var sl = document.getElementById('satTimeSlider');
+  sl.value = 0;
+  onSatTimeSlide(0);
+  satPlayInt = setInterval(function() {
+    var cur = parseInt(sl.value);
+    if(cur >= 18) {
+      clearInterval(satPlayInt);
+      satPlayInt = null;
+      btn.textContent = '▶';
+      return;
+    }
+    sl.value = cur + 1;
+    onSatTimeSlide(cur + 1);
+  }, 1000);
+}
+function onSatTimeChange(val) {
+  satOffsetMins = parseInt(val)*10;
+  var t = gibsTimeOffset(satOffsetMins);
+  var lbl = document.getElementById('satTimeLbl');
+  lbl.textContent = satOffsetMins===0 ? '最新 ('+t.slice(11,16)+'Z)' : satOffsetMins+'分前 ('+t.slice(11,16)+'Z)';
+  loadSat(satKey);
+}
+
+// =====================================================================
+// NAV LOG PARSER
+// =====================================================================
+function navCoord(s) {
+  var m = s.match(/^([NS])(\d{2,3})(\d{3})([EW])(\d{3,4})(\d{3})$/);
+  if(!m) return null;
+  var lat = (m[1]==='N'?1:-1)*(parseInt(m[2])+parseInt(m[3])/600);
+  var lng = (m[4]==='E'?1:-1)*(parseInt(m[5])+parseInt(m[6])/600);
+  return {lat:lat, lng:lng};
+}
+
+function runParse() {
+  var txt = document.getElementById('fpl-txt').value;
+  if(!txt||txt.length<30) {
+    document.getElementById('parse-result').textContent = '⚠ テキストを貼り付けてください';
+    return;
+  }
+  var newWP=[], newVWS={}, newAlts=[], newEtps=[], newVWS_BY_FL={};
+  var dep=null, dest=null, reg=null, etopsKey=null, depFuel=null;
+  var lines = txt.split('\n');
+
+  // 機番
+  var regM = txt.match(/REG\/([A-Z]{2}\d{3,5}[A-Z]?)/);
+  if(!regM) regM = txt.match(/\b(JA\d{4}[A-Z]?)\b/);
+  if(!regM) regM = txt.match(/\b(VH-[A-Z]{3})\b/);
+  if(regM) reg = regM[1];
+
+  // ICAO hex
+  var icaoM = txt.match(/CODE\/([0-9A-Fa-f]{6})/);
+  if(icaoM) acIcao = icaoM[1].toLowerCase();
+
+  // 機材
+  var typeM = txt.match(/\b(NH8A|NH8C|NH9K|NH9D|NHXK)\b/);
+  if(!typeM) typeM = txt.match(/\b(B788|B789|B77W|B772|B773)\b/);
+  if(typeM) {
+    var t = typeM[1];
+    if(ETOPS_DATA[t]) etopsKey=t;
+    else if(t==='B788') etopsKey='NH8A';
+    else if(t==='B789') etopsKey='NH8C';
+    else if(t==='B772') etopsKey='NH9D';
+    else if(t==='B773'||t==='B77W') etopsKey='NH9K';
+  }
+
+  // 出発・目的地
+  var rtM = txt.match(/\b([A-Z]{4})-([A-Z]{4})\b[^\n]*STD/);
+  if(!rtM) rtM = txt.match(/\b([A-Z]{4})-([A-Z]{4})\b/);
+  if(rtM) { dep=rtM[1]; dest=rtM[2]; }
+
+  // STD
+  var stdM = txt.match(/STD\s+(\d{2})(\d{2})Z/);
+  DEP_STD_MIN = stdM ? parseInt(stdM[1])*60+parseInt(stdM[2]) : null;
+
+  // 出発燃料
+  for(var i=0;i<lines.length;i++) {
+    if(lines[i].match(/^\s+[A-Z]{4}\s+\(RDIS\)/)) {
+      var dfm = lines[i].match(/(\d{3}\.\d)/);
+      if(dfm) depFuel = parseFloat(dfm[1]);
+      break;
+    }
+  }
+
+  // ── ETOPS代替空港: RALT/ 行を最優先で解析 ──
+  // 例: RALT/RJTT PGUM YBCS  または  RALT/PGUM YBCS
+  var altSeen = {};
+  var raltM = txt.match(/RALT\/([A-Z0-9 ]+?)(?:\s+SEL\/|\s+CODE\/|\s+OPR\/|\s*\n|\s*$)/);
+  if(raltM) {
+    var raltParts = raltM[1].trim().split(/\s+/);
+    raltParts.forEach(function(id) {
+      if(id.length===4 && APT[id] && !altSeen[id]) {
+        altSeen[id] = true;
+        newAlts.push({id:id, lat:APT[id][0], lng:APT[id][1]});
+      }
+    });
+  }
+  // RALT/が見つからない場合はCPT行, ALT行からフォールバック
+  if(newAlts.length===0) {
+    var altRe = /(?:CPT\s+-|CPT\s+|ALT\s+)([A-Z]{4})/g;
+    var am;
+    while((am=altRe.exec(txt))!==null) {
+      var aid=am[1];
+      if(APT[aid]&&!altSeen[aid]) {
+        altSeen[aid]=true;
+        newAlts.push({id:aid,lat:APT[aid][0],lng:APT[aid][1]});
+      }
+    }
+  }
+
+  // ETP座標
+  var etpRe = /LAT\/LONG\s+([NS]\d{5}[EW]\d{6,7})/g;
+  var em, etpN=1;
+  while((em=etpRe.exec(txt))!==null) {
+    var c = navCoord(em[1]);
+    if(c) {
+      var dup = newEtps.some(function(e){return Math.abs(e.lat-c.lat)<0.2&&Math.abs(e.lng-c.lng)<0.2;});
+      if(!dup) newEtps.push({id:'ETP'+etpN++,lat:c.lat,lng:c.lng});
+    }
+  }
+  var etpRe2 = /(?:ETP|EEP|EXP)[^\n]*?([NS]\d{5}[EW]\d{6,7})/g;
+  while((em=etpRe2.exec(txt))!==null) {
+    var c = navCoord(em[1]);
+    if(c) {
+      var dup = newEtps.some(function(e){return Math.abs(e.lat-c.lat)<0.2&&Math.abs(e.lng-c.lng)<0.2;});
+      if(!dup) newEtps.push({id:'ETP'+etpN++,lat:c.lat,lng:c.lng});
+    }
+  }
+
+  // WIND/TEMP ALOFT FCST パース
+  // DDSSMTT: DD=風向/10, SS=風速kt, M/P=温度符号, TT=温度
+  var FL_ALT_PAIRS = {
+    29:[2,3], 31:[3,4], 33:[3,4], 34:[3,4],
+    35:[4,5], 37:[4,5], 39:[4,5],
+    41:[5,6], 43:[5,6], 45:[5,6]
+  };
+  var wfm = txt.match(/WINDS?\/TEMP[S]?\s+ALOFT\s+FCST([\s\S]*?)(?=\n-{3,}|\nFLIGHT|\nETOPS|$)/i);
+  console.log('wfm match:', wfm ? 'found' : 'not found');
+  if(wfm) {
+    var lineCount = 0;
+    wfm[1].split('\n').forEach(function(line) {
+      if(lineCount++ < 5) console.log('wfm line:', JSON.stringify(line));
+      var toks = line.trim().split(/\s+/);
+      if(toks.length < 8) return;
+      var wpId = toks[0];
+      if(!/^[A-Z][A-Z0-9]{1,7}$/.test(wpId)) return;
+      var speeds = [];
+      for(var fi=0; fi<7; fi++) {
+        var val = toks[fi+1] || '';
+        if(val.slice(0,4)==='9900') { speeds.push(0); continue; }
+        var spd = parseInt(val.slice(2,4));
+        speeds.push(isNaN(spd) ? null : spd);
+      }
+      Object.keys(FL_ALT_PAIRS).forEach(function(flKey) {
+        var pair = FL_ALT_PAIRS[flKey];
+        var s1 = speeds[pair[0]], s2 = speeds[pair[1]];
+        if(s1===null || s2===null) return;
+        var fl = parseInt(flKey);
+        if(!newVWS_BY_FL[fl]) newVWS_BY_FL[fl] = {};
+        newVWS_BY_FL[fl][wpId] = Math.abs(s2 - s1);
+      });
+    });
+  }
+
+  // ウェイポイント座標パース
+  var skipWords = {FL:1,DEC:1,CLM:1,TOC:1,TOD:1,MLDW:1,R:1,RMG:1,P:1,ETP:1,ETP1:1,ETP2:1,ETP3:1,ETP4:1,EEP:1,EEP1:1,EEP2:1,EEP3:1,EXP:1,EXP1:1,EXP2:1,EXP3:1};
+  var coordRe = /([NS]\d{5}[EW]\d{6,7})/;
+  var seen = {};
+
+  for(var i=0;i<lines.length-1;i++) {
+    var lineA = lines[i];
+    var cm = lineA.match(coordRe);
+    if(!cm) continue;
+    var c = navCoord(cm[1]);
+    if(!c) continue;
+    var cpos = lineA.indexOf(cm[1]);
+    var lineB = lines[i+1];
+    if(!lineB||lineB.indexOf('---')>=0) continue;
+    var seg = lineB.slice(Math.max(0,cpos-4)).trim();
+    var nameM = seg.match(/^([A-Z][A-Z0-9\-]{1,7})/);
+    if(!nameM) continue;
+    var wid = nameM[1];
+    if(skipWords[wid]||wid.length<2) continue;
+    if(seen[wid]) continue;
+    seen[wid] = true;
+
+    // CTME
+    var tokA = lineA.trim().split(/\s+/);
+    var ctmeMin = null;
+    if(tokA[2]&&/^\d{1,2}\.\d{2}$/.test(tokA[2])) ctmeMin=parseCTME(tokA[2]);
+
+    // Fuel & Alt
+    var afterCoord = lineA.slice(cpos+cm[1].length);
+    var fuelM = afterCoord.match(/\b(\d{3}\.\d)\b/);
+    var wfuel = fuelM ? parseFloat(fuelM[1]) : null;
+    var altM2 = afterCoord.match(/\b(CLM|DEC|(\d{5}))\b/);
+    var walt = altM2 ? altM2[1] : null;
+
+    // VWS from WSCP (行Bの末尾 NN/NN)
+    var vwsM = lineB.match(/(\d{2})\/(\d{2})\s*$/);
+    if(vwsM) {
+      var ws1=parseInt(vwsM[1]), ws2=parseInt(vwsM[2]);
+      newVWS[wid] = Math.abs(ws2-ws1)/2;
+    }
+
+    newWP.push({id:wid,lat:c.lat,lng:c.lng,t:false,ctme:ctmeMin,fuel:wfuel,alt:walt});
+  }
+
+  // 適用
+  if(newWP.length>=2) {
+    var finalWP = [];
+    // 出発空港を先頭に追加
+    if(dep&&APT[dep]) {
+      finalWP.push({id:dep,lat:APT[dep][0],lng:APT[dep][1],t:true,ctme:0,fuel:depFuel,alt:null});
+    }
+    // depと同じIDのWPは重複を避けて追加
+    newWP.forEach(function(w){
+      if(w.id!==dep) finalWP.push(w);
+    });
+    finalWP[0].t = true;
+    finalWP[finalWP.length-1].t = true;
+    // 代替空港IDをWPから除外
+    var altIdMap = {};
+    newAlts.forEach(function(a){ altIdMap[a.id]=1; });
+    finalWP = finalWP.filter(function(w,i){
+      if(i===0||i===finalWP.length-1) return true;
+      return !altIdMap[w.id];
+    });
+    WP = finalWP;
+    VWS = newVWS;
+    var hasWindFcst = Object.keys(newVWS_BY_FL).length > 0;
+    [29,31,33,34,35,37,39,41,43,45].forEach(function(fl){
+      VWS_BY_FL[fl] = hasWindFcst ? (newVWS_BY_FL[fl] || newVWS) : newVWS;
+    });
+    console.log(VWS_BY_FL);
+  }
+  if(newAlts.length>0) ALTS = newAlts;
+  if(newEtps.length>0) ETPS = newEtps;
+  if(reg) acReg = reg;
+
+  buildFpRows(dep, depFuel);
+
+  // UI更新
+  if(dep&&dest) {
+    document.getElementById('route-lbl').textContent = dep+' → '+dest;
+    document.getElementById('fp-route-lbl').textContent = dep+' → '+dest;
+  }
+  var eLabel = etopsKey
+    ? (etopsKey+' '+ETOPS_DATA[etopsKey].nm60+'/'+ETOPS_DATA[etopsKey].nm180+'NM') : '--';
+  document.getElementById('fpl-info').textContent =
+    '機番:'+acReg+'  機材:'+(etopsKey||'--')+'  ETOPS:'+eLabel
+    +'  WP:'+WP.length+'点  代替:'+ALTS.map(function(a){return a.id;}).join(' ');
+  document.getElementById('parse-result').textContent =
+    '✓ 完了: '+WP.length+'WP / ETP'+ETPS.length+'点 / 代替'+ALTS.length+'空港';
+  if(etopsKey&&ETOPS_DATA[etopsKey]) document.getElementById('etopsSel').value = etopsKey;
+
+  renderFpTable();
+  drawRoute();
+  drawEtops();
+  frameRoute();
+  document.getElementById('fpl-wrap').style.display = 'none';
+  document.getElementById('fplToggle').textContent = '▼ 展開して貼り付け';
+}
+
+// =====================================================================
+// FLIGHT PLAN TABLE
+// =====================================================================
+function buildFpRows(dep, depFuel) {
+  FP_ROWS = [];
+  FP_ROWS.push({id:dep||WP[0].id,ctme:0,ztme:0,fuel:depFuel,alt:null,ato:'',actualFuel:'',crossAt:'',note:''});
+  for(var i=0;i<WP.length;i++) {
+    var w = WP[i];
+    if(w.id===(dep||WP[0].id)) continue;
+    var prevCtme=0;
+    for(var j=i-1;j>=0;j--) {
+      if(WP[j].ctme!==null){prevCtme=WP[j].ctme||0;break;}
+    }
+    var ztme = (w.ctme!==null) ? Math.max(0,w.ctme-prevCtme) : null;
+    FP_ROWS.push({id:w.id,ctme:w.ctme,ztme:ztme,fuel:w.fuel,alt:w.alt,ato:'',actualFuel:'',crossAt:'',note:''});
+  }
+}
+
+function calcEto(ctmeMin) {
+  var ref = DEP_ATO_MIN!==null ? DEP_ATO_MIN : (DEP_STD_MIN!==null ? DEP_STD_MIN : null);
+  if(ref===null||ctmeMin===null) return '--:--';
+  return minsToHHMM(ref+ctmeMin);
+}
+
+function renderFpTable() {
+  var tbody = document.getElementById('fp-tbody');
+  tbody.innerHTML = '';
+  if(!FP_ROWS.length) {
+    tbody.innerHTML = '<tr><td colspan="10" style="color:#546e7a;padding:24px;text-align:center;">NAV LOGを「Weather Radar」タブで貼り付けて解析してください</td></tr>';
+    return;
+  }
+  var ref = DEP_ATO_MIN!==null ? DEP_ATO_MIN : (DEP_STD_MIN!==null ? DEP_STD_MIN : null);
+
+  FP_ROWS.forEach(function(row,idx) {
+    var tr = document.createElement('tr');
+    var eto = calcEto(row.ctme);
+    var etoMin = (ref!==null&&row.ctme!==null) ? ref+row.ctme : null;
+
+    // Time Δ
+    var timeDeltaHtml = '<span style="color:#546e7a;">—</span>';
+    if(row.ato&&etoMin!==null) {
+      var atoMin = hhmmToMins(row.ato);
+      if(atoMin!==null) {
+        var diff = atoMin-etoMin;
+        timeDeltaHtml = '<span class="'+(diff>0?'dn':'dp')+'">'+(diff>=0?'+':'')+diff+' min</span>';
+      }
+    }
+
+    // Fuel Δ
+    var fuelDeltaHtml = '<span style="color:#546e7a;">—</span>';
+    if(row.actualFuel!==''&&row.fuel!==null) {
+      var af = parseFloat(row.actualFuel);
+      if(!isNaN(af)) {
+        var fd = af-row.fuel;
+        fuelDeltaHtml = '<span class="'+(fd>=0?'dp':'dn')+'">'+(fd>=0?'+':'')+fd.toFixed(1)+'</span>';
+      }
+    }
+
+    // Cross at placeholder
+    var altPh = '';
+    if(row.alt&&row.alt!=='CLM'&&row.alt!=='DEC') altPh = row.alt;
+    var ztmeStr = (row.ztme!==null) ? String(row.ztme) : '—';
+
+    tr.innerHTML =
+      '<td style="color:#90a4ae;padding:3px 8px;">'+row.id+'</td>'+
+      '<td style="color:#546e7a;text-align:center;padding:3px 6px;">'+ztmeStr+'</td>'+
+      '<td style="color:#78909c;padding:3px 6px;">'+eto+'</td>'+
+      '<td style="padding:3px 4px;"><input class="fp-in" value="'+row.ato+'" placeholder="HHMM" onchange="onAtoChange('+idx+',this.value)"></td>'+
+      '<td style="padding:3px 6px;text-align:center;min-width:70px;">'+timeDeltaHtml+'</td>'+
+      '<td style="color:#546e7a;text-align:right;padding:3px 8px;">'+(row.fuel!==null?row.fuel.toFixed(1):'—')+'</td>'+
+      '<td style="padding:3px 4px;"><input class="fp-in" value="'+row.actualFuel+'" placeholder="0.0" onchange="onFuelChange('+idx+',this.value)"></td>'+
+      '<td style="padding:3px 6px;text-align:center;min-width:65px;">'+fuelDeltaHtml+'</td>'+
+      '<td style="padding:3px 4px;"><input class="fp-in" value="'+row.crossAt+'" placeholder="'+altPh+'" onchange="onCrossChange('+idx+',this.value)"></td>'+
+      '<td style="padding:3px 4px;"><input class="fp-in fp-note" value="'+row.note+'" onchange="onNoteChange('+idx+',this.value)"></td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function onAtoChange(idx,val) {
+  FP_ROWS[idx].ato = val.trim();
+  if(idx===0) {
+    DEP_ATO_MIN = hhmmToMins(val.trim());
+    if(document.getElementById('dep').checked) {
+      console.log('DEP_ATO_MIN updated:', DEP_ATO_MIN, '→ calcRoutePos:', calcRoutePos());
+    }
+  }
+  renderFpTable();
+}
+function onFuelChange(idx,val)  { FP_ROWS[idx].actualFuel=val.trim(); renderFpTable(); }
+function onCrossChange(idx,val) { FP_ROWS[idx].crossAt=val.trim(); }
+function onNoteChange(idx,val)  { FP_ROWS[idx].note=val.trim(); }
+
+// =====================================================================
+// FPL PANEL
+// =====================================================================
+function toggleFpl() {
+  var w = document.getElementById('fpl-wrap');
+  var btn = document.getElementById('fplToggle');
+  if(w.style.display==='flex') {
+    w.style.display='none';
+    btn.textContent='▼ 展開して貼り付け';
+  } else {
+    w.style.display='flex';
+    btn.textContent='▲ 閉じる';
+  }
+}
+function clearFpl() {
+  document.getElementById('fpl-txt').value='';
+  document.getElementById('parse-result').textContent='';
+}
+
+// =====================================================================
+// MAP INIT
+// =====================================================================
+var map = L.map('map',{center:[20,130],zoom:4,zoomControl:false,attributionControl:false});
+L.control.zoom({position:'topleft'}).addTo(map);
+map.on('mousemove',function(e){
+  var la=e.latlng.lat, lo=e.latlng.lng;
+  document.getElementById('coord-lbl').textContent =
+    (la>=0?la.toFixed(1)+'N':Math.abs(la).toFixed(1)+'S')+' '+
+    (lo>=0?lo.toFixed(1)+'E':Math.abs(lo).toFixed(1)+'W');
+});
+
+// =====================================================================
+// BASE MAP
+// =====================================================================
+function setBase(k) {
+  if(LY.base) map.removeLayer(LY.base);
+  LY.base = L.tileLayer(BASES[k]||BASES.dark, {
+    maxZoom:18,
+    subdomains:(k==='sat'?'':'abcd'),
+    updateWhenIdle:lowBw,
+    keepBuffer:lowBw?0:2
+  }).addTo(map);
+  LY.base.bringToBack();
+}
+setBase('dark');
+
+// =====================================================================
+// SATELLITE
+// =====================================================================
+function loadSat(k) {
+  satKey = k;
+  if(LY.sat) {
+    try { map.removeLayer(LY.sat); } catch(e) {}
+    LY.sat = null;
+  }
+  // レーダー制御
+  if(k==='rainviewer-radar') {
+    radarOn = true;
+    loadRadar();
+  } else {
+    radarOn = false;
+    if(LY.radar){ map.removeLayer(LY.radar); LY.radar=null; }
+  }
+  if(k==='none') {
+    document.getElementById('sat-lbl').textContent = '衛星:なし';
+    return;
+  }
+  var s = SATS[k];
+  if(!s) return;
+  var op = parseFloat(document.getElementById('satOp').value) / 100;
+
+  if(s.wms) {
+    document.getElementById('sat-lbl').textContent = s.label+' 読込中...';
+    LY.sat = L.tileLayer.wms(s.url, {
+      layers: s.layers,
+      format: 'image/png',
+      transparent: true,
+      opacity: op,
+      version: '1.1.1',
+      attribution: 'IEM/NEXRAD'
+    }).addTo(map);
+    if(LY.base) LY.base.bringToBack();
+    document.getElementById('sat-lbl').textContent = s.label;
+    setTimeout(function(){ bringTop(); }, 300);
+    return;
+  }
+
+  if(s.overlay) {
+    document.getElementById('sat-lbl').textContent = s.label+' 読込中...';
+    LY.sat = L.imageOverlay(s.url, s.bounds, {opacity:op}).addTo(map);
+    if(LY.base) LY.base.bringToBack();
+    document.getElementById('sat-lbl').textContent = s.label;
+    setTimeout(function(){ bringTop(); }, 300);
+    return;
+  }
+
+  if(s.jma) {
+    document.getElementById('sat-lbl').textContent = s.label+' 読込中...';
+
+    fetch('https://www.jma.go.jp/bosai/himawari/data/satimg/targetTimes_'+s.area+'.json?_='+Date.now())
+      .then(function(r){return r.json();})
+      .then(function(d){
+        var idx = Math.max(0, d.length-1 - Math.floor(satOffsetMins/10));
+        var latest = d[idx].basetime;
+        var timeLabel = latest.slice(8,10)+':'+latest.slice(10,12)+'Z';
+        var url = 'https://www.jma.go.jp/bosai/himawari/data/satimg/'+latest+'/'+s.area+'/'+latest+'/'+s.band+'/'+s.prod+'/{z}/{x}/{y}.jpg';
+        LY.sat = L.tileLayer(url, {
+          opacity: op,
+          minZoom: 1,
+          maxZoom: 10,
+          maxNativeZoom: 5,
+          updateWhenIdle: false,
+          keepBuffer: 0,
+          errorTileUrl: ''
+        });
+        LY.sat.addTo(map);
+        if(LY.base) LY.base.bringToBack();
+        LY.sat.on('load', function(){
+          document.getElementById('sat-lbl').textContent = s.label+' '+timeLabel+' (JMA)';
+        });
+        LY.sat.on('tileerror', function(){
+          document.getElementById('sat-lbl').textContent = s.label+' (データなし '+timeLabel+')';
+        });
+        setTimeout(function(){ bringTop(); }, 300);
+      }).catch(function(){
+        document.getElementById('sat-lbl').textContent = s.label+' (取得失敗)';
+      });
+    return;
+  }
+
+  var t = gibsTimeOffset(satOffsetMins);
+  var url = s.url ? s.url : (GIBS+'/'+s.l+'/default/'+t+'/GoogleMapsCompatible/{z}/{y}/{x}.'+s.e);
+  document.getElementById('sat-lbl').textContent = s.label+' '+t.slice(11,16)+'Z 読込中...';
+  LY.sat = L.tileLayer(url, {
+    opacity: op,
+    maxZoom: 9,
+    updateWhenIdle: false,
+    keepBuffer: 0,
+    errorTileUrl: ''
+  });
+  LY.sat.addTo(map);
+  if(LY.base) LY.base.bringToBack();
+  LY.sat.on('load', function(){
+    document.getElementById('sat-lbl').textContent = s.label+' '+t.slice(11,16)+'Z';
+  });
+  LY.sat.on('tileerror', function(){
+    document.getElementById('sat-lbl').textContent = s.label+' (データなし '+t.slice(11,16)+'Z)';
+  });
+  setTimeout(function(){ bringTop(); }, 300);
+}
+loadSat('himawari');
+
+function setSatOp(v) {
+  var val = parseFloat(v);
+  document.getElementById('satOpV').textContent = Math.round(val)+'%';
+  if(LY.sat) {
+    LY.sat.setOpacity(val/100);
+  }
+}
+
+// =====================================================================
+// RADAR
+// =====================================================================
+function loadRadar() {
+  if(!radarOn) return;
+  fetch('https://api.rainviewer.com/public/weather-maps.json')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var f = d.radar.past[d.radar.past.length-1];
+      if(LY.radar){map.removeLayer(LY.radar); LY.radar=null;}
+      LY.radar = L.tileLayer(
+        d.host+f.path+'/256/{z}/{x}/{y}/4/1_1.png',
+        {opacity:0.65,maxZoom:10,updateWhenIdle:lowBw,keepBuffer:lowBw?0:2}
+      ).addTo(map);
+      bringTop();
+    }).catch(function(){});
+}
+loadRadar();
+
+function toggleRadar() {
+  radarOn = !radarOn;
+  var b = document.getElementById('radarBtn');
+  b.className = radarOn?'btn on':'btn';
+  b.textContent = radarOn?'● Radar':'○ Radar';
+  if(radarOn) loadRadar();
+  else if(LY.radar){map.removeLayer(LY.radar); LY.radar=null;}
+}
+
+// =====================================================================
+// ROUTE + VWS CORRIDOR
+// =====================================================================
+function vwsCol(v) {
+  if(v>=6) return '#e53935';
+  if(v>=4) return '#fb8c00';
+  if(v>=2) return '#fdd835';
+  return '#43a047';
+}
+
+// 航路上の点からperpendicular方向にnm離れた点を計算
+function perpPoint(lat,lng,brg,nm) {
+  var d = (nm*NM)/6371000;
+  var r = lat*Math.PI/180;
+  var l = lng*Math.PI/180;
+  var nr = Math.asin(Math.sin(r)*Math.cos(d)+Math.cos(r)*Math.sin(d)*Math.cos(brg));
+  var nl = l+Math.atan2(Math.sin(brg)*Math.sin(d)*Math.cos(r),Math.cos(d)-Math.sin(r)*Math.sin(nr));
+  return [nr*180/Math.PI, nl*180/Math.PI];
+}
+function bearing(lat1,lng1,lat2,lng2) {
+  var dL=(lng2-lng1)*Math.PI/180;
+  var r1=lat1*Math.PI/180, r2=lat2*Math.PI/180;
+  return Math.atan2(Math.sin(dL)*Math.cos(r2),
+    Math.cos(r1)*Math.sin(r2)-Math.sin(r1)*Math.cos(r2)*Math.cos(dL));
+}
+
+var KEY_WP = {
+  RJTT:1,OPPAR:1,HANTO:1,TONAR:1,AMAMI:1,IGURU:1,HCN:1,
+  KAPLI:1,IKELA:1,UBL:1,RUKSA:1,VTBS:1,YSSY:1,YMML:1,
+  PGUM:1,VAMOS:1,RIDLL:1,FACED:1,UKATA:1,LOEBB:1
+};
+
+function drawRoute() {
+  // 既存レイヤー削除
+  LY.corridor.forEach(function(l){map.removeLayer(l);}); LY.corridor=[];
+  LY.route.forEach(function(l){map.removeLayer(l);}); LY.route=[];
+  LY.wpts.forEach(function(m){map.removeLayer(m);}); LY.wpts=[];
+
+  var turbOn = document.getElementById('oTurb').checked;
+  var curFL  = parseInt(document.getElementById('flSel').value);
+  var vwsObj = VWS_BY_FL[curFL] || VWS;
+
+  for(var i=0;i<WP.length-1;i++) {
+    var a=WP[i], b=WP[i+1];
+    var v   = turbOn ? (vwsObj[a.id]||0) : 0;
+    var col = vwsCol(v);
+    var brg = bearing(a.lat,a.lng,b.lat,b.lng);
+
+    if(turbOn) {
+      // 10NMコリドーポリゴン（片側5NM）
+      var aL = perpPoint(a.lat,a.lng, brg-Math.PI/2, 5);
+      var aR = perpPoint(a.lat,a.lng, brg+Math.PI/2, 5);
+      var bL = perpPoint(b.lat,b.lng, brg-Math.PI/2, 5);
+      var bR = perpPoint(b.lat,b.lng, brg+Math.PI/2, 5);
+      var poly = L.polygon([aL,bL,bR,aR],{
+        fillColor:col, fillOpacity:0.30,
+        stroke:false
+      }).addTo(map);
+      LY.corridor.push(poly);
+    }
+
+    // 航路中心線
+    var cl = L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{
+      color:'#4fc3f7', weight:2, opacity:1
+    }).addTo(map);
+    LY.route.push(cl);
+  }
+
+  // ウェイポイントマーカー
+  WP.forEach(function(w) {
+    var sz  = w.t ? 10 : 5;
+    var col = w.t ? '#4fc3f7' : 'rgba(100,181,246,.65)';
+    var ic = L.divIcon({
+      html:'<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;'
+          +'background:'+col+';border:1.5px solid rgba(5,8,20,.9);"></div>',
+      className:'', iconSize:[sz,sz], iconAnchor:[sz/2,sz/2]
+    });
+    var m = L.marker([w.lat,w.lng],{icon:ic}).addTo(map);
+    // 主要WPは常に表示、それ以外はzoom>=7で表示
+    if(w.t || KEY_WP[w.id]) {
+      m.bindTooltip(w.id,{permanent:true, direction:'top', className:'wxt', offset:[0,-4]});
+    } else {
+      m.bindTooltip(w.id,{permanent:false, direction:'top', className:'wxt-wp', offset:[0,-4]});
+    }
+    LY.wpts.push(m);
+  });
+
+  // ETPマーカー
+  ETPS.forEach(function(e) {
+    var ic = L.divIcon({
+      html:'<div style="font-size:9px;color:#ff8a65;font-family:monospace;'
+          +'background:rgba(8,10,18,.88);padding:1px 3px;'
+          +'border:.5px solid rgba(255,138,101,.45);border-radius:2px;">'+e.id+'</div>',
+      className:'', iconSize:[34,14], iconAnchor:[17,7]
+    });
+    LY.wpts.push(L.marker([e.lat,e.lng],{icon:ic}).addTo(map));
+  });
+
+  bringTop();
+  updateRvsmPanel();
+}
+drawRoute();
+
+// Zoomレベルによってウェイポイントラベルを制御
+map.on('zoomend',function() {
+  var z = map.getZoom();
+  LY.wpts.forEach(function(m) {
+    if(!m.getTooltip) return;
+    var tt = m.getTooltip();
+    if(!tt) return;
+    // wxt-wp クラスのものはズーム6以上で表示
+    if(tt.options&&tt.options.className==='wxt-wp') {
+      if(z>=6) m.openTooltip();
+      else m.closeTooltip();
+    }
+  });
+});
+
+// =====================================================================
+// ETOPS RINGS
+// =====================================================================
+function drawEtops() {
+  LY.etops.forEach(function(l){map.removeLayer(l);}); LY.etops=[];
+  if(!document.getElementById('oEtops').checked) return;
+  var key  = document.getElementById('etopsSel').value;
+  var data = ETOPS_DATA[key]||{nm60:420,nm180:1210};
+  ALTS.forEach(function(a) {
+    var rings = [
+      [data.nm60,  'rgba(100,200,100,.7)',  1.5, null,  '60min'],
+      [data.nm180, 'rgba(100,200,100,.55)', 1.5, '7 5', '180min']
+    ];
+    rings.forEach(function(cfg) {
+      var nm=cfg[0],col=cfg[1],w=cfg[2],da=cfg[3],lbl=cfg[4];
+      var c = L.circle([a.lat,a.lng],{
+        radius:nm*NM, color:col, weight:w, fill:false, dashArray:da
+      }).addTo(map);
+      c.bindTooltip(a.id+' ETOPS '+lbl+': '+nm+' NM',{className:'wxt',sticky:true});
+      LY.etops.push(c);
+    });
+    var ic = L.divIcon({
+      html:'<span style="font-size:9px;color:rgba(79,195,247,.8);font-family:monospace;'
+          +'background:rgba(6,10,20,.85);padding:1px 4px;border-radius:2px;">'+a.id+'</span>',
+      className:'', iconSize:[36,13], iconAnchor:[18,6]
+    });
+    LY.etops.push(L.marker([a.lat,a.lng],{icon:ic}).addTo(map));
+  });
+  bringTop();
+}
+drawEtops();
+
+// =====================================================================
+// FIR
+// =====================================================================
+function drawFir() {
+  if(LY.fir){ map.removeLayer(LY.fir); LY.fir=null; }
+  if(!document.getElementById('oFir').checked) return;
+
+  function renderFir(data) {
+    var geoStyle = {color:'rgba(255,255,255,0.5)',weight:1,fill:false,dashArray:'6 4',interactive:false};
+    if(WP.length < 2) {
+      LY.fir = L.geoJSON(data, {style:geoStyle}).addTo(map);
+      bringTop();
+      return;
+    }
+    var routeBounds = L.latLngBounds(WP.map(function(w){return[w.lat,w.lng];}));
+    var filtered = {
+      type:'FeatureCollection',
+      features: data.features.filter(function(f){
+        if(!f.geometry) return false;
+        try {
+          return routeBounds.pad(9).intersects(L.geoJSON(f).getBounds());
+        } catch(e){ return false; }
+      })
+    };
+    if(!filtered.features.length) return;
+    LY.fir = L.geoJSON(filtered, {style:geoStyle}).addTo(map);
+    bringTop();
+  }
+
+  if(firGeoJSON) {
+    renderFir(firGeoJSON);
+    return;
+  }
+  var url1 = 'https://raw.githubusercontent.com/vatsimnetwork/vatspy-data-project/master/Boundaries.geojson';
+  var url2 = 'https://raw.githubusercontent.com/nicovince/airspace/refs/heads/main/data/AP_FIR.geojson';
+  Promise.all([
+    fetch(url1).then(function(r){ return r.json(); }).catch(function(){ return {type:'FeatureCollection',features:[]}; }),
+    fetch(url2).then(function(r){ return r.json(); }).then(function(d){ console.log('AP FIR features:', d.features ? d.features.length : 0); return d; }).catch(function(e){ console.log('AP FIR fetch failed:', e.message); return {type:'FeatureCollection',features:[]}; })
+  ]).then(function(results){
+    console.log('url1 FIR features:', results[0].features ? results[0].features.length : 0);
+    firGeoJSON = {
+      type: 'FeatureCollection',
+      features: (results[0].features||[]).concat(results[1].features||[])
+    };
+    renderFir(firGeoJSON);
+  });
+}
+drawFir();
+
+// =====================================================================
+// SIGMETs
+// =====================================================================
+function loadSigmets() {
+  if(LY.sig){map.removeLayer(LY.sig); LY.sig=null;}
+  if(!document.getElementById('oSig').checked) return;
+  fetch('https://corsproxy.io/?url=https://nq-calculator.vercel.app/api/sigmets-geojson')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(!d.features||!d.features.length) return;
+      LY.sig = L.geoJSON(d,{
+        style:function(f){
+          var h=(f.properties.hazard||'').toUpperCase();
+          var c=h.indexOf('CONV')>=0?'#ef5350':h.indexOf('TURB')>=0?'#ffa726':h.indexOf('ICE')>=0?'#ab47bc':'#66bb6a';
+          return{color:c,weight:1.5,fillOpacity:.1,fillColor:c};
+        },
+        onEachFeature:function(f,l){
+          l.bindTooltip(
+            (f.properties.hazard||'SIGMET')+'\n'+(f.properties.rawAirSigmet||'').slice(0,80),
+            {className:'sgx',sticky:true}
+          );
+        }
+      }).addTo(map);
+      bringTop();
+    }).catch(function(){});
+}
+loadSigmets();
+
+// =====================================================================
+// METAR
+// =====================================================================
+function loadMetars() {
+  LY.metar.forEach(function(m){map.removeLayer(m);}); LY.metar=[];
+  if(!document.getElementById('oMetar').checked) return;
+  var CAT = {VFR:'#43a047',MVFR:'#1565c0',IFR:'#e53935',LIFR:'#ab47bc'};
+  var ids = 'RJTT,ROAH,RCTP,VVDN,VTBS,VTBD,VHHH,RPLL,YSSY,YMML,PGUM,WSSS,AYPY';
+  fetch('https://aviationweather.gov/api/data/metar?ids='+ids+'&format=json')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      d.forEach(function(m){
+        if(!m.lat||!m.lon) return;
+        var col = CAT[m.flightCategory]||'#546e7a';
+        var ic = L.divIcon({
+          html:'<div style="font-size:9px;font-family:monospace;background:rgba(6,8,18,.9);'
+              +'color:'+col+';padding:1px 4px;border-radius:2px;'
+              +'border:.5px solid '+col+'55;white-space:nowrap;">'
+              +m.stationId+' '+(m.flightCategory||'')+'</div>',
+          className:'', iconSize:[75,14], iconAnchor:[37,7]
+        });
+        var mk = L.marker([m.lat,m.lon],{icon:ic}).addTo(map);
+        mk.bindTooltip(m.stationId+'\n'+(m.rawOb||''),{className:'wxt',sticky:true});
+        LY.metar.push(mk);
+      });
+      bringTop();
+    }).catch(function(){});
+}
+
+// =====================================================================
+// AIRCRAFT TRACKING (OpenSky)
+// =====================================================================
+function calcRoutePos() {
+  if(WP.length < 2 || DEP_ATO_MIN === null) return null;
+  var vwp = WP.filter(function(w){ return w.ctme !== null; });
+  if(vwp.length < 2) return null;
+  var now = new Date();
+  var elapsed = now.getUTCHours()*60 + now.getUTCMinutes() - DEP_ATO_MIN;
+  if(elapsed < 0) elapsed += 1440;
+  if(elapsed <= vwp[0].ctme) {
+    var brg0 = bearing(vwp[0].lat,vwp[0].lng,vwp[1].lat,vwp[1].lng);
+    return {lat:vwp[0].lat, lng:vwp[0].lng, hdg:(brg0*180/Math.PI+360)%360};
+  }
+  var last = vwp[vwp.length-1];
+  if(elapsed >= last.ctme) {
+    var prev = vwp[vwp.length-2];
+    var brgL = bearing(prev.lat,prev.lng,last.lat,last.lng);
+    return {lat:last.lat, lng:last.lng, hdg:(brgL*180/Math.PI+360)%360};
+  }
+  for(var i=0;i<vwp.length-1;i++) {
+    var a=vwp[i], b=vwp[i+1];
+    if(elapsed >= a.ctme && elapsed < b.ctme) {
+      var t = (elapsed-a.ctme)/(b.ctme-a.ctme);
+      var brg = bearing(a.lat,a.lng,b.lat,b.lng);
+      return {
+        lat: a.lat + t*(b.lat-a.lat),
+        lng: a.lng + t*(b.lng-a.lng),
+        hdg: (brg*180/Math.PI+360)%360
+      };
+    }
+  }
+  return null;
+}
+
+function fetchAc() {
+  console.log('DEP_ATO_MIN:', DEP_ATO_MIN, 'WP.length:', WP.length);
+  var rpos = calcRoutePos();
+  if(!rpos) {
+    document.getElementById('ac-lbl').textContent = 'ATO未入力またはWP未解析';
+    return;
+  }
+  if(LY.ac){map.removeLayer(LY.ac); LY.ac=null;}
+  var ic = L.divIcon({
+    html:'<div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;transform:rotate('+(rpos.hdg-90)+'deg);font-size:20px;filter:drop-shadow(0 0 3px #4fc3f7);">✈</div>',
+    className:'',iconSize:[24,24],iconAnchor:[12,12]
+  });
+  LY.ac = L.marker([rpos.lat,rpos.lng],{icon:ic,zIndexOffset:1000}).addTo(map);
+  LY.ac.bindTooltip(acReg+'\nHDG '+Math.round(rpos.hdg)+'°',{className:'wxt',permanent:true,direction:'right',offset:[14,0]});
+  document.getElementById('ac-lbl').textContent = acReg+' 航路上位置表示中';
+  updateGlide();
+  bringTop();
+}
+
+function onDep(cb) {
+  if(cb.checked) {
+    console.log('acIcao:', acIcao, 'acReg:', acReg);
+    fetchAc();
+    acInt = setInterval(fetchAc,30000);
+  } else {
+    if(acInt){clearInterval(acInt); acInt=null;}
+    if(LY.ac){map.removeLayer(LY.ac); LY.ac=null;}
+    if(LY.glide){map.removeLayer(LY.glide); LY.glide=null;}
+    acPos = null;
+    document.getElementById('ac-lbl').textContent='';
+  }
+}
+
+// =====================================================================
+// GLIDE RANGE
+// =====================================================================
+function updateGlide() {
+  if(LY.glide){map.removeLayer(LY.glide); LY.glide=null;}
+  if(!document.getElementById('oGlide').checked||!acPos) return;
+  var rangeNm = (acPos.alt/6076.115)*20;
+  LY.glide = L.circle([acPos.lat,acPos.lng],{
+    radius:rangeNm*NM,
+    color:'rgba(253,216,53,.7)',weight:1.5,
+    fill:true,fillOpacity:.04,dashArray:'3 5'
+  }).addTo(map);
+  bringTop();
+}
+
+// =====================================================================
+// HELPERS
+// =====================================================================
+// =====================================================================
+// AVOID LINE
+// =====================================================================
+function setAvoidSide(side) {
+  var btn = document.getElementById('avoid'+side);
+  btn.classList.toggle('on');
+  drawAvoidLine();
+}
+
+function drawAvoidLine() {
+  if(LY.avoidL){ map.removeLayer(LY.avoidL); LY.avoidL=null; }
+  if(LY.avoidR){ map.removeLayer(LY.avoidR); LY.avoidR=null; }
+  var nmVal = parseFloat(document.getElementById('avoidNm').value);
+  if(isNaN(nmVal) || nmVal<=0 || WP.length<2) return;
+  var lOn = document.getElementById('avoidL').classList.contains('on');
+  var rOn = document.getElementById('avoidR').classList.contains('on');
+  function makePts(sign) {
+    var pts = [];
+    for(var i=0;i<WP.length;i++) {
+      var a = WP[i];
+      var brg = i<WP.length-1
+        ? bearing(a.lat,a.lng,WP[i+1].lat,WP[i+1].lng)
+        : bearing(WP[i-1].lat,WP[i-1].lng,a.lat,a.lng);
+      pts.push(perpPoint(a.lat,a.lng, brg+sign*Math.PI/2, nmVal));
+    }
+    return pts;
+  }
+  if(lOn) {
+    LY.avoidL = L.polyline(makePts(-1),{color:'#ff9800',weight:2,opacity:0.9,dashArray:'8 5'}).addTo(map);
+  }
+  if(rOn) {
+    LY.avoidR = L.polyline(makePts(1),{color:'#ff9800',weight:2,opacity:0.9,dashArray:'8 5'}).addTo(map);
+  }
+  bringTop();
+}
+
+function hexToRgba(hex, a) {
+  var r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  return 'rgba('+r+','+g+','+b+','+a+')';
+}
+
+function setFlFromRvsm(fl) {
+  var flKey = fl/10;
+  var sel = document.getElementById('flSel');
+  var opts = Array.prototype.slice.call(sel.options);
+  sel.value = opts.reduce(function(p,c){
+    return Math.abs(parseInt(c.value)-flKey) < Math.abs(parseInt(p.value)-flKey) ? c : p;
+  }).value;
+  drawRoute();
+}
+
+function updateRvsmPanel() {
+  var panel = document.getElementById('rvsm-panel');
+  if(!panel) return;
+  var flList, dir;
+  if(WP.length >= 2) {
+    var brg = bearing(WP[0].lat,WP[0].lng,WP[WP.length-1].lat,WP[WP.length-1].lng);
+    var hdg = (brg*180/Math.PI+360)%360;
+    if(hdg < 180) { flList=[410,390,370,350,330,310,290]; dir='→ EAST'; }
+    else          { flList=[400,380,360,340,320,300];     dir='← WEST'; }
+  } else {
+    flList=[410,390,370,350,330,310,290]; dir='----';
+  }
+  var curFL = parseInt(document.getElementById('flSel').value);
+  var html = '<div style="font-size:8px;color:#78909c;margin-bottom:2px;text-align:center;">RVSM</div>'
+           + '<div style="font-size:8px;color:#546e7a;margin-bottom:3px;text-align:center;">'+dir+'</div>';
+  flList.forEach(function(fl) {
+    var flKey = fl/10;
+    var vwsData = VWS_BY_FL[flKey] || VWS;
+    var maxV = 0;
+    WP.forEach(function(w){ var v=vwsData[w.id]||0; if(v>maxV) maxV=v; });
+    var col = vwsCol(maxV);
+    var isSel = (flKey === curFL);
+    html += '<div onclick="setFlFromRvsm('+fl+')" style="cursor:pointer;padding:1px 3px;margin-bottom:1px;'
+          + 'border-radius:2px;font-size:9px;font-family:monospace;text-align:center;'
+          + (isSel
+              ? 'background:#0d2a3e;border:1px solid #1565c0;color:#4fc3f7;'
+              : 'background:'+hexToRgba(col,0.18)+';border:1px solid '+hexToRgba(col,0.35)+';color:'+col+';')
+          + '">FL'+fl+'</div>';
+  });
+  panel.innerHTML = html;
+}
+
+function bringTop() {
+  if(LY.sig)   try{LY.sig.bringToFront();}catch(e){}
+  if(LY.radar) try{LY.radar.bringToFront();}catch(e){}
+  if(LY.fir)   try{LY.fir.bringToFront();}catch(e){}
+  if(LY.glide) try{LY.glide.bringToFront();}catch(e){}
+  LY.corridor.forEach(function(l){try{l.bringToFront();}catch(e){}});
+  LY.route.forEach(function(l){try{l.bringToFront();}catch(e){}});
+  if(LY.avoidL) try{LY.avoidL.bringToFront();}catch(e){}
+  if(LY.avoidR) try{LY.avoidR.bringToFront();}catch(e){}
+  LY.etops.forEach(function(l){try{l.bringToFront();}catch(e){}});
+  LY.wpts.forEach(function(m){try{m.bringToFront();}catch(e){}});
+  LY.metar.forEach(function(m){try{m.bringToFront();}catch(e){}});
+  if(LY.ac) try{LY.ac.bringToFront();}catch(e){}
+}
+
+function frameRoute() {
+  if(!WP.length) return;
+  map.fitBounds(
+    L.latLngBounds(WP.map(function(w){return[w.lat,w.lng];})),
+    {padding:[28,70]}
+  );
+}
+
+function refreshAll() {
+  loadSat(satKey);
+  if(radarOn) loadRadar();
+  if(document.getElementById('oSig').checked)   loadSigmets();
+  if(document.getElementById('dep').checked)    fetchAc();
+  if(document.getElementById('oMetar').checked) loadMetars();
+}
+
+function toggleBw() {
+  lowBw = document.getElementById('lowbw').checked;
+  document.getElementById('msg').textContent = lowBw?'⚡ LOW-BW: タイル削減・自動更新停止':'';
+  loadSat(satKey);
+  setBase(document.getElementById('baseSel').value);
+}
+
+// 10分おきに衛星・レーダー自動更新
+setInterval(function(){
+  if(!lowBw) { loadSat(satKey); if(radarOn) loadRadar(); }
+},600000);
+
+// =====================================================================
+// HIMAWARI IR SANDWICH
+
+</script>
+</body>
+</html>
