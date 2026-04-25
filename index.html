@@ -1049,8 +1049,12 @@ function drawRoute() {
 drawRoute();
 function changeWpFont(d) {
   WP_FONT_SIZE = Math.max(8, Math.min(20, WP_FONT_SIZE + d));
-  drawRoute();
+  document.querySelectorAll('.leaflet-tooltip.wxt, .leaflet-tooltip.wxt-wp').forEach(function(el){
+    el.style.fontSize = WP_FONT_SIZE + 'px';
+  });
 }
+
+
 
 // Zoomレベルによってウェイポイントラベルを制御
 map.on('zoomend',function() {
