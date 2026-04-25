@@ -1146,7 +1146,7 @@ drawFir();
 function loadSigmets() {
   if(LY.sig){map.removeLayer(LY.sig); LY.sig=null;}
   if(!document.getElementById('oSig').checked) return;
-  fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://nq-calculator.vercel.app/api/sigmets-geojson'))
+  fetch('https://corsproxy.io/?url=' + encodeURIComponent('https://nq-calculator.vercel.app/api/sigmets-geojson'))
     .then(function(r){return r.json();})
     .then(function(d){
       if(!d.features||!d.features.length) return;
