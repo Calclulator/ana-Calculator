@@ -1049,9 +1049,9 @@ function drawRoute() {
 drawRoute();
 function changeWpFont(d) {
   WP_FONT_SIZE = Math.max(8, Math.min(20, WP_FONT_SIZE + d));
-  document.querySelectorAll('.leaflet-tooltip.wxt, .leaflet-tooltip.wxt-wp').forEach(function(el){
-    el.style.fontSize = WP_FONT_SIZE + 'px';
-  });
+  var style = document.getElementById('wp-font-style');
+  if(!style){ style = document.createElement('style'); style.id='wp-font-style'; document.head.appendChild(style); }
+  style.textContent = '.leaflet-tooltip.wxt{font-size:'+WP_FONT_SIZE+'px!important;}.leaflet-tooltip.wxt-wp{font-size:'+WP_FONT_SIZE+'px!important;}';
 }
 
 
