@@ -1025,7 +1025,7 @@ function drawRoute() {
     var m = L.marker([w.lat,w.lng],{icon:ic}).addTo(map);
     // 主要WPは常に表示、それ以外はzoom>=7で表示
     if(w.t || KEY_WP[w.id]) {
-      m.bindTooltip(w.id,{permanent:true, direction:'top', className:'wxt', offset:[0,-4]}).getTooltip()._container && (m.getTooltip()._container.style.fontSize=WP_FONT_SIZE+'px');
+      m.bindTooltip('<span style="font-size:'+WP_FONT_SIZE+'px">'+w.id+'</span>',{permanent:true, direction:'top', className:'wxt', offset:[0,-4]});
     } else {
       m.bindTooltip(w.id,{permanent:false, direction:'top', className:'wxt-wp', offset:[0,-4]});
     }
