@@ -1288,6 +1288,17 @@ function toggleMode() {
   document.body.style.background = DAY_MODE ? '#e8eaf0' : '#0a0c16';
   document.body.style.color = DAY_MODE ? '#1a1a1a' : '#cfd8dc';
   document.body.classList.toggle('day-mode', DAY_MODE);
+  var style = document.getElementById('day-mode-style');
+  if(!style){ style = document.createElement('style'); style.id='day-mode-style'; document.head.appendChild(style); }
+  style.textContent = DAY_MODE ? `
+    #tab-bar{background:#f0f4f8!important;border-bottom-color:#d0d8e4!important;}
+    .tab-btn{color:#546e7a!important;}
+    .tab-btn.active{color:#1565c0!important;border-bottom-color:#1565c0!important;}
+    .bar{background:#e8eef4!important;border-bottom-color:#d0d8e4!important;}
+    .lbl{color:#546e7a!important;}
+    #statusbar{background:#f0f4f8!important;}
+    body{background:#e8eef4!important;color:#1a2a3a!important;}
+  ` : '';
   var k = DAY_MODE ? 'light' : 'dark';
   setBase(k);
   if(LY.sat) LY.sat.bringToFront();
