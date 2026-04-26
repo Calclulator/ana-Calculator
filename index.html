@@ -790,6 +790,7 @@ function runParse() {
   if(!rtM) rtM = txt.match(/\b([A-Z]{4})-([A-Z]{4})\b/);
   if(rtM) { dep=rtM[1]; dest=rtM[2]; }
   console.log('[parse] dep:', dep, '| dest:', dest, '| reg:', reg, '| etopsKey:', etopsKey);
+  NAV_DEP = dep; NAV_DEST = dest;
 
   // STD
   var stdM = txt.match(/STD\s+(\d{2})(\d{2})Z/);
@@ -1408,17 +1409,16 @@ function drawRoute() {
   updateRvsmPanel();
 }
 drawRoute();
+var NAV_DEP = null, NAV_DEST = null, NAV_STD = null, NAV_STA = null;
 function updateNavFlightInfo() {
   var info = document.getElementById('nav-flight-info');
-  if(typeof DEP_ICAO==='undefined' || !DEP_ICAO || typeof DEST_ICAO==='undefined' || !DEST_ICAO){ info.style.display='none'; return; }
+  if(!NAV_DEP || !NAV_DEST){ info.style.display='none'; return; }
   info.style.display='block';
-  document.getElementById('nav-route').textContent = DEP_ICAO + ' → ' + DEST_ICAO;
-  document.getElementById('nav-dep-icao').textContent = DEP_ICAO;
-  document.getElementById('nav-arr-icao').textContent = DEST_ICAO;
-  var depT = typeof STD_UTC!=='undefined' ? STD_UTC : '';
-  var arrT = typeof STA_UTC!=='undefined' ? STA_UTC : '';
-  document.getElementById('nav-dep-time').textContent = depT;
-  document.getElementById('nav-arr-time').textContent = arrT;
+  document.getElementById('nav-route').textContent = NAV_DEP + ' → ' + NAV_DEST;
+  document.getElementById('nav-dep-icao').textContent = NAV_DEP;
+  document.getElementById('nav-arr-icao').textContent = NAV_DEST;
+  document.getElementById('nav-dep-time').textContent = NAV_STD || '';
+  document.getElementById('nav-arr-time').textContent = NAV_STA || '';
 }
 var TEXT_SIZE = 12;
 function changeTextSize(d) {
