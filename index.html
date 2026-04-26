@@ -1589,6 +1589,12 @@ function toggleMode() {
   if(!style){ style = document.createElement('style'); style.id='day-mode-style'; document.head.appendChild(style); }
   style.textContent = DAY_MODE ? `
     #tab-bar{background:#f0f4f8!important;border-bottom-color:#d0d8e4!important;}
+    #nav-panel{background:#ffffff!important;border-right-color:#d0d8e4!important;}
+    .nav-hdr{border-bottom-color:#d0d8e4!important;}
+    .nav-sec-lbl{color:#90a4ae!important;}
+    .nav-item{color:#37474f!important;}
+    .nav-item:hover{background:#f0f4f8!important;}
+    #nav-flight-info{border-bottom-color:#d0d8e4!important;}
     .tab-btn{color:#546e7a!important;}
     .tab-btn.active{color:#1565c0!important;border-bottom-color:#1565c0!important;}
     .bar{background:#e8eef4!important;border-bottom-color:#d0d8e4!important;}
@@ -2180,7 +2186,7 @@ setInterval(function(){
     <button onclick="closeNav()" style="background:transparent;border:none;color:#546e7a;cursor:pointer;font-size:20px;line-height:1;padding:0;">×</button>
   </div>
   <div id="nav-flight-info" style="padding:10px 16px 12px;border-bottom:1px solid #1e2a38;display:none;font-family:'Helvetica Neue',Arial,sans-serif;">
-    <div id="nav-utc-row" style="color:#455a64;font-size:10px;letter-spacing:.04em;margin-bottom:8px;"></div>
+    <div id="nav-utc-row" style="color:#90a4ae;font-size:12px;letter-spacing:.04em;margin-bottom:8px;font-weight:500;"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
       <span id="nav-dep-icao" style="color:#4fc3f7;font-size:16px;font-weight:bold;letter-spacing:.1em;"></span>
       <span style="color:#2a3a4e;font-size:13px;flex:1;text-align:center;">──▶</span>
