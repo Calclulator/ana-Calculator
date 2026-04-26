@@ -629,12 +629,10 @@ var acIcao = null;
 // =====================================================================
 function showTab(name) {
   ['wx','fp'].forEach(function(n) {
-    document.getElementById('tab-'+n).classList.remove('active');
     document.getElementById(n+'-panel').classList.remove('active');
     var ni=document.getElementById('nav-'+n);
     if(ni) ni.classList.toggle('nav-act', n===name);
   });
-  document.getElementById('tab-'+name).classList.add('active');
   document.getElementById(name+'-panel').classList.add('active');
   if(name==='wx') setTimeout(function(){map.invalidateSize();},100);
 }
