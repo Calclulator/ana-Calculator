@@ -29,7 +29,7 @@
   #fpl-wrap textarea:focus{outline:none;border-color:#1565c0;color:#cfd8dc;}
   #map-wrap{position:relative;flex:1;min-height:0;}
   #map{height:100%;width:100%;background:#080a12;}
-  body.day-mode #map{background:#e8eaf0;}
+  body.day-mode #map{background:#ffffff;}
   #vleg{position:absolute;right:8px;top:10px;z-index:900;background:rgba(8,10,20,.92);border:1px solid #1e2a38;border-radius:4px;padding:6px 24px 6px 5px;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:2px;}
   #statusbar{background:#080a12;border-top:1px solid #1a2535;padding:3px 8px;display:flex;flex-wrap:wrap;gap:12px;font-size:10px;color:#546e7a;flex-shrink:0;}
   #msg{color:#ffa726;}
@@ -530,6 +530,7 @@ var APT = {
     "RJCC": {"lat": 42.77519989, "lon": 141.6929932},
     "ROAH": {"lat": 26.195801, "lon": 127.646004}
 };
+var BLANK_TILE=(function(){var c=document.createElement('canvas');c.width=c.height=1;return c.toDataURL();})();
 var LY = {
   base:null, sat:null, radar:null,
   corridor:[], route:[], wpts:[], etops:[],
@@ -1022,7 +1023,8 @@ function setBase(k) {
     maxZoom:18,
     subdomains:(k==='sat'?'':'abcd'),
     updateWhenIdle:lowBw,
-    keepBuffer:lowBw?0:2
+    keepBuffer:lowBw?0:2,
+    errorTileUrl:BLANK_TILE
   }).addTo(map);
   LY.base.bringToBack();
 }
@@ -1095,7 +1097,7 @@ function loadSat(k) {
           maxNativeZoom: 5,
           updateWhenIdle: false,
           keepBuffer: 0,
-          errorTileUrl: ''
+          errorTileUrl: BLANK_TILE
         });
         LY.sat.addTo(map);
         if(LY.base) LY.base.bringToBack();
@@ -1120,7 +1122,7 @@ function loadSat(k) {
     maxZoom: 9,
     updateWhenIdle: false,
     keepBuffer: 0,
-    errorTileUrl: ''
+    errorTileUrl: BLANK_TILE
   });
   LY.sat.addTo(map);
   if(LY.base) LY.base.bringToBack();
