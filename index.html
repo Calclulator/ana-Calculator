@@ -82,6 +82,11 @@
 <div id="tab-bar">
   <button class="tab-btn active" id="tab-wx" onclick="showTab('wx')">⛅ Weather Radar</button>
   <button class="tab-btn" id="tab-fp" onclick="showTab('fp')">📋 Flight Plan</button>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:4px;padding:0 8px;">
+    <button class="btn" onclick="changeTextSize(-1)" style="padding:2px 6px;">A-</button>
+    <button class="btn" onclick="changeTextSize(1)" style="padding:2px 6px;">A+</button>
+    <button class="btn" id="modeBtn" onclick="toggleMode()" style="padding:2px 8px;">☀</button>
+  </div>
 </div>
 
 <div id="panels">
@@ -1271,6 +1276,25 @@ function drawRoute() {
   updateRvsmPanel();
 }
 drawRoute();
+var TEXT_SIZE = 12;
+function changeTextSize(d) {
+  TEXT_SIZE = Math.max(10, Math.min(16, TEXT_SIZE + d));
+  document.body.style.fontSize = TEXT_SIZE + 'px';
+}
+
+var DAY_MODE = false;
+function toggleMode() {
+  DAY_MODE = !DAY_MODE;
+  document.getElementById('modeBtn').textContent = DAY_MODE ? '🌙' : '☀';
+  if(DAY_MODE) {
+    document.body.style.background = '#f5f5f5';
+    document.body.style.color = '#1a1a1a';
+  } else {
+    document.body.style.background = '#0a0c16';
+    document.body.style.color = '#cfd8dc';
+  }
+}
+
 function changeWpFont(d) {
   WP_FONT_IDX = Math.max(0, Math.min(2, WP_FONT_IDX + d));
   WP_FONT_SIZE = WP_FONT_SIZES[WP_FONT_IDX];
