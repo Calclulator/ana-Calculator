@@ -1190,38 +1190,36 @@ function loadMetars() {
   LY.metar.forEach(function(m){map.removeLayer(m);}); LY.metar=[];
   if(!document.getElementById('oMetar').checked) return;
   var CAT = {VFR:'#43a047',MVFR:'#1565c0',IFR:'#e53935',LIFR:'#ab47bc'};
-  var APT_DB = 'KAUS,KBWI,KBIL,KBFI,KBOS,KCHS,KRFD,KORD,KDFW,KDEN,KDTW,KIAH,KIND,KLAS,KLAX,KMKE,KMSP,KEWR,KJFK,KOAK,KONT,KPHX,KPDX,KSLC,KSAT,KSFO,KSJC,KSEA,KIAD,PHNL,PHOG,PHKO,PKMJ,PMDY,PWAK,PGSN,PGUM,PANC,PACD,PAED,PAFA,PAKN,PASY,CYYC,CYEG,CYQX,CYYR,CYFB,CYUL,CYXS,CYYZ,CYVR,CYWG,CYXY,CYZF,MMAA,MMDO,MMGL,MMHO,MMMZ,MMMX,MMMY,MMQT,MMSM,MMTC,LOWW,LOWL,EBBR,LBBG,EKCH,EFHK,LFPG,LFPO,EDDK,EDDL,EDDF,EDDM,EDDN,LGAV,BIKF,EINN,LIMC,LIMF,LIPZ,EHAM,ENBR,ENBO,EPWA,ESSA,ESGG,EGAA,EGPF,EGKK,EGLL,EGSS,UNAA,UHMA,UIBB,UIAA,UIII,UHHH,UNKL,UHMM,UUDD,ULMM,UNNT,UHPP,UWWW,ULLI,USRR,UUYY,UIUU,UHWW,UEEE,USSS,UHSS,UDYZ,UBBB,VGEG,VGHS,WBSB,VDPP,VHHH,VAAH,VOBL,VOMM,VIDP,VIJP,VECC,VOHS,VABB,VANP,WADD,WIHH,WIII,WICA,WAAA,WARR,UGTB,UAAA,UACC,UCFM,VMMC,WMKJ,WBKK,WMKK,WBGG,WMKP,ZMCK,VYYY,VYNT,VYMD,ZBHH,ZWWW,ZHHH,ZSAM,ZLXY,ZLDH,ZBAA,ZYCC,ZUCK,ZYTL,ZGGG,ZUGY,ZSHC,ZYHB,ZBLA,ZPPP,ZLLL,ZGNN,ZSQD,ZJSY,ZSSS,ZSPD,ZYTX,ZGSZ,RKSS,RKSI,RPLC,RPVM,RPLL,WSSS,RCKH,RCSS,RCTP,VTBD,VTBS,VTCC,VTSP,VTBU,LTAC,LTBA,LTFM,LTCE,LTBJ,LTAI,UTTT,VVDN,VVCI,VVNB,VVTS,VVVD,YBBN,YBRM,YBCS,YPDN,YPLM,YMML,YPPH,YPPD,YSSY,YBTL,AYPY'.split(',');
-
-// 航路上400NM以内の空港を抽出
-function getAirportsNearRoute() {
-  if(WP.length < 2) return APT_DB.join(',');
-  var near = [];
-  APT_DB.forEach(function(icao) {
-    var apt = APT[icao];
-    if(!apt) return;
-    for(var i=0;i<WP.length;i++) {
-      var d = L.latLng(apt.lat,apt.lng).distanceTo(L.latLng(WP[i].lat,WP[i].lng));
-      if(d < 400*1852) { near.push(icao); break; }
-    }
-  });
-  return near.join(',');
-}
-var ids = WP.length>=2 ? getAirportsNearRoute() : APT_DB.slice(0,50).join(',');
-  fetch('https://aviationweather.gov/api/data/metar?ids='+ids+'&format=json&hours=2')
+  var ids = 'KAUS,KBWI,KBIL,KBFI,KBOS,KCHS,KRFD,KORD,KDFW,KDEN,KDTW,KIAH,KIND,KLAS,KLAX,KMKE,KMSP,KEWR,KJFK,KOAK,KONT,KPHX,KPDX,KSLC,KSAT,KSFO,KSJC,KSEA,KIAD,PHNL,PHOG,PHKO,PKMJ,PMDY,PWAK,PGSN,PGUM,PANC,PACD,PAED,PAFA,PAKN,PASY,CYYC,CYEG,CYQX,CYYR,CYFB,CYUL,CYXS,CYYZ,CYVR,CYWG,CYXY,CYZF,MMAA,MMDO,MMGL,MMHO,MMMZ,MMMX,MMMY,MMQT,MMSM,MMTC,LOWW,LOWL,EBBR,LBBG,EKCH,EFHK,LFPG,LFPO,EDDK,EDDL,EDDF,EDDM,EDDN,LGAV,BIKF,EINN,LIMC,LIMF,LIPZ,EHAM,ENBR,ENBO,EPWA,ESSA,ESGG,EGAA,EGPF,EGKK,EGLL,EGSS,UNAA,UHMA,UIBB,UIAA,UIII,UHHH,UNKL,UHMM,UUDD,ULMM,UNNT,UHPP,UWWW,ULLI,USRR,UUYY,UIUU,UHWW,UEEE,USSS,UHSS,UDYZ,UBBB,VGEG,VGHS,WBSB,VDPP,VHHH,VAAH,VOBL,VOMM,VIDP,VIJP,VECC,VOHS,VABB,VANP,WADD,WIHH,WIII,WICA,WAAA,WARR,UGTB,UAAA,UACC,UCFM,VMMC,WMKJ,WBKK,WMKK,WBGG,WMKP,ZMCK,VYYY,VYNT,VYMD,ZBHH,ZWWW,ZHHH,ZSAM,ZLXY,ZLDH,ZBAA,ZYCC,ZUCK,ZYTL,ZGGG,ZUGY,ZSHC,ZYHB,ZBLA,ZPPP,ZLLL,ZGNN,ZSQD,ZJSY,ZSSS,ZSPD,ZYTX,ZGSZ,RKSS,RKSI,RPLC,RPVM,RPLL,WSSS,RCKH,RCSS,RCTP,VTBD,VTBS,VTCC,VTSP,VTBU,LTAC,LTBA,LTFM,LTCE,LTBJ,LTAI,UTTT,VVDN,VVCI,VVNB,VVTS,VVVD,YBBN,YBRM,YBCS,YPDN,YPLM,YMML,YPPH,YPPD,YSSY,YBTL,AYPY,RJTT,RJOO,RJBB,RJFF,RJCC,ROAH';
+  fetch('https://aviationweather.gov/api/data/metar?ids='+ids+'&format=json')
     .then(function(r){return r.json();})
     .then(function(d){
       d.forEach(function(m){
         if(!m.lat||!m.lon) return;
+        if(WP.length>=2) {
+          var near = false;
+          for(var i=0;i<WP.length;i++){
+            if(L.latLng(m.lat,m.lon).distanceTo(L.latLng(WP[i].lat,WP[i].lng))<400*1852){near=true;break;}
+          }
+          if(!near) return;
+        }
         var col = CAT[m.flightCategory]||'#546e7a';
         var ic = L.divIcon({
-          html:'<div style="font-size:9px;font-family:monospace;background:rgba(6,8,18,.9);'
-              +'color:'+col+';padding:1px 4px;border-radius:2px;'
-              +'border:.5px solid '+col+'55;white-space:nowrap;">'
-              +m.stationId+' '+(m.flightCategory||'')+'</div>',
-          className:'', iconSize:[75,14], iconAnchor:[37,7]
+          html:'<div style="width:14px;height:14px;border-radius:50%;background:'+col+';'
+              +'border:2px solid white;box-shadow:0 0 4px '+col+'88;"></div>',
+          className:'', iconSize:[14,14], iconAnchor:[7,7]
         });
         var mk = L.marker([m.lat,m.lon],{icon:ic}).addTo(map);
-        mk.bindTooltip(m.stationId+'\n'+(m.rawOb||''),{className:'wxt',sticky:true});
+        mk.bindTooltip(m.stationId+'\n'+(m.flightCategory||'')+'\n'+(m.rawOb||''),
+          {className:'wxt',sticky:true,permanent:false});
+        mk.on('click',function(){
+          fetch('https://aviationweather.gov/api/data/taf?ids='+m.stationId+'&format=json')
+            .then(function(r){return r.json();})
+            .then(function(t){
+              var taf = t&&t[0]?t[0].rawTAF:'TAF N/A';
+              alert(m.stationId+' METAR:\n'+(m.rawOb||'N/A')+'\n\nTAF:\n'+taf);
+            });
+        });
         LY.metar.push(mk);
       });
       bringTop();
