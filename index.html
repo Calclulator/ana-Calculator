@@ -1414,7 +1414,6 @@ function loadMetars() {
   fetch('https://api.checkwx.com/v2/metar/'+near.join(',')+'/decoded',{headers:{'X-API-Key':'eb52e4c6ca254584842adb8dc574b4f8'}})
     .then(function(r){return r.json();})
     .then(function(d){
-      console.log('METAR airports:', d.data ? d.data.map(function(m){return m.icao;}) : 'no data');
       if(!d.data) return;
       d.data.forEach(function(m){
         if(!m.station||!m.station.geometry) return;
