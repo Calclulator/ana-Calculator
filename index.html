@@ -1288,10 +1288,9 @@ function toggleMode() {
   document.getElementById('modeBtn').textContent = DAY_MODE ? '🌙' : '☀';
   document.body.style.background = DAY_MODE ? '#e8eaf0' : '#0a0c16';
   document.body.style.color = DAY_MODE ? '#1a1a1a' : '#cfd8dc';
-  var url = DAY_MODE ? BASES.light : BASES.dark;
-  if(LY.base) map.removeLayer(LY.base);
-  LY.base = L.tileLayer(url,{maxZoom:18,subdomains:'abcd'}).addTo(map);
-  LY.base.bringToBack();
+  var k = DAY_MODE ? 'light' : 'dark';
+  document.getElementById('baseSel').value = k;
+  setBase(k);
   if(LY.sat) LY.sat.bringToFront();
   setTimeout(function(){ bringTop(); }, 200);
 }
