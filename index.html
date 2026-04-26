@@ -248,6 +248,7 @@
       <thead>
         <tr>
           <th>Waypoint</th>
+          <th>FIR</th>
           <th>ZTME</th>
           <th>ETO</th>
           <th>ATO</th>
@@ -261,7 +262,7 @@
       </thead>
       <tbody id="fp-tbody">
         <tr>
-          <td colspan="10" style="color:#546e7a;padding:24px;text-align:center;">
+          <td colspan="11" style="color:#546e7a;padding:24px;text-align:center;">
             NAV LOGを貼り付けて ▶ Apply で解析してください
           </td>
         </tr>
@@ -994,13 +995,42 @@ function renderFpTable() {
   var tbody = document.getElementById('fp-tbody');
   tbody.innerHTML = '';
   if(!FP_ROWS.length) {
-    tbody.innerHTML = '<tr><td colspan="10" style="color:#546e7a;padding:24px;text-align:center;">NAV LOGを「Weather Radar」タブで貼り付けて解析してください</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="color:#546e7a;padding:24px;text-align:center;">NAV LOGを貼り付けて ▶ Apply で解析してください</td></tr>';
     return;
   }
+
+  // FIR color palette (bg=通常行, hi=境界行強調, ac=アクセント)
+  var FIR_PAL = [
+    {bg:'rgba(79,195,247,.06)',  hi:'rgba(79,195,247,.13)',  ac:'rgba(79,195,247,.7)'},
+    {bg:'rgba(102,187,106,.06)', hi:'rgba(102,187,106,.13)', ac:'rgba(102,187,106,.7)'},
+    {bg:'rgba(255,167,38,.06)',  hi:'rgba(255,167,38,.13)',  ac:'rgba(255,167,38,.7)'},
+    {bg:'rgba(171,71,188,.06)',  hi:'rgba(171,71,188,.13)',  ac:'rgba(171,71,188,.7)'},
+    {bg:'rgba(38,166,154,.06)',  hi:'rgba(38,166,154,.13)',  ac:'rgba(38,166,154,.7)'},
+    {bg:'rgba(255,112,67,.06)',  hi:'rgba(255,112,67,.13)',  ac:'rgba(255,112,67,.7)'},
+    {bg:'rgba(240,98,146,.06)',  hi:'rgba(240,98,146,.13)',  ac:'rgba(240,98,146,.7)'},
+    {bg:'rgba(120,144,156,.06)', hi:'rgba(120,144,156,.13)', ac:'rgba(120,144,156,.7)'},
+  ];
+  var firMap = {'RJJJ': 0};
+  var firNextIdx = 1;
+  var currentFir = 'RJJJ';
+
   var ref = DEP_ATO_MIN!==null ? DEP_ATO_MIN : (DEP_STD_MIN!==null ? DEP_STD_MIN : null);
 
-  FP_ROWS.forEach(function(row,idx) {
+  FP_ROWS.forEach(function(row, idx) {
+    var isFirBoundary = typeof row.id === 'string' && row.id.charAt(0) === '-';
+    if(isFirBoundary) {
+      var newFir = row.id.slice(1);
+      if(firMap[newFir] === undefined) {
+        firMap[newFir] = firNextIdx % FIR_PAL.length;
+        firNextIdx++;
+      }
+      currentFir = newFir;
+    }
+
+    var pal = FIR_PAL[firMap[currentFir] !== undefined ? firMap[currentFir] : 0];
     var tr = document.createElement('tr');
+    tr.style.background = isFirBoundary ? pal.hi : pal.bg;
+
     var eto = calcEto(row.ctme);
     var etoMin = (ref!==null&&row.ctme!==null) ? ref+row.ctme : null;
 
@@ -1024,13 +1054,18 @@ function renderFpTable() {
       }
     }
 
-    // Cross at placeholder
     var altPh = '';
     if(row.alt&&row.alt!=='CLM'&&row.alt!=='DEC') altPh = row.alt;
     var ztmeStr = (row.ztme!==null) ? String(row.ztme) : '—';
 
+    // FIR cell
+    var firHtml = isFirBoundary
+      ? '<td style="color:'+pal.ac+';font-size:10px;font-weight:bold;padding:3px 6px;white-space:nowrap;">&#x2192; '+currentFir+'</td>'
+      : '<td style="color:#37474f;font-size:10px;padding:3px 6px;white-space:nowrap;">'+currentFir+'</td>';
+
     tr.innerHTML =
-      '<td style="color:#90a4ae;padding:3px 8px;">'+row.id+'</td>'+
+      '<td style="color:'+(isFirBoundary?'#cfd8dc':'#90a4ae')+';padding:3px 8px;">'+row.id+'</td>'+
+      firHtml+
       '<td style="color:#546e7a;text-align:center;padding:3px 6px;">'+ztmeStr+'</td>'+
       '<td style="color:#78909c;padding:3px 6px;">'+eto+'</td>'+
       '<td style="padding:3px 4px;"><input class="fp-in" value="'+row.ato+'" placeholder="HHMM" onchange="onAtoChange('+idx+',this.value)"></td>'+
