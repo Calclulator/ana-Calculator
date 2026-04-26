@@ -962,7 +962,8 @@ function perpPoint(lat,lng,brg,nm) {
   var d = (nm*NM)/6371000;
   var r = lat*Math.PI/180;
   var l = lng*Math.PI/180;
-  var nr = Math.asin(Math.sin(r)*Math.cos(d)+Math.cos(r)*Math.sin(d)*Math.cos(brg));
+  var sinNr = Math.sin(r)*Math.cos(d)+Math.cos(r)*Math.sin(d)*Math.cos(brg);
+  var nr = Math.asin(Math.max(-1, Math.min(1, sinNr)));
   var nl = l+Math.atan2(Math.sin(brg)*Math.sin(d)*Math.cos(r),Math.cos(d)-Math.sin(r)*Math.sin(nr));
   return [nr*180/Math.PI, nl*180/Math.PI];
 }
@@ -991,6 +992,7 @@ function drawRoute() {
 
   for(var i=0;i<WP.length-1;i++) {
     var a=WP[i], b=WP[i+1];
+    if(isNaN(a.lat)||isNaN(a.lng)||isNaN(b.lat)||isNaN(b.lng)) continue;
     var v   = turbOn ? (vwsObj[a.id]||0) : 0;
     var col = vwsCol(v);
     var brg = bearing(a.lat,a.lng,b.lat,b.lng);
@@ -1001,11 +1003,14 @@ function drawRoute() {
       var aR = perpPoint(a.lat,a.lng, brg+Math.PI/2, 5);
       var bL = perpPoint(b.lat,b.lng, brg-Math.PI/2, 5);
       var bR = perpPoint(b.lat,b.lng, brg+Math.PI/2, 5);
-      var poly = L.polygon([aL,bL,bR,aR],{
-        fillColor:col, fillOpacity:0.30,
-        stroke:false
-      }).addTo(map);
-      LY.corridor.push(poly);
+      if(!isNaN(aL[0])&&!isNaN(aL[1])&&!isNaN(aR[0])&&!isNaN(aR[1])&&
+         !isNaN(bL[0])&&!isNaN(bL[1])&&!isNaN(bR[0])&&!isNaN(bR[1])) {
+        var poly = L.polygon([aL,bL,bR,aR],{
+          fillColor:col, fillOpacity:0.30,
+          stroke:false
+        }).addTo(map);
+        LY.corridor.push(poly);
+      }
     }
 
     // 航路中心線
