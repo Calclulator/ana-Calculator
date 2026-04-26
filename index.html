@@ -1286,19 +1286,16 @@ var DAY_MODE = false;
 function toggleMode() {
   DAY_MODE = !DAY_MODE;
   document.getElementById('modeBtn').textContent = DAY_MODE ? '🌙' : '☀';
-  if(DAY_MODE) {
-    document.body.style.background = '#e8eaf0';
-    document.body.style.color = '#1a1a1a';
-    if(LY.base) map.removeLayer(LY.base);
-    LY.base = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:18,subdomains:'abcd'}).addTo(map);
-    LY.base.bringToBack();
-  } else {
-    document.body.style.background = '#0a0c16';
-    document.body.style.color = '#cfd8dc';
-    if(LY.base) map.removeLayer(LY.base);
-    LY.base = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:18,subdomains:'abcd'}).addTo(map);
-    LY.base.bringToBack();
-  }
+  document.body.style.background = DAY_MODE ? '#e8eaf0' : '#0a0c16';
+  document.body.style.color = DAY_MODE ? '#1a1a1a' : '#cfd8dc';
+  var url = DAY_MODE
+    ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  if(LY.base) map.removeLayer(LY.base);
+  LY.base = L.tileLayer(url,{maxZoom:18,subdomains:'abcd'}).addTo(map);
+  LY.base.bringToBack();
+  if(LY.sat) LY.sat.bringToFront();
+  setTimeout(function(){ bringTop(); }, 200);
 }
 
 function changeWpFont(d) {
