@@ -1411,7 +1411,7 @@ function loadMetars() {
     }
   }
   if(!near.length) return;
-  fetch('https://api.checkwx.com/metar/'+near.join(',')+'/decoded',{headers:{'X-API-Key':'eb52e4c6ca254584842adb8dc574b4f8'}})
+  fetch('https://api.checkwx.com/V2/metar/'+near.join(',')+'/decoded',{headers:{'X-API-Key':'eb52e4c6ca254584842adb8dc574b4f8'}})
     .then(function(r){return r.json();})
     .then(function(d){
       if(!d.data) return;
