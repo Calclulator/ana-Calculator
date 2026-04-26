@@ -54,6 +54,22 @@
   .leaflet-tooltip.sgx{background:rgba(18,4,4,.94)!important;border:.5px solid rgba(239,83,80,.4)!important;color:#ffcdd2!important;font-family:monospace!important;font-size:10px!important;padding:2px 6px!important;border-radius:2px!important;box-shadow:none!important;}
   .leaflet-tooltip.sgx::before{display:none!important;}
   .leaflet-control-zoom a{background:#0d1117!important;color:#90a4ae!important;border-color:#2a3a4e!important;}
+  /* Nav / Hamburger */
+  #menu-btn{background:transparent;border:none;cursor:pointer;padding:5px 12px;display:flex;flex-direction:column;justify-content:center;gap:4px;align-self:stretch;flex-shrink:0;border-right:1px solid #1e2a38;}
+  #menu-btn span{display:block;width:17px;height:2px;background:#546e7a;border-radius:1px;transition:background .15s;}
+  #menu-btn:hover span{background:#90a4ae;}
+  #nav-overlay{position:fixed;inset:0;z-index:3998;background:rgba(0,0,0,.5);display:none;}
+  #nav-panel{position:fixed;top:0;left:0;bottom:0;z-index:3999;width:240px;max-width:82vw;background:#080a14;border-right:1px solid #2a3a4e;display:flex;flex-direction:column;transform:translateX(-100%);transition:transform .22s cubic-bezier(.4,0,.2,1);padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);}
+  #nav-panel.open{transform:translateX(0);}
+  .nav-hdr{padding:10px 14px;border-bottom:1px solid #1e2a38;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+  .nav-scroll{flex:1;overflow-y:auto;padding-bottom:env(safe-area-inset-bottom);}
+  .nav-sec{padding:14px 0 2px;}
+  .nav-sec-lbl{padding:0 16px 5px;font-size:9px;letter-spacing:.12em;color:#37474f;text-transform:uppercase;}
+  .nav-item{display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;font-size:12px;color:#78909c;background:transparent;border:none;width:100%;text-align:left;font-family:'Courier New',monospace;transition:background .1s,color .1s;}
+  .nav-item:hover:not(.nav-dis){background:#0d1a28;color:#cfd8dc;}
+  .nav-item.nav-act{color:#4fc3f7;}
+  .nav-item.nav-dis{color:#2a3a4e;cursor:default;}
+  .nav-tag{margin-left:auto;font-size:9px;color:#1e2a38;border:1px solid #1e2a38;border-radius:2px;padding:1px 4px;letter-spacing:.04em;}
   /* METAR Panel */
   #metar-overlay{position:fixed;inset:0;z-index:2999;background:rgba(0,0,0,.5);display:none;}
   #metar-panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:3000;background:#080a14;border:1px solid #2a3a4e;border-radius:6px;box-shadow:0 4px 32px rgba(0,0,0,.85);width:780px;max-width:96vw;display:none;font-family:'Courier New',monospace;font-size:12px;}
@@ -82,6 +98,7 @@
 <body>
 
 <div id="tab-bar">
+  <button id="menu-btn" onclick="openNav()" aria-label="Menu"><span></span><span></span><span></span></button>
   <button class="tab-btn active" id="tab-wx" onclick="showTab('wx')">⛅ Weather Radar</button>
   <button class="tab-btn" id="tab-fp" onclick="showTab('fp')">📋 Flight Plan</button>
   <div style="margin-left:auto;display:flex;align-items:center;gap:4px;padding:0 8px;">
@@ -547,10 +564,24 @@ function showTab(name) {
   ['wx','fp'].forEach(function(n) {
     document.getElementById('tab-'+n).classList.remove('active');
     document.getElementById(n+'-panel').classList.remove('active');
+    var ni=document.getElementById('nav-'+n);
+    if(ni) ni.classList.toggle('nav-act', n===name);
   });
   document.getElementById('tab-'+name).classList.add('active');
   document.getElementById(name+'-panel').classList.add('active');
   if(name==='wx') setTimeout(function(){map.invalidateSize();},100);
+}
+function openNav(){
+  document.getElementById('nav-panel').classList.add('open');
+  document.getElementById('nav-overlay').style.display='block';
+}
+function closeNav(){
+  document.getElementById('nav-panel').classList.remove('open');
+  document.getElementById('nav-overlay').style.display='none';
+}
+function navTo(tab){
+  showTab(tab);
+  closeNav();
 }
 
 // =====================================================================
@@ -1865,6 +1896,34 @@ setInterval(function(){
 
 </script>
 
+<div id="nav-overlay" onclick="closeNav()"></div>
+<div id="nav-panel">
+  <div class="nav-hdr">
+    <span style="color:#4fc3f7;font-size:13px;font-weight:bold;letter-spacing:.1em;">AJX</span>
+    <button onclick="closeNav()" style="background:transparent;border:none;color:#546e7a;cursor:pointer;font-size:20px;line-height:1;padding:0;">×</button>
+  </div>
+  <div class="nav-scroll">
+    <div class="nav-sec">
+      <div class="nav-sec-lbl">Planning</div>
+      <button class="nav-item" id="nav-fp" onclick="navTo('fp')">📋 FLT PLN</button>
+    </div>
+    <div class="nav-sec">
+      <div class="nav-sec-lbl">Weather</div>
+      <button class="nav-item nav-act" id="nav-wx" onclick="navTo('wx')">⛅ Weather Radar</button>
+      <button class="nav-item nav-dis">🌡 Atmosphere Analysis<span class="nav-tag">WIP</span></button>
+      <button class="nav-item nav-dis">🛰 SAT View<span class="nav-tag">WIP</span></button>
+    </div>
+    <div class="nav-sec">
+      <div class="nav-sec-lbl">Calculators</div>
+      <button class="nav-item nav-dis">💤 Crew Rest Calculator<span class="nav-tag">WIP</span></button>
+      <button class="nav-item nav-dis">🔔 Curfew Calculator<span class="nav-tag">WIP</span></button>
+    </div>
+    <div class="nav-sec">
+      <div class="nav-sec-lbl">Briefings &amp; Tools</div>
+      <button class="nav-item nav-dis">📄 Cabin Crew BRFG<span class="nav-tag">WIP</span></button>
+    </div>
+  </div>
+</div>
 <div id="metar-overlay" onclick="closeMetarPanel()"></div>
 <div id="metar-panel">
   <div class="mp-hdr">
