@@ -1288,9 +1288,7 @@ function toggleMode() {
   document.getElementById('modeBtn').textContent = DAY_MODE ? '🌙' : '☀';
   document.body.style.background = DAY_MODE ? '#e8eaf0' : '#0a0c16';
   document.body.style.color = DAY_MODE ? '#1a1a1a' : '#cfd8dc';
-  var url = DAY_MODE
-    ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  var url = DAY_MODE ? BASES.light : BASES.dark;
   if(LY.base) map.removeLayer(LY.base);
   LY.base = L.tileLayer(url,{maxZoom:18,subdomains:'abcd'}).addTo(map);
   LY.base.bringToBack();
