@@ -792,9 +792,12 @@ function runParse() {
   console.log('[parse] dep:', dep, '| dest:', dest, '| reg:', reg, '| etopsKey:', etopsKey);
   NAV_DEP = dep; NAV_DEST = dest;
 
-  // STD
+  // STD / STA
   var stdM = txt.match(/STD\s+(\d{2})(\d{2})Z/);
   DEP_STD_MIN = stdM ? parseInt(stdM[1])*60+parseInt(stdM[2]) : null;
+  NAV_STD = stdM ? (stdM[1]+stdM[2]) : null;
+  var staM = txt.match(/STA\s+(\d{2})(\d{2})Z/);
+  NAV_STA = staM ? (staM[1]+staM[2]) : null;
 
   // 出発燃料
   for(var i=0;i<lines.length;i++) {
@@ -1410,16 +1413,165 @@ function drawRoute() {
 }
 drawRoute();
 var NAV_DEP = null, NAV_DEST = null, NAV_STD = null, NAV_STA = null;
+
+// Returns {name, offset} where offset is hours (may be fractional, e.g. 5.5 for IST)
+function getIcaoTz(icao) {
+  if(!icao) return {name:'UTC', offset:0};
+  var c = icao.toUpperCase();
+  var p2 = c.slice(0,2);
+  var now = new Date();
+  var mo = now.getUTCMonth() + 1; // 1-12
+  // Japan / Okinawa
+  if(p2==='RJ'||p2==='RO') return {name:'JST', offset:9};
+  // Korea
+  if(p2==='RK') return {name:'KST', offset:9};
+  // Australia - DST Oct-Apr (+11 AEDT), May-Sep (+10 AEST)
+  // SE Australia states (NSW, VIC, ACT, TAS, SA)
+  if(c==='YSSY'||c==='YMML'||c==='YBBN'||c==='YPAD'||c==='YMHB'||
+     c==='YSCB'||c==='YBTL'||c==='YBCS'||c==='YBMK'||c==='YPPH'||
+     (p2==='YS'||p2==='YM'||p2==='YB'||p2==='YP'||p2==='YN'||p2==='YA'||p2==='YC'||p2==='YE'||p2==='YG'||p2==='YH')) {
+    // Western Australia: no DST
+    if(c==='YPPH'||c==='YPJT'||c==='YPKG') return {name:'AWST', offset:8};
+    // Queensland: no DST
+    if(c==='YBBN'||c==='YBTL'||c==='YBCS'||c==='YBMK'||c==='YBAF') return {name:'AEST', offset:10};
+    // Darwin/NT: no DST (ACST +9.5)
+    if(c==='YPDN') return {name:'ACST', offset:9.5};
+    // SE: has DST
+    var dst = (mo>=10||mo<=3);
+    return dst ? {name:'AEDT', offset:11} : {name:'AEST', offset:10};
+  }
+  // New Zealand - DST Sep-Apr
+  if(p2==='NZ') {
+    var dst = (mo>=9||mo<=4);
+    return dst ? {name:'NZDT', offset:13} : {name:'NZST', offset:12};
+  }
+  // Guam / CNMI
+  if(p2==='PG') return {name:'ChST', offset:10};
+  // Hawaii
+  if(p2==='PH') return {name:'HST', offset:-10};
+  // Micronesia (Chuuk/Truk UTC+10, Pohnpei +11, Kosrae +11)
+  if(c==='PTTP'||c==='PTPN'||c==='PTKK') return {name:'CHUT', offset:10};
+  // Hong Kong / Macau
+  if(p2==='VH'||c==='VMMC') return {name:'HKT', offset:8};
+  // Taiwan
+  if(p2==='RC') return {name:'CST', offset:8};
+  // Philippines
+  if(p2==='RP') return {name:'PHT', offset:8};
+  // Singapore
+  if(p2==='WS') return {name:'SGT', offset:8};
+  // Malaysia (Peninsular + East)
+  if(p2==='WM'||p2==='WB') return {name:'MYT', offset:8};
+  // Brunei
+  if(p2==='WB') return {name:'BNT', offset:8};
+  // Indonesia - WIT (Papua) UTC+9
+  if(c==='WAJJ'||c==='WABY') return {name:'WIT', offset:9};
+  // Indonesia - WITA (Bali, Lombok, Makassar) UTC+8
+  if(p2==='WA'||c==='WAAA'||c==='WADD'||c==='WADL') return {name:'WITA', offset:8};
+  // Indonesia - WIB (Jakarta, Surabaya) UTC+7
+  if(p2==='WI'||p2==='WR') return {name:'WIB', offset:7};
+  // China (all regions use CST UTC+8)
+  if(p2==='ZB'||p2==='ZS'||p2==='ZG'||p2==='ZU'||p2==='ZW'||
+     p2==='ZL'||p2==='ZH'||p2==='ZP'||p2==='ZY'||p2==='ZJ') return {name:'CST', offset:8};
+  // Vietnam
+  if(p2==='VV') return {name:'ICT', offset:7};
+  // Thailand
+  if(p2==='VT') return {name:'ICT', offset:7};
+  // Cambodia / Laos
+  if(p2==='VD'||p2==='VL') return {name:'ICT', offset:7};
+  // Myanmar
+  if(p2==='VY') return {name:'MMT', offset:6.5};
+  // Bangladesh
+  if(p2==='VG') return {name:'BST', offset:6};
+  // Sri Lanka
+  if(p2==='VC') return {name:'SLST', offset:5.5};
+  // India (all) UTC+5:30
+  if(p2==='VI'||p2==='VE'||p2==='VA'||p2==='VO'||p2==='VN') return {name:'IST', offset:5.5};
+  // Pakistan
+  if(p2==='OP') return {name:'PKT', offset:5};
+  // UAE
+  if(p2==='OM') return {name:'GST', offset:4};
+  // Qatar
+  if(p2==='OT') return {name:'AST', offset:3};
+  // Bahrain
+  if(c==='OBBI') return {name:'AST', offset:3};
+  // Kuwait
+  if(c==='OKBK') return {name:'AST', offset:3};
+  // Saudi Arabia
+  if(p2==='OE') return {name:'AST', offset:3};
+  // Turkey
+  if(p2==='LT') return {name:'TRT', offset:3};
+  // Israel
+  if(p2==='LL') { var dst=(mo>=3&&mo<=10); return dst?{name:'IDT',offset:3}:{name:'IST',offset:2}; }
+  // Greece
+  if(p2==='LG') { var dst=(mo>=3&&mo<=10); return dst?{name:'EEST',offset:3}:{name:'EET',offset:2}; }
+  // Germany / Austria / Switzerland / Netherlands / Belgium / Italy / Spain / France
+  if(p2==='ED'||p2==='ET'||p2==='LO'||p2==='LS'||p2==='EH'||p2==='EB'||
+     p2==='LI'||p2==='LE'||p2==='LF'||p2==='LP') {
+    var dst=(mo>=3&&mo<=10); return dst?{name:'CEST',offset:2}:{name:'CET',offset:1};
+  }
+  // UK / Ireland
+  if(p2==='EG'||p2==='EI') { var dst=(mo>=3&&mo<=10); return dst?{name:'BST',offset:1}:{name:'GMT',offset:0}; }
+  // US Eastern: KJFK, KEWR, KBOS, KIAD, KMIA, KATL, KPHL, KDCA...
+  if(c==='KJFK'||c==='KEWR'||c==='KLGA'||c==='KBOS'||c==='KIAD'||c==='KDCA'||
+     c==='KMIA'||c==='KATL'||c==='KPHL'||c==='KDTW'||c==='KJAX'||c==='KRDU') {
+    var dst=(mo>=3&&mo<=11); return dst?{name:'EDT',offset:-4}:{name:'EST',offset:-5};
+  }
+  // US Central
+  if(c==='KORD'||c==='KDFW'||c==='KIAH'||c==='KMSP'||c==='KMCI'||c==='KSTL') {
+    var dst=(mo>=3&&mo<=11); return dst?{name:'CDT',offset:-5}:{name:'CST',offset:-6};
+  }
+  // US Mountain
+  if(c==='KDEN'||c==='KSLC'||c==='KABQ'||c==='KELP') {
+    var dst=(mo>=3&&mo<=11); return dst?{name:'MDT',offset:-6}:{name:'MST',offset:-7};
+  }
+  // Phoenix: no DST
+  if(c==='KPHX') return {name:'MST', offset:-7};
+  // US Pacific
+  if(c==='KLAX'||c==='KSFO'||c==='KSEA'||c==='KPDX'||c==='KLAS'||c==='KOAK'||c==='KSJC') {
+    var dst=(mo>=3&&mo<=11); return dst?{name:'PDT',offset:-7}:{name:'PST',offset:-8};
+  }
+  // Anchorage
+  if(c==='PANC') { var dst=(mo>=3&&mo<=11); return dst?{name:'AKDT',offset:-8}:{name:'AKST',offset:-9}; }
+  // Canada Pacific
+  if(c==='CYVR'||c==='CYXX') { var dst=(mo>=3&&mo<=11); return dst?{name:'PDT',offset:-7}:{name:'PST',offset:-8}; }
+  // Canada Eastern
+  if(c==='CYYZ'||c==='CYOW'||c==='CYUL'||c==='CYHZ') { var dst=(mo>=3&&mo<=11); return dst?{name:'EDT',offset:-4}:{name:'EST',offset:-5}; }
+  return {name:'UTC', offset:0};
+}
+
+function utcHhmmToLcl(hhmm, offset) {
+  if(!hhmm||hhmm.length<4) return '--:--';
+  var totalMin = parseInt(hhmm.slice(0,2))*60 + parseInt(hhmm.slice(2,4)) + Math.round(offset*60);
+  totalMin = ((totalMin%1440)+1440)%1440;
+  return ('0'+Math.floor(totalMin/60)).slice(-2)+':'+('0'+totalMin%60).slice(-2);
+}
+
+function updateNavClock() {
+  var el = document.getElementById('nav-utc-row');
+  if(!el) return;
+  var d = new Date();
+  var DAYS = ['日','月','火','水','木','金','土'];
+  var hh = ('0'+d.getUTCHours()).slice(-2);
+  var mm = ('0'+d.getUTCMinutes()).slice(-2);
+  el.textContent = DAYS[d.getUTCDay()]+' '+(d.getUTCMonth()+1)+'/'+d.getUTCDate()+' · '+hh+':'+mm+' UTC';
+}
+
 function updateNavFlightInfo() {
   var info = document.getElementById('nav-flight-info');
   if(!NAV_DEP || !NAV_DEST){ info.style.display='none'; return; }
   info.style.display='block';
-  document.getElementById('nav-route').textContent = NAV_DEP + ' → ' + NAV_DEST;
+  updateNavClock();
   document.getElementById('nav-dep-icao').textContent = NAV_DEP;
   document.getElementById('nav-arr-icao').textContent = NAV_DEST;
-  document.getElementById('nav-dep-time').textContent = NAV_STD || '';
-  document.getElementById('nav-arr-time').textContent = NAV_STA || '';
+  var depTz = getIcaoTz(NAV_DEP);
+  var arrTz = getIcaoTz(NAV_DEST);
+  document.getElementById('nav-dep-time').textContent = NAV_STD ? utcHhmmToLcl(NAV_STD, depTz.offset) : '--:--';
+  document.getElementById('nav-dep-tz').textContent = 'STD ' + (NAV_STD ? NAV_STD.slice(0,2)+':'+NAV_STD.slice(2,4)+'Z' : '--:--') + ' · ' + depTz.name;
+  document.getElementById('nav-arr-time').textContent = NAV_STA ? utcHhmmToLcl(NAV_STA, arrTz.offset) : '--:--';
+  document.getElementById('nav-arr-tz').textContent = 'STA ' + (NAV_STA ? NAV_STA.slice(0,2)+':'+NAV_STA.slice(2,4)+'Z' : '--:--') + ' · ' + arrTz.name;
 }
+setInterval(updateNavClock, 60000);
+updateNavClock();
 var TEXT_SIZE = 12;
 function changeTextSize(d) {
   TEXT_SIZE = Math.max(10, Math.min(16, TEXT_SIZE + d));
@@ -2027,16 +2179,21 @@ setInterval(function(){
     <span style="color:#4fc3f7;font-size:13px;font-weight:bold;letter-spacing:.1em;">AJX</span>
     <button onclick="closeNav()" style="background:transparent;border:none;color:#546e7a;cursor:pointer;font-size:20px;line-height:1;padding:0;">×</button>
   </div>
-  <div id="nav-flight-info" style="padding:10px 16px;border-bottom:1px solid #1e2a38;display:none;font-size:12px;">
-    <div id="nav-route" style="color:#4fc3f7;font-size:14px;font-weight:bold;margin-bottom:6px;"></div>
-    <div style="display:flex;justify-content:space-between;">
+  <div id="nav-flight-info" style="padding:10px 16px 12px;border-bottom:1px solid #1e2a38;display:none;font-family:'Helvetica Neue',Arial,sans-serif;">
+    <div id="nav-utc-row" style="color:#455a64;font-size:10px;letter-spacing:.04em;margin-bottom:8px;"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <span id="nav-dep-icao" style="color:#4fc3f7;font-size:16px;font-weight:bold;letter-spacing:.1em;"></span>
+      <span style="color:#2a3a4e;font-size:13px;flex:1;text-align:center;">──▶</span>
+      <span id="nav-arr-icao" style="color:#4fc3f7;font-size:16px;font-weight:bold;letter-spacing:.1em;"></span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;">
       <div>
-        <div id="nav-dep-icao" style="color:#90a4ae;font-size:11px;"></div>
-        <div id="nav-dep-time" style="color:#cfd8dc;font-size:13px;"></div>
+        <div id="nav-dep-time" style="color:#eceff1;font-size:20px;font-weight:300;line-height:1;letter-spacing:.03em;"></div>
+        <div id="nav-dep-tz" style="color:#546e7a;font-size:9px;letter-spacing:.05em;margin-top:3px;"></div>
       </div>
       <div style="text-align:right;">
-        <div id="nav-arr-icao" style="color:#90a4ae;font-size:11px;"></div>
-        <div id="nav-arr-time" style="color:#cfd8dc;font-size:13px;"></div>
+        <div id="nav-arr-time" style="color:#eceff1;font-size:20px;font-weight:300;line-height:1;letter-spacing:.03em;"></div>
+        <div id="nav-arr-tz" style="color:#546e7a;font-size:9px;letter-spacing:.05em;margin-top:3px;"></div>
       </div>
     </div>
   </div>
