@@ -1410,7 +1410,7 @@ function drawRoute() {
 drawRoute();
 function updateNavFlightInfo() {
   var info = document.getElementById('nav-flight-info');
-  if(!DEP_ICAO || !DEST_ICAO){ info.style.display='none'; return; }
+  if(typeof DEP_ICAO==='undefined' || !DEP_ICAO || typeof DEST_ICAO==='undefined' || !DEST_ICAO){ info.style.display='none'; return; }
   info.style.display='block';
   document.getElementById('nav-route').textContent = DEP_ICAO + ' → ' + DEST_ICAO;
   document.getElementById('nav-dep-icao').textContent = DEP_ICAO;
