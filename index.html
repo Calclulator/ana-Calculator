@@ -120,11 +120,7 @@
     <input type="range" id="satOp" min="0" max="100" value="80" step="5"
            style="width:65px;" oninput="setSatOp(this.value)" onchange="setSatOp(this.value)">
     <span id="satOpV" style="font-size:10px;min-width:26px;">80%</span>
-    <select id="baseSel" class="btn" onchange="setBase(this.value)">
-      <option value="dark">Dark</option>
-      <option value="sat">Satellite</option>
-      <option value="light">Light</option>
-    </select>
+    
     <label class="ck" style="margin-left:auto;">
       <span class="lbl">LOW-BW</span>
       <input type="checkbox" id="lowbw" onchange="toggleBw()" style="margin-left:3px;">
@@ -1293,7 +1289,6 @@ function toggleMode() {
   document.body.style.color = DAY_MODE ? '#1a1a1a' : '#cfd8dc';
   document.body.classList.toggle('day-mode', DAY_MODE);
   var k = DAY_MODE ? 'light' : 'dark';
-  document.getElementById('baseSel').value = k;
   setBase(k);
   if(LY.sat) LY.sat.bringToFront();
   setTimeout(function(){ bringTop(); }, 200);
