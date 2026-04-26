@@ -52,6 +52,20 @@
   .leaflet-tooltip.sgx{background:rgba(18,4,4,.94)!important;border:.5px solid rgba(239,83,80,.4)!important;color:#ffcdd2!important;font-family:monospace!important;font-size:10px!important;padding:2px 6px!important;border-radius:2px!important;box-shadow:none!important;}
   .leaflet-tooltip.sgx::before{display:none!important;}
   .leaflet-control-zoom a{background:#0d1117!important;color:#90a4ae!important;border-color:#2a3a4e!important;}
+  /* METAR Panel */
+  #metar-overlay{position:fixed;inset:0;z-index:2999;background:rgba(0,0,0,.5);display:none;}
+  #metar-panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:3000;background:#080a14;border:1px solid #2a3a4e;border-radius:6px;box-shadow:0 4px 32px rgba(0,0,0,.85);width:780px;max-width:96vw;display:none;font-family:'Courier New',monospace;font-size:12px;}
+  .mp-hdr{background:#0d1117;border-bottom:1px solid #1e2a38;padding:8px 12px;display:flex;align-items:center;gap:8px;border-radius:6px 6px 0 0;}
+  .mp-body{display:flex;max-height:72vh;}
+  .mp-left{flex:1;padding:12px;overflow-y:auto;border-right:1px solid #1e2a38;min-width:0;}
+  .mp-right{width:230px;padding:12px;overflow-y:auto;flex-shrink:0;}
+  .mp-lbl{color:#546e7a;font-size:10px;margin-bottom:3px;letter-spacing:.05em;}
+  .mp-raw{background:#0d1117;border-radius:4px;padding:8px;margin-bottom:10px;word-break:break-all;line-height:1.7;}
+  .mp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-bottom:10px;}
+  .mp-field{display:flex;flex-direction:column;gap:2px;}
+  .mp-taf-period{border-top:.5px solid #1e2a38;padding:4px 0;font-size:11px;line-height:1.5;}
+  .mp-rwy-inp{width:70px;background:#0d1117;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:'Courier New',monospace;font-size:11px;padding:2px 5px;}
+  .mp-calc-btn{background:#0d2a3e;border:1px solid #1565c0;border-radius:3px;color:#4fc3f7;font-family:'Courier New',monospace;font-size:11px;padding:2px 8px;cursor:pointer;}
   @media print{
     #tab-bar,.bar,#fpl-wrap,#statusbar{display:none!important;}
     #wx-panel{display:none!important;}
@@ -1426,18 +1440,180 @@ function loadMetars() {
         });
         var mk=L.marker([lat,lon],{icon:ic}).addTo(map);
         mk.bindTooltip(m.icao+'\n'+(m.flight_category||'')+'\n'+(m.raw_text||''),{className:'wxt',sticky:true});
-        mk.on('click',function(){
-          fetch('https://api.checkwx.com/taf/'+m.icao+'/decoded',{headers:{'X-API-Key':'eb52e4c6ca254584842adb8dc574b4f8'}})
+        mk.on('click',(function(metar){return function(){
+          fetch('https://api.checkwx.com/v2/taf/'+metar.icao+'/decoded',{headers:{'X-API-Key':'eb52e4c6ca254584842adb8dc574b4f8'}})
             .then(function(r){return r.json();})
-            .then(function(t){
-              var taf=t.data&&t.data[0]?t.data[0].raw_text:'TAF N/A';
-              alert(m.icao+' METAR:\n'+(m.raw_text||'N/A')+'\n\nTAF:\n'+taf);
-            });
-        });
+            .then(function(t){showMetarPanel(metar,t.data&&t.data[0]?t.data[0]:null);})
+            .catch(function(){showMetarPanel(metar,null);});
+        };})(m));
         LY.metar.push(mk);
       });
       bringTop();
     }).catch(function(){});
+}
+
+// =====================================================================
+// METAR PANEL HELPERS
+// =====================================================================
+function closeMetarPanel(){
+  document.getElementById('metar-panel').style.display='none';
+  document.getElementById('metar-overlay').style.display='none';
+}
+
+function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function mpField(label,val,col){
+  return '<div class="mp-field"><div class="mp-lbl">'+label+'</div>'+
+    '<div style="color:'+(col||'#cfd8dc')+';font-size:12px;">'+escH(String(val))+'</div></div>';
+}
+
+function buildWindSvg(deg){
+  var s='<svg width="100" height="100" viewBox="0 0 100 100">';
+  s+='<circle cx="50" cy="50" r="38" fill="none" stroke="#1e2a38" stroke-width="1.5"/>';
+  for(var i=0;i<36;i++){
+    var a=i*10*Math.PI/180;
+    var tl=(i%9===0)?8:(i%3===0)?5:2;
+    var x1=(50+37.5*Math.sin(a)).toFixed(1),y1=(50-37.5*Math.cos(a)).toFixed(1);
+    var x2=(50+(37.5-tl)*Math.sin(a)).toFixed(1),y2=(50-(37.5-tl)*Math.cos(a)).toFixed(1);
+    s+='<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="#2a3a4e" stroke-width="1"/>';
+  }
+  s+='<text x="50" y="8" text-anchor="middle" fill="#546e7a" font-size="9" font-family="Courier New,monospace">N</text>';
+  s+='<text x="93" y="54" text-anchor="middle" fill="#546e7a" font-size="9" font-family="Courier New,monospace">E</text>';
+  s+='<text x="50" y="98" text-anchor="middle" fill="#546e7a" font-size="9" font-family="Courier New,monospace">S</text>';
+  s+='<text x="7" y="54" text-anchor="middle" fill="#546e7a" font-size="9" font-family="Courier New,monospace">W</text>';
+  if(deg!=null){
+    var rad=deg*Math.PI/180;
+    var ax=(50+30*Math.sin(rad)).toFixed(1),ay=(50-30*Math.cos(rad)).toFixed(1);
+    s+='<line x1="50" y1="50" x2="'+ax+'" y2="'+ay+'" stroke="#4fc3f7" stroke-width="2.5" stroke-linecap="round"/>';
+    var a1=(deg+150)*Math.PI/180,a2=(deg-150)*Math.PI/180;
+    var hx1=(+ax+8*Math.sin(a1)).toFixed(1),hy1=(+ay-8*Math.cos(a1)).toFixed(1);
+    var hx2=(+ax+8*Math.sin(a2)).toFixed(1),hy2=(+ay-8*Math.cos(a2)).toFixed(1);
+    s+='<polygon points="'+ax+','+ay+' '+hx1+','+hy1+' '+hx2+','+hy2+'" fill="#4fc3f7"/>';
+    s+='<circle cx="50" cy="50" r="3" fill="#4fc3f7"/>';
+  } else {
+    s+='<text x="50" y="54" text-anchor="middle" fill="#4fc3f7" font-size="11" font-family="Courier New,monospace">VRB</text>';
+  }
+  return s+'</svg>';
+}
+
+function calcCrosswind(){
+  var r=document.getElementById('mp-xwind-result');
+  var hv=document.getElementById('mp-rwy-hdg').value;
+  if(!hv||!window._mpWind){r.innerHTML='';return;}
+  if(window._mpWind.deg==null){r.innerHTML='<span style="color:#546e7a;">Wind variable</span>';return;}
+  var diff=(window._mpWind.deg-parseFloat(hv))*Math.PI/180;
+  var hw=Math.round(window._mpWind.spd*Math.cos(diff));
+  var xw=Math.round(window._mpWind.spd*Math.sin(diff));
+  var gw=window._mpWind.gst||0;
+  var gxw=gw?Math.round(gw*Math.sin(diff)):null;
+  var hwc=hw>=0?'#66bb6a':'#ef5350';
+  var xwc=Math.abs(xw)>20?'#ef5350':Math.abs(xw)>15?'#ffa726':'#66bb6a';
+  var xd=xw>=0?'R':'L';
+  r.innerHTML='<div style="display:grid;grid-template-columns:auto 1fr;gap:3px 8px;font-size:12px;">'+
+    '<span class="mp-lbl">HEADWIND</span><span style="color:'+hwc+';">'+(hw>=0?'+':'')+hw+'kt</span>'+
+    '<span class="mp-lbl">CROSSWIND</span><span style="color:'+xwc+';">'+Math.abs(xw)+'kt '+xd+'</span>'+
+    (gxw!=null?'<span class="mp-lbl">GUST XW</span><span style="color:'+(Math.abs(gxw)>20?'#ef5350':'#ffa726')+';">'+Math.abs(gxw)+'kt '+xd+'</span>':'')+'</div>';
+}
+
+function showMetarPanel(m,taf){
+  var CAT_COL={VFR:'#43a047',MVFR:'#1565c0',IFR:'#e53935',LIFR:'#ab47bc'};
+  var cat=m.flight_category||'';
+  var cc=CAT_COL[cat]||'#546e7a';
+
+  // Header
+  document.getElementById('mp-icao').textContent=m.icao||'';
+  var ce=document.getElementById('mp-cat');
+  ce.textContent=cat;
+  ce.style.cssText='font-size:10px;padding:2px 7px;border-radius:3px;font-weight:bold;background:'+cc+'22;color:'+cc+';border:1px solid '+cc+';';
+  document.getElementById('mp-name').textContent=(m.station&&m.station.name)||'';
+  document.getElementById('mp-time').textContent=m.observed?m.observed.replace('T',' ').replace('Z',' Z'):'';
+
+  // Left panel
+  var L='';
+  L+='<div class="mp-lbl">RAW METAR</div>';
+  L+='<div class="mp-raw" style="border:1px solid '+cc+'44;color:'+cc+';">'+escH(m.raw_text||'N/A')+'</div>';
+  L+='<div class="mp-grid">';
+  if(m.visibility){
+    var vm=m.visibility.meters!=null?m.visibility.meters+'m':(m.visibility.miles!=null?m.visibility.miles+'SM':'N/A');
+    var vc=m.visibility.meters!=null?(m.visibility.meters<800?'#ef5350':m.visibility.meters<3000?'#ffa726':'#cfd8dc'):'#cfd8dc';
+    L+=mpField('VISIBILITY',vm,vc);
+  }
+  if(m.ceiling){
+    var ft=m.ceiling.feet;
+    L+=mpField('CEILING',ft+'ft '+(m.ceiling.code||''),ft<200?'#ef5350':ft<1000?'#ffa726':'#cfd8dc');
+  }
+  if(m.temperature){
+    L+=mpField('TEMP / DEW',(m.temperature.celsius!=null?m.temperature.celsius:'--')+'°C / '+(m.dewpoint?m.dewpoint.celsius:'--')+'°C','#cfd8dc');
+  }
+  if(m.barometer){
+    var q=m.barometer.mb?m.barometer.mb+'hPa':(m.barometer.hg?m.barometer.hg+'"Hg':'-');
+    L+=mpField('QNH',q,'#e0f7fa');
+  }
+  L+='</div>';
+  if(m.clouds&&m.clouds.length){
+    L+='<div class="mp-lbl">CLOUDS</div><div style="margin-bottom:10px;">';
+    m.clouds.forEach(function(c){
+      var cc2=(c.code==='OVC'||c.code==='BKN')?'#ffa726':'#90a4ae';
+      L+='<span style="color:'+cc2+';margin-right:10px;">'+(c.code||'')+' '+(c.base_feet_agl!=null?c.base_feet_agl+'ft':'')+'</span>';
+    });
+    L+='</div>';
+  }
+  if(m.conditions&&m.conditions.length){
+    L+='<div class="mp-lbl">CONDITIONS</div><div style="margin-bottom:10px;">';
+    m.conditions.forEach(function(c){
+      L+='<span style="color:#ef9a9a;margin-right:6px;">'+escH(c.code||'')+'</span>';
+      if(c.text) L+='<span style="color:#78909c;font-size:11px;">'+escH(c.text)+'</span><br>';
+    });
+    L+='</div>';
+  }
+  L+='<div class="mp-lbl" style="margin-top:2px;">TAF</div>';
+  if(taf){
+    if(taf.raw_text) L+='<div class="mp-raw" style="border-color:#1e2a38;color:#90caf9;font-size:11px;margin-bottom:6px;">'+escH(taf.raw_text)+'</div>';
+    if(taf.forecast&&taf.forecast.length){
+      L+='<div>';
+      taf.forecast.forEach(function(f){
+        var from=(f.timestamp&&f.timestamp.from||'').substring(11,16);
+        var to=(f.timestamp&&f.timestamp.to||'').substring(11,16);
+        var ind=f.change&&f.change.indicator?'<span style="color:#ffa726;margin-right:4px;">'+escH(f.change.indicator)+'</span>':'';
+        L+='<div class="mp-taf-period">'+ind+'<span style="color:#78909c;">'+from+' → '+to+'</span>';
+        if(f.wind) L+=' <span style="color:#4fc3f7;">'+(f.wind.variable?'VRB':String(f.wind.degrees||0).padStart(3,'0'))+'°/'+(f.wind.speed_kts||0)+'kt'+(f.wind.gust_kts?'G'+f.wind.gust_kts+'kt':'')+'</span>';
+        if(f.visibility){var fv=f.visibility.meters!=null?f.visibility.meters+'m':(f.visibility.miles!=null?f.visibility.miles+'SM':'');if(fv)L+=' <span style="color:#90a4ae;">'+fv+'</span>';}
+        if(f.clouds&&f.clouds.length) L+=' <span style="color:#546e7a;">'+f.clouds.map(function(c){return (c.code||'')+(c.base_feet_agl!=null?c.base_feet_agl:'');}).join(' ')+'</span>';
+        if(f.conditions&&f.conditions.length) L+=' <span style="color:#ef9a9a;">'+f.conditions.map(function(c){return c.code||'';}).join(' ')+'</span>';
+        L+='</div>';
+      });
+      L+='</div>';
+    }
+  } else {
+    L+='<div style="color:#546e7a;font-size:11px;">TAF N/A</div>';
+  }
+  document.getElementById('mp-left').innerHTML=L;
+
+  // Right panel
+  var wd=m.wind&&m.wind.degrees!=null?m.wind.degrees:null;
+  var ws=m.wind?+(m.wind.speed_kts||0):0;
+  var wg=m.wind?+(m.wind.gust_kts||0):0;
+  var wvar=!!(m.wind&&m.wind.variable);
+  var R='';
+  R+='<div class="mp-lbl">WIND</div>';
+  R+='<div style="display:flex;justify-content:center;margin-bottom:6px;">'+buildWindSvg(wvar?null:wd)+'</div>';
+  R+='<div style="text-align:center;margin-bottom:14px;">';
+  R+='<span style="color:#4fc3f7;font-size:15px;font-weight:bold;">'+(wvar?'VRB':wd!=null?String(wd).padStart(3,'0')+'°':'---')+'</span>';
+  R+='<span style="color:#cfd8dc;font-size:13px;"> / '+ws+'kt</span>';
+  if(wg) R+='<br><span style="color:#ffa726;font-size:12px;">GUST '+wg+'kt</span>';
+  R+='</div>';
+  R+='<div style="border-top:1px solid #1e2a38;padding-top:10px;">';
+  R+='<div class="mp-lbl">CROSSWIND CALC</div>';
+  R+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:8px;">';
+  R+='<span style="color:#78909c;font-size:10px;white-space:nowrap;">RWY HDG</span>';
+  R+='<input id="mp-rwy-hdg" class="mp-rwy-inp" type="number" min="1" max="360" placeholder="e.g. 340">';
+  R+='<button class="mp-calc-btn" onclick="calcCrosswind()">GO</button>';
+  R+='</div><div id="mp-xwind-result"></div></div>';
+  document.getElementById('mp-right').innerHTML=R;
+  window._mpWind={deg:wvar?null:wd,spd:ws,gst:wg};
+
+  document.getElementById('metar-panel').style.display='block';
+  document.getElementById('metar-overlay').style.display='block';
 }
 
 // =====================================================================
@@ -1656,5 +1832,20 @@ setInterval(function(){
 // HIMAWARI IR SANDWICH
 
 </script>
+
+<div id="metar-overlay" onclick="closeMetarPanel()"></div>
+<div id="metar-panel">
+  <div class="mp-hdr">
+    <span id="mp-icao" style="color:#4fc3f7;font-size:14px;font-weight:bold;letter-spacing:.1em;"></span>
+    <span id="mp-cat" style="font-size:10px;padding:2px 7px;border-radius:3px;"></span>
+    <span id="mp-name" style="color:#546e7a;font-size:11px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></span>
+    <span id="mp-time" style="color:#546e7a;font-size:10px;white-space:nowrap;"></span>
+    <button onclick="closeMetarPanel()" style="background:transparent;border:none;color:#546e7a;cursor:pointer;font-size:20px;line-height:1;padding:0 0 0 14px;">×</button>
+  </div>
+  <div class="mp-body">
+    <div class="mp-left" id="mp-left"></div>
+    <div class="mp-right" id="mp-right"></div>
+  </div>
+</div>
 </body>
 </html>
