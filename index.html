@@ -289,9 +289,12 @@ function loadNavPdf(input){
   var status=document.getElementById('parse-result');
   status.style.color='#4fc3f7';
   status.textContent='PDF読み込み中...';
+  console.log('[PDF] loading:', file.name, file.size+'bytes');
   var reader=new FileReader();
   reader.onload=function(e){
+    console.log('[PDF] FileReader loaded, byteLength:', e.target.result.byteLength);
     pdfjsLib.getDocument({data:new Uint8Array(e.target.result)}).promise.then(function(pdf){
+      console.log('[PDF] numPages:', pdf.numPages);
       var nums=[];
       for(var i=1;i<=pdf.numPages;i++) nums.push(i);
       return nums.reduce(function(chain,n){
@@ -299,17 +302,23 @@ function loadNavPdf(input){
           return pdf.getPage(n).then(function(page){
             return page.getTextContent();
           }).then(function(content){
+            console.log('[PDF] page'+n+' items:', content.items.length);
             var lineMap={};
             content.items.forEach(function(item){
               var y=Math.round(item.transform[5]);
               if(!lineMap[y]) lineMap[y]=[];
-              lineMap[y].push({x:item.transform[4],str:item.str});
+              lineMap[y].push({x:item.transform[4], w:item.width||0, str:item.str});
             });
             var text=Object.keys(lineMap).map(Number)
               .sort(function(a,b){return b-a;})
               .map(function(y){
-                return lineMap[y].sort(function(a,b){return a.x-b.x;})
-                  .map(function(i){return i.str;}).join('');
+                var its=lineMap[y].sort(function(a,b){return a.x-b.x;});
+                return its.reduce(function(line,item,i){
+                  if(i===0) return item.str;
+                  var prev=its[i-1];
+                  var gap=item.x-(prev.x+prev.w);
+                  return line+(gap>1?' ':'')+item.str;
+                },'');
               }).join('\n');
             acc.push(text);
             return acc;
@@ -317,15 +326,22 @@ function loadNavPdf(input){
         });
       },Promise.resolve([]));
     }).then(function(pages){
-      document.getElementById('fpl-txt').value=pages.join('\n');
+      var fullText=pages.join('\n');
+      console.log('[PDF] extracted length:', fullText.length);
+      console.log('[PDF] first 400 chars:\n', fullText.slice(0,400));
+      document.getElementById('fpl-txt').value=fullText;
       status.style.color='#66bb6a';
-      status.textContent='PDF読み込み完了（'+pages.length+'p）';
+      status.textContent='PDF読み込み完了（'+pages.length+'p）— 解析中...';
       input.value='';
-    }).catch(function(){
+      console.log('[PDF] calling runParse()');
+      runParse();
+    }).catch(function(err){
+      console.error('[PDF] extraction error:', err);
       status.style.color='#ef5350';
-      status.textContent='PDF読み込みエラー';
+      status.textContent='PDF読み込みエラー: '+(err&&err.message||err);
     });
   };
+  reader.onerror=function(e){console.error('[PDF] FileReader error:', e);};
   reader.readAsArrayBuffer(file);
 }
 
@@ -748,6 +764,8 @@ function runParse() {
   var newWP=[], newVWS={}, newAlts=[], newEtps=[], newVWS_BY_FL={};
   var dep=null, dest=null, reg=null, etopsKey=null, depFuel=null;
   var lines = txt.split('\n');
+  console.log('[parse] txt.length:', txt.length, '| lines:', lines.length);
+  console.log('[parse] first 300 chars:', txt.slice(0,300));
 
   // 機番
   var regM = txt.match(/REG\/([A-Z]{2}\d{3,5}[A-Z]?)/);
@@ -775,6 +793,7 @@ function runParse() {
   var rtM = txt.match(/\b([A-Z]{4})-([A-Z]{4})\b[^\n]*STD/);
   if(!rtM) rtM = txt.match(/\b([A-Z]{4})-([A-Z]{4})\b/);
   if(rtM) { dep=rtM[1]; dest=rtM[2]; }
+  console.log('[parse] dep:', dep, '| dest:', dest, '| reg:', reg, '| etopsKey:', etopsKey);
 
   // STD
   var stdM = txt.match(/STD\s+(\d{2})(\d{2})Z/);
@@ -910,8 +929,10 @@ function runParse() {
       newVWS[wid] = Math.abs(ws2-ws1)/2;
     }
 
+    console.log('[parse] WP found:', wid, c.lat.toFixed(2), c.lng.toFixed(2), 'ctme:', ctmeMin);
     newWP.push({id:wid,lat:c.lat,lng:c.lng,t:false,ctme:ctmeMin,fuel:wfuel,alt:walt});
   }
+  console.log('[parse] newWP total:', newWP.length, '| newAlts:', newAlts.length, '| newEtps:', newEtps.length);
 
   // 適用
   if(newWP.length>=2) {
