@@ -41,15 +41,15 @@
   .fp-table th{background:#0d1117;color:#546e7a;font-weight:normal;padding:5px 8px;text-align:left;border-bottom:1px solid #1e2a38;position:sticky;top:0;white-space:nowrap;z-index:10;}
   .fp-table td{padding:3px 6px;border-bottom:.5px solid #0f1825;vertical-align:middle;white-space:nowrap;}
   .fp-table tr:hover td{background:#0d1a28;}
-  .fp-in{background:transparent;border:none;border-bottom:.5px solid #1e2a38;color:#cfd8dc;font-family:'Courier New',monospace;font-size:11px;padding:1px 3px;width:56px;}
+  .fp-in{background:transparent;border:none;border-bottom:.5px solid #1e2a38;color:#cfd8dc;font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;padding:1px 3px;width:56px;}
   .fp-in:focus{outline:none;border-bottom-color:#4fc3f7;background:#060a14;}
   .fp-in::placeholder{color:#2a3a4e;}
   .fp-note{width:90px;}
   .dp{color:#66bb6a;}
   .dn{color:#ef5350;}
-  .leaflet-tooltip.wxt{background:rgba(6,8,18,.94)!important;border:.5px solid rgba(79,195,247,.35)!important;color:#e0f7fa!important;font-family:'Courier New',monospace!important;padding:2px 6px!important;border-radius:2px!important;box-shadow:none!important;white-space:pre;}
+  .leaflet-tooltip.wxt{background:rgba(6,8,18,.94)!important;border:.5px solid rgba(79,195,247,.35)!important;color:#e0f7fa!important;font-family:'Helvetica Neue',Arial,sans-serif!important;padding:2px 6px!important;border-radius:2px!important;box-shadow:none!important;white-space:pre;}
   .leaflet-tooltip.wxt::before{display:none!important;}
-  .leaflet-tooltip.wxt-wp{background:rgba(6,8,18,.88)!important;border:.5px solid rgba(79,195,247,.25)!important;color:#b0bec5!important;font-family:'Courier New',monospace!important;padding:1px 4px!important;border-radius:2px!important;box-shadow:none!important;}
+  .leaflet-tooltip.wxt-wp{background:rgba(6,8,18,.88)!important;border:.5px solid rgba(79,195,247,.25)!important;color:#b0bec5!important;font-family:'Helvetica Neue',Arial,sans-serif!important;padding:1px 4px!important;border-radius:2px!important;box-shadow:none!important;}
   .leaflet-tooltip.wxt-wp::before{display:none!important;}
   .leaflet-tooltip.sgx{background:rgba(18,4,4,.94)!important;border:.5px solid rgba(239,83,80,.4)!important;color:#ffcdd2!important;font-family:monospace!important;font-size:10px!important;padding:2px 6px!important;border-radius:2px!important;box-shadow:none!important;}
   .leaflet-tooltip.sgx::before{display:none!important;}
@@ -65,14 +65,14 @@
   .nav-scroll{flex:1;overflow-y:auto;padding-bottom:env(safe-area-inset-bottom);}
   .nav-sec{padding:14px 0 2px;}
   .nav-sec-lbl{padding:0 16px 5px;font-size:9px;letter-spacing:.12em;color:#37474f;text-transform:uppercase;}
-  .nav-item{display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;font-size:12px;color:#78909c;background:transparent;border:none;width:100%;text-align:left;font-family:'Courier New',monospace;transition:background .1s,color .1s;}
+  .nav-item{display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;font-size:12px;color:#78909c;background:transparent;border:none;width:100%;text-align:left;font-family:'Helvetica Neue',Arial,sans-serif;transition:background .1s,color .1s;}
   .nav-item:hover:not(.nav-dis){background:#0d1a28;color:#cfd8dc;}
   .nav-item.nav-act{color:#4fc3f7;}
   .nav-item.nav-dis{color:#2a3a4e;cursor:default;}
   .nav-tag{margin-left:auto;font-size:9px;color:#1e2a38;border:1px solid #1e2a38;border-radius:2px;padding:1px 4px;letter-spacing:.04em;}
   /* METAR Panel */
   #metar-overlay{position:fixed;inset:0;z-index:2999;background:rgba(0,0,0,.5);display:none;}
-  #metar-panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:3000;background:#080a14;border:1px solid #2a3a4e;border-radius:6px;box-shadow:0 4px 32px rgba(0,0,0,.85);width:780px;max-width:96vw;display:none;font-family:'Courier New',monospace;font-size:12px;}
+  #metar-panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:3000;background:#080a14;border:1px solid #2a3a4e;border-radius:6px;box-shadow:0 4px 32px rgba(0,0,0,.85);width:780px;max-width:96vw;display:none;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;}
   .mp-hdr{background:#0d1117;border-bottom:1px solid #1e2a38;padding:8px 12px;display:flex;align-items:center;gap:8px;border-radius:6px 6px 0 0;}
   .mp-body{display:flex;max-height:72vh;}
   .mp-left{flex:1;padding:12px;overflow-y:auto;border-right:1px solid #1e2a38;min-width:0;}
@@ -82,8 +82,8 @@
   .mp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-bottom:10px;}
   .mp-field{display:flex;flex-direction:column;gap:2px;}
   .mp-taf-period{border-top:.5px solid #1e2a38;padding:4px 0;font-size:11px;line-height:1.5;}
-  .mp-rwy-inp{width:70px;background:#0d1117;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:'Courier New',monospace;font-size:11px;padding:2px 5px;}
-  .mp-calc-btn{background:#0d2a3e;border:1px solid #1565c0;border-radius:3px;color:#4fc3f7;font-family:'Courier New',monospace;font-size:11px;padding:2px 8px;cursor:pointer;}
+  .mp-rwy-inp{width:70px;background:#0d1117;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;padding:2px 5px;}
+  .mp-calc-btn{background:#0d2a3e;border:1px solid #1565c0;border-radius:3px;color:#4fc3f7;font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;padding:2px 8px;cursor:pointer;}
   @media print{
     #tab-bar,.bar,#fpl-wrap,#statusbar{display:none!important;}
     #wx-panel{display:none!important;}
@@ -1540,10 +1540,10 @@ function buildWindSvg(deg){
     var x2=(50+(37.5-tl)*Math.sin(a)).toFixed(1),y2=(50-(37.5-tl)*Math.cos(a)).toFixed(1);
     s+='<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="#2a3a4e" stroke-width="1"/>';
   }
-  s+='<text x="50" y="8" text-anchor="middle" fill="#546e7a" font-size="9" font-family="Courier New,monospace">N</text>';
-  s+='<text x="93" y="54" text-anchor="middle" fill="#546e7a" font-size="9" font-family="Courier New,monospace">E</text>';
-  s+='<text x="50" y="98" text-anchor="middle" fill="#546e7a" font-size="9" font-family="Courier New,monospace">S</text>';
-  s+='<text x="7" y="54" text-anchor="middle" fill="#546e7a" font-size="9" font-family="Courier New,monospace">W</text>';
+  s+='<text x="50" y="8" text-anchor="middle" fill="#546e7a" font-size="9" font-family="Helvetica Neue,Arial,sans-serif">N</text>';
+  s+='<text x="93" y="54" text-anchor="middle" fill="#546e7a" font-size="9" font-family="Helvetica Neue,Arial,sans-serif">E</text>';
+  s+='<text x="50" y="98" text-anchor="middle" fill="#546e7a" font-size="9" font-family="Helvetica Neue,Arial,sans-serif">S</text>';
+  s+='<text x="7" y="54" text-anchor="middle" fill="#546e7a" font-size="9" font-family="Helvetica Neue,Arial,sans-serif">W</text>';
   if(deg!=null){
     var rad=deg*Math.PI/180;
     var ax=(50+30*Math.sin(rad)).toFixed(1),ay=(50-30*Math.cos(rad)).toFixed(1);
@@ -1554,7 +1554,7 @@ function buildWindSvg(deg){
     s+='<polygon points="'+ax+','+ay+' '+hx1+','+hy1+' '+hx2+','+hy2+'" fill="#4fc3f7"/>';
     s+='<circle cx="50" cy="50" r="3" fill="#4fc3f7"/>';
   } else {
-    s+='<text x="50" y="54" text-anchor="middle" fill="#4fc3f7" font-size="11" font-family="Courier New,monospace">VRB</text>';
+    s+='<text x="50" y="54" text-anchor="middle" fill="#4fc3f7" font-size="11" font-family="Helvetica Neue,Arial,sans-serif">VRB</text>';
   }
   return s+'</svg>';
 }
