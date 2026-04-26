@@ -25,9 +25,9 @@
   select.btn{padding:2px 4px;}
   .ck{display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#90a4ae;}
   .ck input{margin:0;cursor:pointer;width:12px;height:12px;accent-color:#4fc3f7;}
-  #fpl-wrap{background:#060a12;border-bottom:1px solid #1e2a38;display:none;padding:6px 8px;flex-direction:column;gap:6px;flex-shrink:0;}
-  #fpl-wrap textarea{width:100%;height:100px;background:#030608;border:1px solid #1e2a38;border-radius:3px;color:#90a4ae;font-family:inherit;font-size:11px;padding:5px 7px;resize:vertical;line-height:1.5;}
-  #fpl-wrap textarea:focus{outline:none;border-color:#1565c0;color:#cfd8dc;}
+  #fp-navlog{background:#060a12;border-bottom:1px solid #1e2a38;display:flex;padding:8px;flex-direction:column;gap:6px;flex-shrink:0;}
+  #fp-navlog textarea{width:100%;height:88px;background:#030608;border:1px solid #1e2a38;border-radius:3px;color:#90a4ae;font-family:inherit;font-size:11px;padding:5px 7px;resize:vertical;line-height:1.5;}
+  #fp-navlog textarea:focus{outline:none;border-color:#1565c0;color:#cfd8dc;}
   #map-wrap{position:relative;flex:1;min-height:0;}
   #map{height:100%;width:100%;background:#080a12;}
   body.day-mode #map{background:#ffffff;}
@@ -85,7 +85,7 @@
   .mp-rwy-inp{width:70px;background:#0d1117;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;padding:2px 5px;}
   .mp-calc-btn{background:#0d2a3e;border:1px solid #1565c0;border-radius:3px;color:#4fc3f7;font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;padding:2px 8px;cursor:pointer;}
   @media print{
-    #tab-bar,.bar,#fpl-wrap,#statusbar{display:none!important;}
+    #tab-bar,.bar,#fp-navlog,#statusbar{display:none!important;}
     #wx-panel{display:none!important;}
     #fp-panel{display:flex!important;}
     .fp-wrap{overflow:visible!important;}
@@ -168,22 +168,6 @@
     </select>
   </div>
 
-  <!-- BAR3: NAV LOG -->
-  <div class="bar">
-    <span class="lbl">NAV LOG</span>
-    <button class="btn" id="fplToggle" onclick="toggleFpl()">▼ 展開して貼り付け</button>
-    <span id="fpl-info" style="font-size:10px;color:#4fc3f7;margin-left:6px;"></span>
-  </div>
-  <div id="fpl-wrap">
-    <textarea id="fpl-txt"
-      placeholder="ナブログテキストをここに貼り付け&#10;機番・機材・ウェイポイント・ETOPS代替空港（RALT/行）・ETPを自動解析します"></textarea>
-    <div style="display:flex;gap:6px;align-items:center;">
-      <button class="btn go" onclick="runParse()">▶ 解析する</button>
-      <button class="btn" onclick="clearFpl()">✕ クリア</button>
-      <span id="parse-result" style="font-size:10px;color:#66bb6a;margin-left:4px;"></span>
-    </div>
-  </div>
-
   <!-- BAR4: OVERLAYS -->
   <div class="bar">
     <span class="lbl">OVERLAYS</span>
@@ -244,6 +228,21 @@
     <span id="fp-route-lbl" style="color:#546e7a;margin-left:10px;font-size:11px;">----→----</span>
     <button class="btn" onclick="window.print()" style="margin-left:auto;">🖨 Print / PDF</button>
   </div>
+  <div id="fp-navlog">
+    <div style="display:flex;gap:6px;align-items:flex-start;">
+      <textarea id="fpl-txt" placeholder="ナブログテキストをここに貼り付け&#10;機番・機材・ウェイポイント・ETOPS代替空港（RALT/行）・ETPを自動解析します"></textarea>
+      <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">
+        <input type="file" id="pdf-file" accept=".pdf" style="display:none;" onchange="loadNavPdf(this)">
+        <button class="btn" onclick="document.getElementById('pdf-file').click()">📄 Upload PDF</button>
+        <button class="btn go" onclick="runParse()" style="font-size:12px;padding:3px 12px;">▶ Apply</button>
+        <button class="btn" onclick="clearFpl()">✕ Clear</button>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span id="parse-result" style="font-size:10px;color:#66bb6a;"></span>
+      <span id="fpl-info" style="font-size:10px;color:#4fc3f7;"></span>
+    </div>
+  </div>
   <div class="fp-wrap">
     <table class="fp-table">
       <thead>
@@ -263,7 +262,7 @@
       <tbody id="fp-tbody">
         <tr>
           <td colspan="10" style="color:#546e7a;padding:24px;text-align:center;">
-            NAV LOGを「Weather Radar」タブで貼り付けて解析してください
+            NAV LOGを貼り付けて ▶ Apply で解析してください
           </td>
         </tr>
       </tbody>
@@ -275,7 +274,60 @@
 </div><!-- #panels -->
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
+// =====================================================================
+// PDF.js
+// =====================================================================
+if(window.pdfjsLib){
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+function loadNavPdf(input){
+  var file=input.files[0];
+  if(!file) return;
+  var status=document.getElementById('parse-result');
+  status.style.color='#4fc3f7';
+  status.textContent='PDF読み込み中...';
+  var reader=new FileReader();
+  reader.onload=function(e){
+    pdfjsLib.getDocument({data:new Uint8Array(e.target.result)}).promise.then(function(pdf){
+      var nums=[];
+      for(var i=1;i<=pdf.numPages;i++) nums.push(i);
+      return nums.reduce(function(chain,n){
+        return chain.then(function(acc){
+          return pdf.getPage(n).then(function(page){
+            return page.getTextContent();
+          }).then(function(content){
+            var lineMap={};
+            content.items.forEach(function(item){
+              var y=Math.round(item.transform[5]);
+              if(!lineMap[y]) lineMap[y]=[];
+              lineMap[y].push({x:item.transform[4],str:item.str});
+            });
+            var text=Object.keys(lineMap).map(Number)
+              .sort(function(a,b){return b-a;})
+              .map(function(y){
+                return lineMap[y].sort(function(a,b){return a.x-b.x;})
+                  .map(function(i){return i.str;}).join('');
+              }).join('\n');
+            acc.push(text);
+            return acc;
+          });
+        });
+      },Promise.resolve([]));
+    }).then(function(pages){
+      document.getElementById('fpl-txt').value=pages.join('\n');
+      status.style.color='#66bb6a';
+      status.textContent='PDF読み込み完了（'+pages.length+'p）';
+      input.value='';
+    }).catch(function(){
+      status.style.color='#ef5350';
+      status.textContent='PDF読み込みエラー';
+    });
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 // =====================================================================
 // CONSTANTS
 // =====================================================================
@@ -912,8 +964,6 @@ function runParse() {
   drawRoute();
   drawEtops();
   frameRoute();
-  document.getElementById('fpl-wrap').style.display = 'none';
-  document.getElementById('fplToggle').textContent = '▼ 展開して貼り付け';
 }
 
 // =====================================================================
@@ -1014,6 +1064,7 @@ function onNoteChange(idx,val)  { FP_ROWS[idx].note=val.trim(); }
 function toggleFpl() {
   var w = document.getElementById('fpl-wrap');
   var btn = document.getElementById('fplToggle');
+  if(!w || !btn) return;
   if(w.style.display==='flex') {
     w.style.display='none';
     btn.textContent='▼ 展開して貼り付け';
