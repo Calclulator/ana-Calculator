@@ -1841,7 +1841,7 @@ function refreshAll() {
 
 function toggleBw() {
   lowBw = document.getElementById('lowbw').checked;
-  document.getElementById('msg').textContent = lowBw?'⚡ LOW-BW: タイル削減・自動更新停止':'';
+  document.getElementById('msg').textContent = lowBw?'⚡ 低速度モード: タイル削減・自動更新停止':'';
   loadSat(satKey);
   setBase(document.getElementById('baseSel').value);
 }
