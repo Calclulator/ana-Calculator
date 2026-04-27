@@ -1146,6 +1146,10 @@ function renderFpTable() {
     var pal = FIR_PAL[(rowFirName && firMap[rowFirName] !== undefined) ? firMap[rowFirName] : 0];
     var tr = document.createElement('tr');
     tr.style.background = isFirBoundary ? pal.hi : pal.bg;
+    if(isFirBoundary) {
+      tr.style.borderTop = DAY_MODE ? '3px double #1565c0' : '3px double #ffa726';
+      tr.style.borderBottom = DAY_MODE ? '3px double #1565c0' : '3px double #ffa726';
+    }
 
     var eto = calcEto(row.ctme);
     var etoMin = (ref!==null&&row.ctme!==null) ? ref+row.ctme : null;
