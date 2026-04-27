@@ -607,6 +607,8 @@ var firGeoJSON = null;
 var radarOn = false;
 var satKey = 'himawari';
 var satOffsetMins = 0; // 0=最新, 10=10分前, ...最大180分前
+var SAT_LAYER_CACHE = {};   // satKey+'|'+offsetMins → {ly, timeLabel, source}
+var SAT_API_CACHE   = {};   // satKey → API data (JMA list / RainViewer frames)
 var acInt = null;
 var acPos = null;
 var acReg = '--';
@@ -746,6 +748,7 @@ function runParse() {
     document.getElementById('parse-result').textContent = '⚠ テキストを貼り付けてください';
     return;
   }
+  clearSatCache();
   var newWP=[], newVWS={}, newAlts=[], newEtps=[], newVWS_BY_FL={};
   var dep=null, dest=null, reg=null, etopsKey=null, depFuel=null;
   var lines = txt.split('\n');
@@ -1255,122 +1258,219 @@ toggleMode();
 // =====================================================================
 // SATELLITE
 // =====================================================================
+
+// ── キャッシュヘルパー ─────────────────────────────────────────────────
+function _satCk(k, o) { return k + '|' + o; }
+
+function _isCachedLayer(ly) {
+  if(!ly) return false;
+  var keys = Object.keys(SAT_LAYER_CACHE);
+  for(var i=0; i<keys.length; i++) {
+    if(SAT_LAYER_CACHE[keys[i]] && SAT_LAYER_CACHE[keys[i]].ly === ly) return true;
+  }
+  return false;
+}
+
+function clearSatCache() {
+  Object.keys(SAT_LAYER_CACHE).forEach(function(ck) {
+    var e = SAT_LAYER_CACHE[ck];
+    if(e && e.ly) try { map.removeLayer(e.ly); } catch(x) {}
+  });
+  SAT_LAYER_CACHE = {};
+  SAT_API_CACHE   = {};
+  LY.sat = null;
+}
+
+// キャッシュ済みエントリをアクティブ表示（前のレイヤーはopacity 0で保持）
+function _activateSat(entry, op, label, offset) {
+  if(LY.sat && LY.sat !== entry.ly) {
+    if(_isCachedLayer(LY.sat) && map.hasLayer(LY.sat)) {
+      LY.sat.setOpacity(0);          // 次回キャッシュヒット用にmap上に保持
+    } else if(map.hasLayer(LY.sat)) {
+      try { map.removeLayer(LY.sat); } catch(e) {}
+    }
+  }
+  LY.sat = entry.ly;
+  if(!map.hasLayer(entry.ly)) entry.ly.addTo(map);
+  entry.ly.setOpacity(op);
+  if(LY.base) LY.base.bringToBack();
+  document.getElementById('satTimeLbl').textContent =
+    offset===0 ? '最新 ('+entry.timeLabel+')' : offset+'分前 ('+entry.timeLabel+')';
+  document.getElementById('sat-lbl').textContent = label+' 読込中...';
+  entry.ly.once('load', function() {
+    document.getElementById('sat-lbl').textContent = label+' '+entry.timeLabel+' ('+entry.source+')';
+  });
+  setTimeout(bringTop, 300);
+}
+
+// 他フレームをバックグラウンドでプリロード（200ms間隔でstagger）
+function _preloadEntries(entries) {
+  var i = 0;
+  function next() {
+    if(i >= entries.length) return;
+    var e = entries[i++];
+    if(e && e.ly && !map.hasLayer(e.ly)) {
+      e.ly.setOpacity(0);
+      e.ly.addTo(map);
+    }
+    setTimeout(next, 200);
+  }
+  setTimeout(next, 400);
+}
+
+function _allOffsets() {
+  var max = parseInt(document.getElementById('satTimeSlider').max);
+  var arr = [];
+  for(var step = 0; step <= max; step++) arr.push((max - step) * 10);
+  return arr;
+}
+
+// エントリ生成（キャッシュ済みならそのまま返す）
+function _makeJmaEntry(k, s, jmaList, offset) {
+  var ck = _satCk(k, offset);
+  if(SAT_LAYER_CACHE[ck]) return SAT_LAYER_CACHE[ck];
+  var idx = Math.max(0, jmaList.length - 1 - Math.floor(offset / 10));
+  var latest = jmaList[idx].basetime;
+  var tl = latest.slice(8,10)+':'+latest.slice(10,12)+'Z';
+  var url = 'https://www.jma.go.jp/bosai/himawari/data/satimg/'+latest+'/'+s.area+'/'+latest+'/'+s.band+'/'+s.prod+'/{z}/{x}/{y}.jpg';
+  var ly = L.tileLayer(url, {opacity:0,minZoom:1,maxZoom:10,maxNativeZoom:5,updateWhenIdle:false,keepBuffer:0,errorTileUrl:BLANK_TILE});
+  var entry = {ly:ly, timeLabel:tl, source:'JMA'};
+  SAT_LAYER_CACHE[ck] = entry;
+  return entry;
+}
+
+function _makeRvEntry(k, host, past, offset) {
+  var ck = _satCk(k, offset);
+  if(SAT_LAYER_CACHE[ck]) return SAT_LAYER_CACHE[ck];
+  var frame = past[past.length-1], bestDiff = 0;
+  if(offset > 0) {
+    var targetSec = Math.floor((Date.now() - offset*60*1000)/1000);
+    frame = past[0]; bestDiff = Math.abs(past[0].time - targetSec);
+    for(var i=1; i<past.length; i++) {
+      var d = Math.abs(past[i].time - targetSec);
+      if(d < bestDiff) { frame = past[i]; bestDiff = d; }
+    }
+    if(bestDiff > 20*60) return null;
+  }
+  var ts = new Date(frame.time*1000);
+  var tl = ('0'+ts.getUTCHours()).slice(-2)+':'+('0'+ts.getUTCMinutes()).slice(-2)+'Z';
+  var url = host+frame.path+'/256/{z}/{x}/{y}/4/1_1.png';
+  var ly = L.tileLayer(url, {opacity:0,maxZoom:10,updateWhenIdle:false,keepBuffer:0,errorTileUrl:BLANK_TILE});
+  var entry = {ly:ly, timeLabel:tl, source:'RainViewer'};
+  SAT_LAYER_CACHE[ck] = entry;
+  return entry;
+}
+
+function _makeWmsEntry(k, s, offset) {
+  var ck = _satCk(k, offset);
+  if(SAT_LAYER_CACHE[ck]) return SAT_LAYER_CACHE[ck];
+  var tgt = new Date(Date.now() - offset*60*1000);
+  tgt.setUTCMinutes(Math.floor(tgt.getUTCMinutes()/5)*5, 0, 0);
+  var ts = tgt.getUTCFullYear()+'-'+('0'+(tgt.getUTCMonth()+1)).slice(-2)+'-'+('0'+tgt.getUTCDate()).slice(-2)+
+           'T'+('0'+tgt.getUTCHours()).slice(-2)+':'+('0'+tgt.getUTCMinutes()).slice(-2)+':00Z';
+  var tl = ('0'+tgt.getUTCHours()).slice(-2)+':'+('0'+tgt.getUTCMinutes()).slice(-2)+'Z';
+  var ly = L.tileLayer.wms(s.url, {layers:s.layers,format:'image/png',transparent:true,opacity:0,version:'1.1.1',attribution:'IEM/NEXRAD',TIME:ts});
+  var entry = {ly:ly, timeLabel:tl, source:'IEM'};
+  SAT_LAYER_CACHE[ck] = entry;
+  return entry;
+}
+
 function loadSat(k) {
+  var prevKey = satKey;
   satKey = k;
-  if(LY.sat) {
-    try { map.removeLayer(LY.sat); } catch(e) {}
+
+  // ソース変更時：前ソースのプリロード済みレイヤーをmapから除去
+  if(prevKey && prevKey !== k) {
+    Object.keys(SAT_LAYER_CACHE).forEach(function(ck) {
+      if(ck.slice(0, prevKey.length+1) === prevKey+'|') {
+        var e = SAT_LAYER_CACHE[ck];
+        if(e && e.ly && map.hasLayer(e.ly)) try { map.removeLayer(e.ly); } catch(x) {}
+      }
+    });
     LY.sat = null;
   }
-  // SAT dropdownでradar系以外を選んだ時はLY.radarも消す
+
   if(k!=='rainviewer-radar' && k!=='bom-radar') {
     radarOn = false;
     if(LY.radar){ map.removeLayer(LY.radar); LY.radar=null; }
   }
+
   if(k==='none') {
+    if(LY.sat) {
+      if(_isCachedLayer(LY.sat) && map.hasLayer(LY.sat)) LY.sat.setOpacity(0);
+      else if(map.hasLayer(LY.sat)) try { map.removeLayer(LY.sat); } catch(e) {}
+      LY.sat = null;
+    }
     document.getElementById('sat-lbl').textContent = '衛星:なし';
     return;
   }
+
   var s = SATS[k];
   if(!s) return;
   var op = parseFloat(document.getElementById('satOp').value) / 100;
+  var capturedOffset = satOffsetMins;
+  var capturedKey    = k;
+  var label          = s.label;
+  var ck             = _satCk(k, capturedOffset);
+
+  // ── レイヤーキャッシュヒット（即時表示） ─────────────────────────────
+  if(SAT_LAYER_CACHE[ck]) {
+    _activateSat(SAT_LAYER_CACHE[ck], op, label, capturedOffset);
+    return;
+  }
 
   // ── RainViewer Radar / BOM Radar ──────────────────────────────────────
   if(s.rainviewer) {
+    function _showRv(host, past) {
+      var e = _makeRvEntry(k, host, past, capturedOffset);
+      if(e) {
+        _activateSat(e, op, label, capturedOffset);
+        var others = _allOffsets().filter(function(o){ return o !== capturedOffset; });
+        _preloadEntries(others.map(function(o){ return _makeRvEntry(k, host, past, o); }).filter(Boolean));
+      } else {
+        var maxMin = Math.round((Date.now()/1000 - past[0].time)/60);
+        document.getElementById('sat-lbl').textContent = label+' (過去データなし: 最大'+maxMin+'分前まで)';
+        document.getElementById('satTimeLbl').textContent = capturedOffset+'分前 (データなし)';
+      }
+    }
+    if(SAT_API_CACHE[k]) { _showRv(SAT_API_CACHE[k].host, SAT_API_CACHE[k].past); return; }
+
     if(loadSat._rvAbort) loadSat._rvAbort.abort();
     var rvCtrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     loadSat._rvAbort = rvCtrl;
-    var capturedOffsetRv = satOffsetMins;
-    var capturedLabelRv  = s.label;
-    var rvOpts = rvCtrl ? {signal: rvCtrl.signal} : {};
-
-    document.getElementById('sat-lbl').textContent = capturedLabelRv+' 読込中...';
-
-    fetch('https://api.rainviewer.com/public/weather-maps.json', rvOpts)
+    document.getElementById('sat-lbl').textContent = label+' 読込中...';
+    fetch('https://api.rainviewer.com/public/weather-maps.json', rvCtrl ? {signal:rvCtrl.signal} : {})
       .then(function(r){ return r.json(); })
       .then(function(d){
         loadSat._rvAbort = null;
+        if(capturedKey !== satKey) return;
         var past = d.radar.past;
         if(!past || !past.length) throw new Error('no data');
-
-        var frame;
-        if(capturedOffsetRv === 0) {
-          frame = past[past.length-1];
-        } else {
-          var targetSec = Math.floor((Date.now() - capturedOffsetRv*60*1000)/1000);
-          frame = past[0];
-          var bestDiff = Math.abs(frame.time - targetSec);
-          for(var i=1; i<past.length; i++) {
-            var diff = Math.abs(past[i].time - targetSec);
-            if(diff < bestDiff) { frame = past[i]; bestDiff = diff; }
-          }
-          // 最古エントリとの差が20分超 → 過去データなし
-          if(bestDiff > 20*60) {
-            var maxMin = Math.round((Date.now()/1000 - past[0].time)/60);
-            document.getElementById('sat-lbl').textContent = capturedLabelRv+' (過去データなし: 最大'+maxMin+'分前まで)';
-            document.getElementById('satTimeLbl').textContent = capturedOffsetRv+'分前 (データなし)';
-            return;
-          }
-        }
-        var ts = new Date(frame.time*1000);
-        var rvTimeLabel = ('0'+ts.getUTCHours()).slice(-2)+':'+('0'+ts.getUTCMinutes()).slice(-2)+'Z';
-        document.getElementById('satTimeLbl').textContent =
-          capturedOffsetRv===0 ? '最新 ('+rvTimeLabel+')' : capturedOffsetRv+'分前 ('+rvTimeLabel+')';
-
-        var url = d.host+frame.path+'/256/{z}/{x}/{y}/4/1_1.png';
-        LY.sat = L.tileLayer(url, {
-          opacity: op, maxZoom:10, updateWhenIdle:false, keepBuffer:0, errorTileUrl:BLANK_TILE
-        }).addTo(map);
-        if(LY.base) LY.base.bringToBack();
-        LY.sat.on('load',     function(){ document.getElementById('sat-lbl').textContent = capturedLabelRv+' '+rvTimeLabel+' (RainViewer)'; });
-        LY.sat.on('tileerror',function(){ document.getElementById('sat-lbl').textContent = capturedLabelRv+' (エラー '+rvTimeLabel+')'; });
-        setTimeout(function(){ bringTop(); }, 300);
+        SAT_API_CACHE[k] = {host:d.host, past:past, ts:Date.now()};
+        _showRv(d.host, past);
       }).catch(function(e){
         if(e && e.name==='AbortError') return;
-        document.getElementById('sat-lbl').textContent = capturedLabelRv+' (取得失敗)';
+        document.getElementById('sat-lbl').textContent = label+' (取得失敗)';
       });
     return;
   }
 
-  // ── NEXRAD WMS (IEM) ─ TIME パラメータ付きで時刻対応 ─────────────────
+  // ── NEXRAD WMS (IEM) ──────────────────────────────────────────────────
   if(s.wms) {
-    var capturedOffsetWms = satOffsetMins;
-    var capturedLabelWms  = s.label;
-
-    // 対象時刻を5分単位に丸める
-    var tgt = new Date(Date.now() - capturedOffsetWms*60*1000);
-    tgt.setUTCMinutes(Math.floor(tgt.getUTCMinutes()/5)*5, 0, 0);
-    var wmsTimeStr  = tgt.getUTCFullYear()+'-'+
-      ('0'+(tgt.getUTCMonth()+1)).slice(-2)+'-'+('0'+tgt.getUTCDate()).slice(-2)+'T'+
-      ('0'+tgt.getUTCHours()).slice(-2)+':'+('0'+tgt.getUTCMinutes()).slice(-2)+':00Z';
-    var wmsTimeLbl  = ('0'+tgt.getUTCHours()).slice(-2)+':'+('0'+tgt.getUTCMinutes()).slice(-2)+'Z';
-
-    document.getElementById('sat-lbl').textContent = capturedLabelWms+' 読込中...';
-    document.getElementById('satTimeLbl').textContent =
-      capturedOffsetWms===0 ? '最新 ('+wmsTimeLbl+')' : capturedOffsetWms+'分前 ('+wmsTimeLbl+')';
-
-    LY.sat = L.tileLayer.wms(s.url, {
-      layers: s.layers,
-      format: 'image/png',
-      transparent: true,
-      opacity: op,
-      version: '1.1.1',
-      attribution: 'IEM/NEXRAD',
-      TIME: wmsTimeStr
-    }).addTo(map);
-    if(LY.base) LY.base.bringToBack();
-    LY.sat.on('load', function(){
-      document.getElementById('sat-lbl').textContent = capturedLabelWms+' '+wmsTimeLbl+' (IEM)';
+    var we = _makeWmsEntry(k, s, capturedOffset);
+    we.ly.on('tileerror', function(){
+      document.getElementById('sat-lbl').textContent = capturedOffset>0
+        ? label+' (過去データ未対応の可能性あり)' : label+' (タイルエラー)';
     });
-    LY.sat.on('tileerror', function(){
-      document.getElementById('sat-lbl').textContent = capturedOffsetWms>0
-        ? capturedLabelWms+' (過去データ未対応の可能性あり)'
-        : capturedLabelWms+' (タイルエラー)';
-    });
-    setTimeout(function(){ bringTop(); }, 300);
+    _activateSat(we, op, label, capturedOffset);
+    var wmsOthers = _allOffsets().filter(function(o){ return o !== capturedOffset; });
+    _preloadEntries(wmsOthers.map(function(o){ return _makeWmsEntry(k, s, o); }));
     return;
   }
 
+  // ── overlay ──────────────────────────────────────────────────────────
   if(s.overlay) {
+    if(LY.sat && !_isCachedLayer(LY.sat)) try { map.removeLayer(LY.sat); } catch(e) {}
     document.getElementById('sat-lbl').textContent = s.label+' 読込中...';
     LY.sat = L.imageOverlay(s.url, s.bounds, {opacity:op}).addTo(map);
     if(LY.base) LY.base.bringToBack();
@@ -1379,75 +1479,48 @@ function loadSat(k) {
     return;
   }
 
+  // ── JMA Himawari ──────────────────────────────────────────────────────
   if(s.jma) {
-    // 前回のフェッチをキャンセル（スライダー連続操作時のレースコンディション防止）
+    function _showJma(jmaList) {
+      var e = _makeJmaEntry(k, s, jmaList, capturedOffset);
+      _activateSat(e, op, label, capturedOffset);
+      var others = _allOffsets().filter(function(o){ return o !== capturedOffset; });
+      _preloadEntries(others.map(function(o){ return _makeJmaEntry(k, s, jmaList, o); }));
+    }
+    if(SAT_API_CACHE[k]) { _showJma(SAT_API_CACHE[k].jmaList); return; }
+
     if(loadSat._jmaAbort) loadSat._jmaAbort.abort();
     var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     loadSat._jmaAbort = ctrl;
-
-    // オフセットをキャプチャ（非同期コールバック内で正しい値を参照するため）
-    var capturedOffset = satOffsetMins;
-    var capturedLabel = s.label;
-
-    document.getElementById('sat-lbl').textContent = s.label+' 読込中...';
-
-    var fetchOpts = ctrl ? {signal: ctrl.signal} : {};
-    fetch('https://www.jma.go.jp/bosai/himawari/data/satimg/targetTimes_'+s.area+'.json?_='+Date.now(), fetchOpts)
+    document.getElementById('sat-lbl').textContent = label+' 読込中...';
+    fetch('https://www.jma.go.jp/bosai/himawari/data/satimg/targetTimes_'+s.area+'.json?_='+Date.now(), ctrl ? {signal:ctrl.signal} : {})
       .then(function(r){ return r.json(); })
       .then(function(d){
         loadSat._jmaAbort = null;
-        var idx = Math.max(0, d.length-1 - Math.floor(capturedOffset/10));
-        var latest = d[idx].basetime;
-        var timeLabel = latest.slice(8,10)+':'+latest.slice(10,12)+'Z';
-
-        // satTimeLbl と sat-lbl を同じ実時刻で同期
-        document.getElementById('satTimeLbl').textContent =
-          capturedOffset===0 ? '最新 ('+timeLabel+')' : capturedOffset+'分前 ('+timeLabel+')';
-
-        var url = 'https://www.jma.go.jp/bosai/himawari/data/satimg/'+latest+'/'+s.area+'/'+latest+'/'+s.band+'/'+s.prod+'/{z}/{x}/{y}.jpg';
-        LY.sat = L.tileLayer(url, {
-          opacity: op,
-          minZoom: 1,
-          maxZoom: 10,
-          maxNativeZoom: 5,
-          updateWhenIdle: false,
-          keepBuffer: 0,
-          errorTileUrl: BLANK_TILE
-        });
-        LY.sat.addTo(map);
-        if(LY.base) LY.base.bringToBack();
-        LY.sat.on('load', function(){
-          document.getElementById('sat-lbl').textContent = capturedLabel+' '+timeLabel+' (JMA)';
-        });
-        LY.sat.on('tileerror', function(){
-          document.getElementById('sat-lbl').textContent = capturedLabel+' (データなし '+timeLabel+')';
-        });
-        setTimeout(function(){ bringTop(); }, 300);
+        if(capturedKey !== satKey) return;
+        SAT_API_CACHE[k] = {jmaList:d, ts:Date.now()};
+        _showJma(d);
       }).catch(function(e){
-        if(e && e.name === 'AbortError') return;
-        document.getElementById('sat-lbl').textContent = s.label+' (取得失敗)';
+        if(e && e.name==='AbortError') return;
+        document.getElementById('sat-lbl').textContent = label+' (取得失敗)';
       });
     return;
   }
 
+  // ── GIBS (その他) ─────────────────────────────────────────────────────
+  if(LY.sat) {
+    if(_isCachedLayer(LY.sat) && map.hasLayer(LY.sat)) LY.sat.setOpacity(0);
+    else if(map.hasLayer(LY.sat)) try { map.removeLayer(LY.sat); } catch(e) {}
+    LY.sat = null;
+  }
   var t = gibsTimeOffset(satOffsetMins);
   var url = s.url ? s.url : (GIBS+'/'+s.l+'/default/'+t+'/GoogleMapsCompatible/{z}/{y}/{x}.'+s.e);
   document.getElementById('sat-lbl').textContent = s.label+' '+t.slice(11,16)+'Z 読込中...';
-  LY.sat = L.tileLayer(url, {
-    opacity: op,
-    maxZoom: 9,
-    updateWhenIdle: false,
-    keepBuffer: 0,
-    errorTileUrl: BLANK_TILE
-  });
+  LY.sat = L.tileLayer(url, {opacity:op,maxZoom:9,updateWhenIdle:false,keepBuffer:0,errorTileUrl:BLANK_TILE});
   LY.sat.addTo(map);
   if(LY.base) LY.base.bringToBack();
-  LY.sat.on('load', function(){
-    document.getElementById('sat-lbl').textContent = s.label+' '+t.slice(11,16)+'Z';
-  });
-  LY.sat.on('tileerror', function(){
-    document.getElementById('sat-lbl').textContent = s.label+' (データなし '+t.slice(11,16)+'Z)';
-  });
+  LY.sat.on('load',     function(){ document.getElementById('sat-lbl').textContent = s.label+' '+t.slice(11,16)+'Z'; });
+  LY.sat.on('tileerror',function(){ document.getElementById('sat-lbl').textContent = s.label+' (データなし '+t.slice(11,16)+'Z)'; });
   setTimeout(function(){ bringTop(); }, 300);
 }
 loadSat('himawari');
