@@ -1448,7 +1448,8 @@ function drawRoute() {
   LY.wpts.forEach(function(m){map.removeLayer(m);}); LY.wpts=[];
 
   var turbOn = document.getElementById('oTurb').checked;
-  var curFL  = parseInt(document.getElementById('flSel').value);
+  var flSelEl = document.getElementById('flSel');
+  var curFL  = flSelEl ? parseInt(flSelEl.value) : 35;
   var vwsObj = VWS_BY_FL[curFL] || VWS;
 
   for(var i=0;i<WP.length-1;i++) {
@@ -2201,10 +2202,12 @@ function hexToRgba(hex, a) {
 function setFlFromRvsm(fl) {
   var flKey = fl/10;
   var sel = document.getElementById('flSel');
-  var opts = Array.prototype.slice.call(sel.options);
-  sel.value = opts.reduce(function(p,c){
-    return Math.abs(parseInt(c.value)-flKey) < Math.abs(parseInt(p.value)-flKey) ? c : p;
-  }).value;
+  if(sel) {
+    var opts = Array.prototype.slice.call(sel.options);
+    sel.value = opts.reduce(function(p,c){
+      return Math.abs(parseInt(c.value)-flKey) < Math.abs(parseInt(p.value)-flKey) ? c : p;
+    }).value;
+  }
   drawRoute();
 }
 
@@ -2220,7 +2223,8 @@ function updateRvsmPanel() {
   } else {
     flList=[410,390,370,350,330,310,290]; dir='----';
   }
-  var curFL = parseInt(document.getElementById('flSel').value);
+  var flSelEl = document.getElementById('flSel');
+  var curFL = flSelEl ? parseInt(flSelEl.value) : 35;
   var html = '<div style="font-size:8px;color:#78909c;margin-bottom:2px;text-align:center;">RVSM</div>'
            + '<div style="font-size:8px;color:#546e7a;margin-bottom:3px;text-align:center;">'+dir+'</div>';
   flList.forEach(function(fl) {
