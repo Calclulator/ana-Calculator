@@ -146,7 +146,7 @@
            style="width:65px;" oninput="setSatOp(this.value)" onchange="setSatOp(this.value)">
     <span id="satOpV" style="font-size:10px;min-width:26px;">80%</span>
     <span class="lbl" style="margin-left:12px;">SAT TIME</span>
-    <input type="range" id="satTimeSlider" min="0" max="12" value="0" step="1"
+    <input type="range" id="satTimeSlider" min="0" max="12" value="12" step="1"
            style="width:120px;" oninput="onSatTimeSlide(this.value)">
     <span id="satTimeLbl" style="font-size:10px;color:#4fc3f7;min-width:90px;">最新</span>
     <button class="btn" onclick="onSatTimeLatest()" style="margin-left:4px;">最新</button>
@@ -680,9 +680,10 @@ function gibsTimeOffset(offsetMins) {
 }
 
 function onSatTimeSlide(val) {
-  satOffsetMins = parseInt(val)*10;
+  var max = parseInt(document.getElementById('satTimeSlider').max);
+  satOffsetMins = (max - parseInt(val)) * 10;
   document.getElementById('satTimeLbl').textContent =
-    satOffsetMins===0 ? '最新...' : satOffsetMins+'分前...';
+    satOffsetMins===0 ? '最新' : satOffsetMins+'分前';
   loadSat(satKey);
 }
 function onSatTimeApply() {
@@ -690,8 +691,8 @@ function onSatTimeApply() {
 }
 function onSatTimeLatest() {
   var sl = document.getElementById('satTimeSlider');
-  sl.value = 0;
-  onSatTimeSlide(0);
+  sl.value = sl.max;
+  onSatTimeSlide(sl.max);
 }
 
 var satPlayInt = null;
@@ -709,10 +710,11 @@ function toggleSatPlay() {
   onSatTimeSlide(0);
   satPlayInt = setInterval(function() {
     var cur = parseInt(sl.value);
-    if(cur >= 12) {
+    if(cur >= parseInt(sl.max)) {
       clearInterval(satPlayInt);
       satPlayInt = null;
       btn.textContent = '▶';
+      onSatTimeLatest();
       return;
     }
     sl.value = cur + 1;
