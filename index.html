@@ -1260,7 +1260,8 @@ function setBase(k) {
   }).addTo(map);
   LY.base.bringToBack();
 }
-setBase('dark');
+setBase('light');
+toggleMode();
 
 // =====================================================================
 // SATELLITE
@@ -1677,7 +1678,7 @@ function changeTextSize(d) {
   document.body.style.fontSize = TEXT_SIZE + 'px';
 }
 
-var DAY_MODE = false;
+var DAY_MODE = true;
 function toggleMode() {
   DAY_MODE = !DAY_MODE;
   document.getElementById('modeBtn').textContent = DAY_MODE ? '🌙' : '🔆';
