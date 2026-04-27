@@ -121,7 +121,16 @@
     <button class="btn" onclick="map.zoomIn()">＋</button>
     <button class="btn" onclick="frameRoute()">全体表示</button>
     <button class="btn" onclick="refreshAll()">Now</button>
-    <span class="lbl" style="margin-left:6px;">SAT</span>
+        
+    <label class="ck" style="margin-left:auto;">
+      <span class="lbl">低速モード</span>
+      <input type="checkbox" id="lowbw" onchange="toggleBw()" style="margin-left:3px;">
+    </label>
+  </div>
+
+  <!-- BAR2: SAT時刻スライダー -->
+  <div class="bar">
+    <span class="lbl">SAT</span>
     <select id="satSel" class="btn" onchange="loadSat(this.value)" style="max-width:210px;">
       <option value="himawari">Himawari-9（アジア太平洋）</option>
       <option value="rainviewer-radar">RainViewer Radar</option>
@@ -136,16 +145,7 @@
     <input type="range" id="satOp" min="0" max="100" value="80" step="5"
            style="width:65px;" oninput="setSatOp(this.value)" onchange="setSatOp(this.value)">
     <span id="satOpV" style="font-size:10px;min-width:26px;">80%</span>
-    
-    <label class="ck" style="margin-left:auto;">
-      <span class="lbl">低速モード</span>
-      <input type="checkbox" id="lowbw" onchange="toggleBw()" style="margin-left:3px;">
-    </label>
-  </div>
-
-  <!-- BAR2: SAT時刻スライダー -->
-  <div class="bar">
-    <span class="lbl">SAT TIME</span>
+    <span class="lbl" style="margin-left:12px;">SAT TIME</span>
     <input type="range" id="satTimeSlider" min="0" max="18" value="0" step="1"
            style="width:120px;" oninput="onSatTimeSlide(this.value)">
     <span id="satTimeLbl" style="font-size:10px;color:#4fc3f7;min-width:90px;">最新</span>
