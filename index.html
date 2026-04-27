@@ -904,7 +904,7 @@ function runParse() {
     if(!nameM) continue;
     var wid = nameM[1];
     var isFirWp = wid.charAt(0) === '-';
-    if(!isFirWp && (skipWords[wid]||wid.length<2)) continue;
+    if(!isFirWp && (skipWords[wid]||wid.length<2||wid.charAt(0)==='-')) continue;
     if(!isFirWp && seen[wid]) continue;
     if(!isFirWp) seen[wid] = true;
 
