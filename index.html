@@ -2298,7 +2298,7 @@ function fetchAc() {
   }
   if(LY.ac){map.removeLayer(LY.ac); LY.ac=null;}
   var ic = L.divIcon({
-    html:'<div style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;transform:rotate('+(rpos.hdg-90)+'deg);font-size:40px;filter:drop-shadow(0 0 3px #4fc3f7);">✈</div>',
+    html:'<div style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;transform:rotate('+(rpos.hdg)+'deg);font-size:40px;filter:drop-shadow(0 0 3px #4fc3f7);">⬆</div>',
     className:'',iconSize:[24,24],iconAnchor:[12,12]
   });
   LY.ac = L.marker([rpos.lat,rpos.lng],{icon:ic,zIndexOffset:1000}).addTo(map);
