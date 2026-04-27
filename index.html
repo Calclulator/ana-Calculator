@@ -120,7 +120,7 @@
     <button class="btn" onclick="map.zoomOut()">−</button>
     <button class="btn" onclick="map.zoomIn()">＋</button>
     <button class="btn" onclick="frameRoute()">全体表示</button>
-    <button class="btn" onclick="refreshAll()">Now</button>
+    <button class="btn" onclick="goToAircraft()">Now</button>
         
     <label class="ck" style="margin-left:auto;">
       <span class="lbl">低速モード</span>
@@ -2374,6 +2374,15 @@ function drawAvoidLine() {
     LY.avoidR = L.polyline(makePts(1),{color:'#ff9800',weight:2,opacity:0.9,dashArray:'8 5'}).addTo(map);
   }
   bringTop();
+}
+
+function goToAircraft() {
+  var rpos = calcRoutePos();
+  if(rpos) {
+    map.setView([rpos.lat, rpos.lng], map.getZoom());
+  } else {
+    frameRoute();
+  }
 }
 
 function hexToRgba(hex, a) {
