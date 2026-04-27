@@ -142,9 +142,9 @@
       <option value="none">衛星なし</option>
     </select>
     <span class="lbl">透過度</span>
-    <input type="range" id="satOp" min="0" max="100" value="80" step="5"
+    <input type="range" id="satOp" min="0" max="100" value="50" step="5"
            style="width:65px;" oninput="setSatOp(this.value)" onchange="setSatOp(this.value)">
-    <span id="satOpV" style="font-size:10px;min-width:26px;">80%</span>
+    <span id="satOpV" style="font-size:10px;min-width:26px;">50%</span>
     <span class="lbl" style="margin-left:12px;">SAT TIME</span>
     <input type="range" id="satTimeSlider" min="0" max="12" value="12" step="1"
            style="width:120px;" oninput="onSatTimeSlide(this.value)">
@@ -2298,7 +2298,7 @@ function fetchAc() {
   }
   if(LY.ac){map.removeLayer(LY.ac); LY.ac=null;}
   var ic = L.divIcon({
-    html:'<div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;transform:rotate('+(rpos.hdg-90)+'deg);font-size:20px;filter:drop-shadow(0 0 3px #4fc3f7);">✈</div>',
+    html:'<div style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;transform:rotate('+(rpos.hdg-90)+'deg);font-size:40px;filter:drop-shadow(0 0 3px #4fc3f7);">✈</div>',
     className:'',iconSize:[24,24],iconAnchor:[12,12]
   });
   LY.ac = L.marker([rpos.lat,rpos.lng],{icon:ic,zIndexOffset:1000}).addTo(map);
