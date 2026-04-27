@@ -894,7 +894,7 @@ function runParse() {
   }
 
   // ウェイポイント座標パース
-  var skipWords = {FL:1,DEC:1,CLM:1,TOC:1,TOD:1,MLDW:1,R:1,RMG:1,P:1,ETP:1,ETP1:1,ETP2:1,ETP3:1,ETP4:1,EEP:1,EEP1:1,EEP2:1,EEP3:1,EXP:1,EXP1:1,EXP2:1,EXP3:1};
+  var skipWords = {FL:1,DEC:1,CLM:1,TOC:1,TOD:1,MLDW:1,R:1,RMG:1,P:1,ETP:1,ETP1:1,ETP2:1,ETP3:1,ETP4:1,EEP:1,EEP1:1,EEP2:1,EEP3:1,EXP:1,EXP1:1,EXP2:1,EXP3:1,PLAN:1,NML:1,STD:1,STA:1,BOF:1,CON:1,RSV:1,ALT:1,TAX:1,REQ:1,PCF:1,EXT:1,FOB:1,FOD:1};
   var coordRe = /([NS]\d{5}[EW]\d{6,7})/;
   var seen = {};
 
@@ -1020,6 +1020,65 @@ function calcEto(ctmeMin) {
   return minsToHHMM(ref+ctmeMin);
 }
 
+// =====================================================================
+// FIR GEOGRAPHIC DETECTION (point-in-polygon, ray casting)
+// =====================================================================
+var firIndex = null;
+
+function buildFirIndex(geoJSON) {
+  firIndex = [];
+  if(!geoJSON || !geoJSON.features) return;
+  geoJSON.features.forEach(function(f) {
+    if(!f.geometry) return;
+    var p = f.properties || {};
+    var name = p.id || p.ICAO || p.FIR_ICAO || p.FIRNAME || p.name || null;
+    if(!name || typeof name !== 'string' || name.length < 2) return;
+    var allC = [];
+    (function flat(x) {
+      if(!Array.isArray(x)) return;
+      if(typeof x[0] === 'number') { allC.push(x); return; }
+      x.forEach(flat);
+    })(f.geometry.coordinates);
+    if(!allC.length) return;
+    var minLn=allC[0][0], maxLn=allC[0][0], minLa=allC[0][1], maxLa=allC[0][1];
+    for(var k=1;k<allC.length;k++){
+      if(allC[k][0]<minLn)minLn=allC[k][0]; if(allC[k][0]>maxLn)maxLn=allC[k][0];
+      if(allC[k][1]<minLa)minLa=allC[k][1]; if(allC[k][1]>maxLa)maxLa=allC[k][1];
+    }
+    firIndex.push({f:f, name:name, minLn:minLn, maxLn:maxLn, minLa:minLa, maxLa:maxLa});
+  });
+}
+
+function pipTest(lat, lng, ring) {
+  var inside = false;
+  var n = ring.length;
+  for(var i=0, j=n-1; i<n; j=i++) {
+    var lni=ring[i][0], lai=ring[i][1], lnj=ring[j][0], laj=ring[j][1];
+    if(((lai>lat)!==(laj>lat)) && (lng < (lnj-lni)*(lat-lai)/(laj-lai)+lni))
+      inside = !inside;
+  }
+  return inside;
+}
+
+function getFirForPoint(lat, lng) {
+  if(!firIndex || !firIndex.length) return null;
+  for(var i=0; i<firIndex.length; i++) {
+    var e = firIndex[i];
+    if(lat<e.minLa||lat>e.maxLa||lng<e.minLn||lng>e.maxLn) continue;
+    var g = e.f.geometry;
+    var polys = g.type==='Polygon' ? [g.coordinates]
+               : g.type==='MultiPolygon' ? g.coordinates : [];
+    for(var p=0; p<polys.length; p++) {
+      var rings = polys[p];
+      if(!rings.length || !pipTest(lat,lng,rings[0])) continue;
+      var hole = false;
+      for(var r=1; r<rings.length; r++) { if(pipTest(lat,lng,rings[r])){hole=true;break;} }
+      if(!hole) return e.name;
+    }
+  }
+  return null;
+}
+
 function renderFpTable() {
   var tbody = document.getElementById('fp-tbody');
   tbody.innerHTML = '';
@@ -1039,21 +1098,32 @@ function renderFpTable() {
     {bg:'rgba(240,98,146,.06)',  hi:'rgba(240,98,146,.13)',  ac:'rgba(240,98,146,.7)'},
     {bg:'rgba(120,144,156,.06)', hi:'rgba(120,144,156,.13)', ac:'rgba(120,144,156,.7)'},
   ];
-  var firMap = {'RJJJ': 0};
-  var firNextIdx = 1;
-  var currentFir = 'RJJJ';
+  var firMap = {};
+  var firNextIdx = 0;
+  var currentFir = null;
+
+  // WP座標マップ（地理的FIR判定用）
+  var wpCoordMap = {};
+  WP.forEach(function(w) { wpCoordMap[w.id] = w; });
+  var hasFirGeo = firIndex && firIndex.length > 0;
 
   var ref = DEP_ATO_MIN!==null ? DEP_ATO_MIN : (DEP_STD_MIN!==null ? DEP_STD_MIN : null);
 
   FP_ROWS.forEach(function(row, idx) {
     var isFirBoundary = typeof row.id === 'string' && row.id.charAt(0) === '-';
-    if(isFirBoundary) {
-      var newFir = row.id.slice(1);
-      if(firMap[newFir] === undefined) {
-        firMap[newFir] = firNextIdx % FIR_PAL.length;
-        firNextIdx++;
-      }
-      currentFir = newFir;
+    if(isFirBoundary) currentFir = row.id.slice(1);
+
+    // 地理的FIR判定（GeoJSON未ロード時は -XXXX 追跡にフォールバック）
+    var rowFirName = null;
+    if(hasFirGeo) {
+      var wpLookup = wpCoordMap[row.id];
+      if(wpLookup) rowFirName = getFirForPoint(wpLookup.lat, wpLookup.lng);
+    }
+    if(!rowFirName) rowFirName = currentFir;
+
+    if(rowFirName && firMap[rowFirName] === undefined) {
+      firMap[rowFirName] = firNextIdx % FIR_PAL.length;
+      firNextIdx++;
     }
 
     // MLDW marker: planned fuelがMLDW以下に初めて下がる直前に挿入
@@ -1073,7 +1143,7 @@ function renderFpTable() {
       }
     }
 
-    var pal = FIR_PAL[firMap[currentFir] !== undefined ? firMap[currentFir] : 0];
+    var pal = FIR_PAL[(rowFirName && firMap[rowFirName] !== undefined) ? firMap[rowFirName] : 0];
     var tr = document.createElement('tr');
     tr.style.background = isFirBoundary ? pal.hi : pal.bg;
 
@@ -1105,9 +1175,10 @@ function renderFpTable() {
     var ztmeStr = (row.ztme!==null) ? String(row.ztme) : '—';
 
     // FIR cell
+    var displayFir = rowFirName || '----';
     var firHtml = isFirBoundary
-      ? '<td style="color:'+pal.ac+';font-size:10px;font-weight:bold;padding:3px 6px;white-space:nowrap;">&#x2192; '+currentFir+'</td>'
-      : '<td style="color:#37474f;font-size:10px;padding:3px 6px;white-space:nowrap;">'+currentFir+'</td>';
+      ? '<td style="color:'+pal.ac+';font-size:10px;font-weight:bold;padding:3px 6px;white-space:nowrap;">&#x2192; '+displayFir+'</td>'
+      : '<td style="color:#37474f;font-size:10px;padding:3px 6px;white-space:nowrap;">'+displayFir+'</td>';
 
     tr.innerHTML =
       '<td style="color:'+(isFirBoundary?'#cfd8dc':'#90a4ae')+';padding:3px 8px;">'+row.id+'</td>'+
@@ -1731,6 +1802,7 @@ function drawFir() {
   }
 
   if(firGeoJSON) {
+    if(!firIndex) buildFirIndex(firGeoJSON);
     renderFir(firGeoJSON);
     return;
   }
@@ -1745,7 +1817,9 @@ function drawFir() {
       type: 'FeatureCollection',
       features: (results[0].features||[]).concat(results[1].features||[])
     };
+    buildFirIndex(firGeoJSON);
     renderFir(firGeoJSON);
+    if(FP_ROWS.length) renderFpTable();
   });
 }
 drawFir();
