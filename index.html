@@ -1087,6 +1087,7 @@ function renderFpTable() {
   var firMap = {};
   var firNextIdx = 0;
   var currentFir = null;
+  var prevRowFirName = undefined;
 
   // WP座標マップ（地理的FIR判定用）
   var wpCoordMap = {};
@@ -1132,9 +1133,8 @@ function renderFpTable() {
     var pal = FIR_PAL[(rowFirName && firMap[rowFirName] !== undefined) ? firMap[rowFirName] : 0];
     var tr = document.createElement('tr');
     tr.style.background = isFirBoundary ? pal.hi : pal.bg;
-    if(isFirBoundary) {
+    if(prevRowFirName !== undefined && rowFirName !== prevRowFirName) {
       tr.style.borderTop = DAY_MODE ? '3px double #1565c0' : '3px double #ffa726';
-      tr.style.borderBottom = DAY_MODE ? '3px double #1565c0' : '3px double #ffa726';
     }
 
     var eto = calcEto(row.ctme);
@@ -1183,6 +1183,7 @@ function renderFpTable() {
       '<td style="padding:3px 4px;"><input class="fp-in" value="'+row.crossAt+'" placeholder="'+altPh+'" onchange="onCrossChange('+idx+',this.value)"></td>'+
       '<td style="padding:3px 4px;"><input class="fp-in fp-note" value="'+row.note+'" onchange="onNoteChange('+idx+',this.value)"></td>';
     tbody.appendChild(tr);
+    prevRowFirName = rowFirName;
   });
 }
 
