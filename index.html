@@ -900,7 +900,7 @@ function runParse() {
 
   for(var i=0;i<lines.length-1;i++) {
     var lineA = lines[i];
-    if(lineA.match(/ALTERNATE\s+DATA|EQUAL\s+TIME\s+POINT|DIVERSION\s+SUMMARY/i)) break;
+    if(lineA.match(/ALTERNATE\s+DATA|ETP\s+SUMMARY|EQUAL\s+TIME\s+POINT|DIVERSION\s+SUMMARY/i)) break;
     var cm = lineA.match(coordRe);
     if(!cm) continue;
     var c = navCoord(cm[1]);
