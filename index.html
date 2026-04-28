@@ -2392,15 +2392,9 @@ function hexToRgba(hex, a) {
 }
 
 function setFlFromRvsm(fl) {
-  var flKey = fl/10;
-  var sel = document.getElementById('flSel');
-  if(sel) {
-    var opts = Array.prototype.slice.call(sel.options);
-    sel.value = opts.reduce(function(p,c){
-      return Math.abs(parseInt(c.value)-flKey) < Math.abs(parseInt(p.value)-flKey) ? c : p;
-    }).value;
-  }
+  CURRENT_FL = fl/10;
   drawRoute();
+  updateRvsmPanel();
 }
 
 function updateRvsmPanel() {
