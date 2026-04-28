@@ -1602,8 +1602,7 @@ function drawRoute() {
   LY.wpts.forEach(function(m){map.removeLayer(m);}); LY.wpts=[];
 
   var turbOn = document.getElementById('oTurb').checked;
-  var flSelEl = document.getElementById('flSel');
-  var curFL  = flSelEl ? parseInt(flSelEl.value) : 35;
+  var curFL = CURRENT_FL;
   var vwsObj = VWS_BY_FL[curFL] || VWS;
 
   for(var i=0;i<WP.length-1;i++) {
