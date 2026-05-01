@@ -1583,12 +1583,19 @@ function renderWsTable() {
     html += '<th style="color:#cfd8dc;padding:4px 8px;font-weight:600;border-bottom:1px solid #1e2a38;white-space:nowrap;">'+wp+'</th>';
   });
   html += '</tr></thead><tbody>';
+  var prevFl = null;
   altRows.forEach(function(alt){
     var altFt = alt * 100;
     if(alt <= 120) return; // 一番下は計算不能
     var altLowFt = altFt - 1000;
+    var topBorder = '';
+    if(prevFl !== null) {
+      if((prevFl > 410 && alt <= 410) || (prevFl > 290 && alt <= 290)) {
+        topBorder = 'border-top:2px solid #ef5350;';
+      }
+    }
     html += '<tr>';
-    html += '<td style="position:sticky;left:0;background:#0d1620;color:#90a4ae;padding:3px 8px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;z-index:1;">'+(altFt.toLocaleString())+' ft</td>';
+    html += '<td style="position:sticky;left:0;background:#0d1620;color:#90a4ae;padding:3px 8px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;z-index:1;'+topBorder+'">'+(altFt.toLocaleString())+' ft</td>';
     wpIds.forEach(function(wp){
       var cHi = getCell(wp, alt);
       var cLo = getCell(wp, alt - 10);
@@ -1605,9 +1612,10 @@ function renderWsTable() {
         }
       }
       var bg = wsColor(val, ATM_WS);
-      html += '<td style="padding:3px 8px;background:'+bg+';color:#cfd8dc;text-align:center;border-bottom:1px solid #14202c;">'+txt+sub+'</td>';
+      html += '<td style="padding:3px 8px;background:'+bg+';color:#cfd8dc;text-align:center;border-bottom:1px solid #14202c;'+topBorder+'">'+txt+sub+'</td>';
     });
     html += '</tr>';
+    prevFl = alt;
   });
   html += '</tbody></table>';
   wrap.innerHTML = html;
@@ -1759,10 +1767,17 @@ function renderAtmTable() {
     html += '<th style="color:#cfd8dc;padding:4px 8px;font-weight:600;border-bottom:1px solid #1e2a38;white-space:nowrap;">'+wp+'</th>';
   });
   html += '</tr></thead><tbody>';
-    altRows.forEach(function(alt){
+  var prevFl = null;
+  altRows.forEach(function(alt){
     var altFt = alt * 100; // FL120 → 12000ft
+    var topBorder = '';
+    if(prevFl !== null) {
+      if((prevFl > 410 && alt <= 410) || (prevFl > 290 && alt <= 290)) {
+        topBorder = 'border-top:2px solid #ef5350;';
+      }
+    }
     html += '<tr>';
-    html += '<td style="position:sticky;left:0;background:#0d1620;color:#90a4ae;padding:3px 8px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;z-index:1;">'+(altFt.toLocaleString())+' ft</td>';
+    html += '<td style="position:sticky;left:0;background:#0d1620;color:#90a4ae;padding:3px 8px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;z-index:1;'+topBorder+'">'+(altFt.toLocaleString())+' ft</td>';
     wpIds.forEach(function(wp){
       var c = interpAt(wp, alt);
       var bg = 'transparent';
@@ -1780,9 +1795,10 @@ function renderAtmTable() {
           else if(ATM_HEAT === 'temp') bg = tempColor(c.tmp);
         }
       }
-      html += '<td style="padding:3px 8px;background:'+bg+';color:#cfd8dc;white-space:nowrap;border-bottom:1px solid #14202c;">'+txt2+'</td>';
+      html += '<td style="padding:3px 8px;background:'+bg+';color:#cfd8dc;white-space:nowrap;border-bottom:1px solid #14202c;'+topBorder+'">'+txt2+'</td>';
     });
     html += '</tr>';
+    prevFl = alt;
   });
   html += '</tbody></table>';
   wrap.innerHTML = html;
