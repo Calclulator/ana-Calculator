@@ -256,6 +256,32 @@
   </div>
 </div><!-- fp-panel -->
 
+<!-- ===== ATMOSPHERE ANALYSIS ===== -->
+<div id="atm-panel" class="panel">
+  <div class="bar">
+    <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.08em;">Atmosphere Analysis</span>
+    <span id="atm-route-lbl" style="color:#546e7a;margin-left:10px;font-size:11px;">----→----</span>
+  </div>
+  <div style="padding:8px 12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #1e2a38;">
+    <span style="font-size:10px;color:#90a4ae;">Heat map:</span>
+    <button class="btn" id="atm-heat-temp" onclick="setAtmHeat('temp')">Temp</button>
+    <button class="btn on" id="atm-heat-wind" onclick="setAtmHeat('wind')">Wind</button>
+    <button class="btn" id="atm-heat-off" onclick="setAtmHeat('off')">Off</button>
+    <span style="font-size:10px;color:#90a4ae;margin-left:8px;">Cell shows:</span>
+    <button class="btn on" id="atm-show-wt" onclick="setAtmShow('wt')">Wind &amp; temp</button>
+    <button class="btn" id="atm-show-isa" onclick="setAtmShow('isa')">ISA deviation</button>
+  </div>
+  <div style="flex:1;overflow:auto;padding:6px;">
+    <div id="atm-tbody-wrap">
+      <div style="color:#546e7a;padding:24px;text-align:center;font-size:12px;">
+        Flight Plan で NAV LOG を Apply すると、ここに Wind/Temp が表示されます
+      </div>
+    </div>
+    <div style="font-size:10px;color:#546e7a;padding:8px;text-align:right;">
+      Wind: lower (green) → higher (red) range 1-127kt &nbsp;|&nbsp; Temp: warmer (red) → colder (blue)
+    </div>
+  </div>
+</div><!-- atm-panel -->
 
 </div><!-- #panels -->
 
@@ -621,12 +647,15 @@ var acIcao = null;
 // TABS
 // =====================================================================
 function showTab(name) {
-  ['wx','fp'].forEach(function(n) {
+  ['wx','fp','atm'].forEach(function(n) {
     document.getElementById(n+'-panel').classList.remove('active');
     var ni=document.getElementById('nav-'+n);
     if(ni) ni.classList.toggle('nav-act', n===name);
   });
   document.getElementById(name+'-panel').classList.add('active');
+  if(name==='atm') {
+    if(typeof renderAtmTable === 'function') renderAtmTable();
+  }
   if(name==='wx') {
     // 複数回 invalidateSize を呼ぶ(描画完了タイミングが端末で異なるため)
     [50, 200, 500, 1000].forEach(function(delay){
@@ -1354,6 +1383,163 @@ function toggleFpl() {
     w.style.display='flex';
     btn.textContent='▲ 閉じる';
   }
+}
+// ===== ATMOSPHERE ANALYSIS =====
+var ATM_HEAT = 'wind';  // 'temp' | 'wind' | 'off'
+var ATM_SHOW = 'wt';    // 'wt' | 'isa'
+
+function setAtmHeat(mode) {
+  ATM_HEAT = mode;
+  ['temp','wind','off'].forEach(function(m){
+    var btn = document.getElementById('atm-heat-'+m);
+    if(btn) btn.className = 'btn' + (m===mode ? ' on' : '');
+  });
+  renderAtmTable();
+}
+function setAtmShow(mode) {
+  ATM_SHOW = mode;
+  ['wt','isa'].forEach(function(m){
+    var btn = document.getElementById('atm-show-'+m);
+    if(btn) btn.className = 'btn' + (m===mode ? ' on' : '');
+  });
+  renderAtmTable();
+}
+
+// ISA Deviation: ISA温度 = 15 - 1.98*FL (FL = altitude/1000) で対流圏内、対流圏界面以上は-56.5C固定
+function isaTempC(altFt) {
+  var trop = 36089;
+  if(altFt <= trop) return 15 - 1.98 * (altFt/1000);
+  return -56.5;
+}
+
+// Wind速度 → 色 (green→yellow→red, 0→127kt)
+function windColor(spd) {
+  if(spd === null || isNaN(spd)) return 'transparent';
+  var t = Math.min(127, Math.max(0, spd)) / 127;
+  // green(120) → yellow(60) → red(0)
+  var hue = 120 - t * 120;
+  return 'hsla(' + hue.toFixed(0) + ',60%,55%,0.35)';
+}
+// Temp → 色 (red=warm → blue=cold, +30→-80)
+function tempColor(c) {
+  if(c === null || isNaN(c)) return 'transparent';
+  var t = (c + 80) / 110; // -80→0, +30→1
+  t = Math.min(1, Math.max(0, t));
+  var hue = 240 - t * 240; // blue(240) → red(0)
+  return 'hsla(' + hue.toFixed(0) + ',65%,55%,0.30)';
+}
+// ISA Dev → 色 (warmer redder)
+function isaDevColor(dev) {
+  if(dev === null || isNaN(dev)) return 'transparent';
+  var t = (dev + 20) / 40; // -20→0, +20→1
+  t = Math.min(1, Math.max(0, t));
+  var hue = 240 - t * 240;
+  return 'hsla(' + hue.toFixed(0) + ',65%,55%,0.30)';
+}
+
+function renderAtmTable() {
+  var wrap = document.getElementById('atm-tbody-wrap');
+  if(!wrap) return;
+  // ルートラベル更新
+  var lblEl = document.getElementById('atm-route-lbl');
+  if(lblEl) {
+    if(NAV_DEP && NAV_DEST) lblEl.textContent = NAV_DEP + ' → ' + NAV_DEST;
+    else lblEl.textContent = '----→----';
+  }
+  // データなし
+  if(!WFM_DATA || Object.keys(WFM_DATA).length === 0) {
+    wrap.innerHTML = '<div style="color:#546e7a;padding:24px;text-align:center;font-size:12px;">'+
+      'Flight Plan で NAV LOG を Apply すると、ここに Wind/Temp が表示されます</div>';
+    return;
+  }
+  // WP順 (FP_ROWS の順を尊重、FIR境界行は除外)
+  var wpIds = [];
+  if(typeof FP_ROWS !== 'undefined' && FP_ROWS && FP_ROWS.length) {
+    FP_ROWS.forEach(function(r){
+      if(typeof r.id !== 'string') return;
+      if(r.id.charAt(0) === '-') return;
+      if(WFM_DATA[r.id]) wpIds.push(r.id);
+    });
+  }
+  // FP_ROWS から取れなかった場合は WFM_DATA のキーをそのまま使う
+  if(wpIds.length === 0) wpIds = Object.keys(WFM_DATA);
+
+  // 高度カラム: 12000-45000ft, 1000ft刻み(NAVLOGの7点を線形補間)
+  var srcAlts = [12000,18000,24000,30000,34000,39000,45000];
+  var altRows = [];
+  for(var a=45000; a>=12000; a-=1000) altRows.push(a);
+
+  // 補間関数: WP, alt → {dir, spd, tmp}
+  function interpAt(wpId, alt) {
+    var d = WFM_DATA[wpId];
+    if(!d) return null;
+    // 完全一致なら即返す
+    if(d[alt]) return d[alt];
+    // 近傍2点を見つけて線形補間
+    var lo = null, hi = null;
+    for(var i=0;i<srcAlts.length;i++){
+      if(srcAlts[i] <= alt && d[srcAlts[i]]) lo = srcAlts[i];
+      if(srcAlts[i] >= alt && d[srcAlts[i]] && hi===null) hi = srcAlts[i];
+    }
+    if(lo===null && hi===null) return null;
+    if(lo===null) return d[hi];
+    if(hi===null) return d[lo];
+    if(lo===hi) return d[lo];
+    var dlo = d[lo], dhi = d[hi];
+    var f = (alt - lo) / (hi - lo);
+    var dirInterp;
+    // 風向は循環するので近い方を選ぶ
+    if(dlo.dir===null || dhi.dir===null) {
+      dirInterp = dlo.dir || dhi.dir;
+    } else {
+      var diff = dhi.dir - dlo.dir;
+      if(diff > 180) diff -= 360;
+      if(diff < -180) diff += 360;
+      dirInterp = (dlo.dir + diff * f + 360) % 360;
+      if(dirInterp === 0) dirInterp = 360;
+    }
+    return {
+      dir: dirInterp===null?null:Math.round(dirInterp/10)*10,
+      spd: Math.round(dlo.spd + (dhi.spd - dlo.spd) * f),
+      tmp: Math.round(dlo.tmp + (dhi.tmp - dlo.tmp) * f),
+      variable: false
+    };
+  }
+
+  // テーブル組み立て
+  var html = '<table style="border-collapse:collapse;font-size:10px;width:100%;">';
+  html += '<thead><tr>';
+  html += '<th style="position:sticky;left:0;background:#0d1620;color:#90a4ae;padding:4px 8px;text-align:right;border-right:1px solid #1e2a38;z-index:2;">Altitude</th>';
+  wpIds.forEach(function(wp){
+    html += '<th style="color:#cfd8dc;padding:4px 8px;font-weight:600;border-bottom:1px solid #1e2a38;white-space:nowrap;">'+wp+'</th>';
+  });
+  html += '</tr></thead><tbody>';
+  altRows.forEach(function(alt){
+    html += '<tr>';
+    html += '<td style="position:sticky;left:0;background:#0d1620;color:#90a4ae;padding:3px 8px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;z-index:1;">'+(alt.toLocaleString())+' ft</td>';
+    wpIds.forEach(function(wp){
+      var c = interpAt(wp, alt);
+      var bg = 'transparent';
+      var txt2 = '—';
+      if(c) {
+        if(ATM_SHOW === 'isa') {
+          var dev = c.tmp - isaTempC(alt);
+          txt2 = (dev>=0?'+':'')+Math.round(dev)+'°C ISA';
+          if(ATM_HEAT === 'temp') bg = isaDevColor(dev);
+          else if(ATM_HEAT === 'wind') bg = windColor(c.spd);
+        } else {
+          var dirStr = c.variable ? 'VRB' : (c.dir===null?'---':((c.dir<100?'0':'')+(c.dir<10?'0':'')+c.dir+'°'));
+          txt2 = dirStr+' '+c.spd+'kt '+(c.tmp>=0?'+':'')+c.tmp+'°C';
+          if(ATM_HEAT === 'wind') bg = windColor(c.spd);
+          else if(ATM_HEAT === 'temp') bg = tempColor(c.tmp);
+        }
+      }
+      html += '<td style="padding:3px 8px;background:'+bg+';color:#cfd8dc;white-space:nowrap;border-bottom:1px solid #14202c;">'+txt2+'</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
 }
 function clearFpl() {
   document.getElementById('fpl-txt').value='';
@@ -2660,7 +2846,7 @@ setInterval(function(){
     <div class="nav-sec">
       <div class="nav-sec-lbl">Weather</div>
       <button class="nav-item nav-act" id="nav-wx" onclick="navTo('wx')">⛅ Weather Radar</button>
-      <button class="nav-item nav-dis">🌡 Atmosphere Analysis<span class="nav-tag">WIP</span></button>
+      <button class="nav-item" id="nav-atm" onclick="navTo('atm')">🌡 Atmosphere Analysis</button>
       <button class="nav-item nav-dis">🛰 SAT View<span class="nav-tag">WIP</span></button>
     </div>
     <div class="nav-sec">
