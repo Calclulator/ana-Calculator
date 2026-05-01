@@ -367,6 +367,7 @@ var WP = [];
 var CURRENT_FL = 35;
 var VWS = {};
 var VWS_BY_FL = {};
+var WFM_DATA = {};
 var ALTS = [];
 var ETPS = [];
 var FP_ROWS = [];
@@ -774,7 +775,7 @@ function runParse() {
     return;
   }
   clearSatCache();
-  var newWP=[], newVWS={}, newAlts=[], newEtps=[], newVWS_BY_FL={};
+  var newWP=[], newVWS={}, newAlts=[], newEtps=[], newVWS_BY_FL={}, newWfmData={};
   var dep=null, dest=null, reg=null, etopsKey=null, depFuel=null;
   var lines = txt.split('\n');
   console.log('[parse] txt.length:', txt.length, '| lines:', lines.length);
@@ -887,12 +888,43 @@ function runParse() {
   }
 
   // WIND/TEMP ALOFT FCST パース
-  // DDSSMTT: DD=風向/10, SS=風速kt, M/P=温度符号, TT=温度
+  // 各セルの形式: DDSSSMTT 例 2768M17 = 270deg/68kt/-17C
+  //   風向: 1桁目が0-4ならDDx10、5-9なら((1桁目-5)x100 + 残り0桁x10) で風速は+100する
+  //   例: 6725M34 = 170deg/125kt/-34C (170=(6-5)*100+7*10, 125=25+100)
+  //   例: 9900xxx = light and variable
+  // 高度カラム順: 0:12000, 1:18000, 2:24000, 3:30000, 4:34000, 5:39000, 6:45000
   var FL_ALT_PAIRS = {
     29:[2,3], 31:[3,4], 33:[3,4], 34:[3,4],
     35:[4,5], 37:[4,5], 39:[4,5],
     41:[5,6], 43:[5,6], 45:[5,6]
   };
+  var WFM_FLS = [120, 180, 240, 300, 340, 390, 450]; // 列順の高度 (x100ft)
+  function parseWfmCell(val) {
+    if(!val || val.length < 7) return null;
+    if(val.slice(0,4)==='9900') {
+      // light and variable
+      var tSign = val.charAt(4);
+      var tVal = parseInt(val.slice(5,7));
+      if(isNaN(tVal)) return null;
+      return {dir:null, spd:0, tmp:(tSign==='M'?-tVal:tVal), variable:true};
+    }
+    var d1 = parseInt(val.charAt(0));
+    var d2 = parseInt(val.charAt(1));
+    var s = parseInt(val.slice(2,4));
+    var tSign2 = val.charAt(4);
+    var t = parseInt(val.slice(5,7));
+    if(isNaN(d1)||isNaN(d2)||isNaN(s)||isNaN(t)) return null;
+    var dir, spd;
+    if(d1 >= 5) {
+      dir = (d1-5)*100 + d2*10;
+      spd = s + 100;
+    } else {
+      dir = d1*100 + d2*10;
+      spd = s;
+    }
+    if(dir === 0) dir = 360; // 360を0と表記しないため
+    return {dir:dir, spd:spd, tmp:(tSign2==='M'?-t:t), variable:false};
+  }
   var wfm = txt.match(/WINDS?\/TEMP[S]?\s+ALOFT\s+FCST([\s\S]*?)(?=\n-{3,}|\nFLIGHT|\nETOPS|$)/i);
   console.log('wfm match:', wfm ? 'found' : 'not found');
   if(wfm) {
@@ -904,8 +936,12 @@ function runParse() {
       var wpId = toks[0];
       if(!/^[A-Z][A-Z0-9]{1,7}$/.test(wpId)) return;
       var speeds = [];
+      // 全7段階の生データを WFM_DATA に保存
+      if(!newWfmData[wpId]) newWfmData[wpId] = {};
       for(var fi=0; fi<7; fi++) {
         var val = toks[fi+1] || '';
+        var cell = parseWfmCell(val);
+        if(cell) newWfmData[wpId][WFM_FLS[fi]] = cell;
         if(val.slice(0,4)==='9900') { speeds.push(0); continue; }
         var spd = parseInt(val.slice(2,4));
         speeds.push(isNaN(spd) ? null : spd);
@@ -995,7 +1031,9 @@ function runParse() {
     [29,31,33,34,35,37,39,41,43,45].forEach(function(fl){
       VWS_BY_FL[fl] = hasWindFcst ? (newVWS_BY_FL[fl] || newVWS) : newVWS;
     });
+    WFM_DATA = newWfmData;
     console.log(VWS_BY_FL);
+    console.log('WFM_DATA WPs:', Object.keys(WFM_DATA).length);
   }
   if(newAlts.length>0) ALTS = newAlts;
   if(newEtps.length>0) ETPS = newEtps;
