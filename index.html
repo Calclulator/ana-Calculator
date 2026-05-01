@@ -1465,9 +1465,10 @@ function renderAtmTable() {
   if(wpIds.length === 0) wpIds = Object.keys(WFM_DATA);
 
   // 高度カラム: 12000-45000ft, 1000ft刻み(NAVLOGの7点を線形補間)
-  var srcAlts = [12000,18000,24000,30000,34000,39000,45000];
+  // 注: WFM_DATA のキーは FL 値(120, 180...450)で保存されているため、それに揃える
+  var srcAlts = [120,180,240,300,340,390,450];
   var altRows = [];
-  for(var a=45000; a>=12000; a-=1000) altRows.push(a);
+  for(var fl=450; fl>=120; fl-=10) altRows.push(fl);
 
   // 補間関数: WP, alt → {dir, spd, tmp}
   function interpAt(wpId, alt) {
@@ -1514,16 +1515,17 @@ function renderAtmTable() {
     html += '<th style="color:#cfd8dc;padding:4px 8px;font-weight:600;border-bottom:1px solid #1e2a38;white-space:nowrap;">'+wp+'</th>';
   });
   html += '</tr></thead><tbody>';
-  altRows.forEach(function(alt){
+    altRows.forEach(function(alt){
+    var altFt = alt * 100; // FL120 → 12000ft
     html += '<tr>';
-    html += '<td style="position:sticky;left:0;background:#0d1620;color:#90a4ae;padding:3px 8px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;z-index:1;">'+(alt.toLocaleString())+' ft</td>';
+    html += '<td style="position:sticky;left:0;background:#0d1620;color:#90a4ae;padding:3px 8px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;z-index:1;">'+(altFt.toLocaleString())+' ft</td>';
     wpIds.forEach(function(wp){
       var c = interpAt(wp, alt);
       var bg = 'transparent';
       var txt2 = '—';
       if(c) {
         if(ATM_SHOW === 'isa') {
-          var dev = c.tmp - isaTempC(alt);
+          var dev = c.tmp - isaTempC(altFt);
           txt2 = (dev>=0?'+':'')+Math.round(dev)+'°C ISA';
           if(ATM_HEAT === 'temp') bg = isaDevColor(dev);
           else if(ATM_HEAT === 'wind') bg = windColor(c.spd);
