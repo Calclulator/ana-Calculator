@@ -1591,7 +1591,7 @@ function renderWsTable() {
     var topBorder = '';
     if(prevFl !== null) {
       if((prevFl > 410 && alt <= 410) || (prevFl > 290 && alt <= 290)) {
-        topBorder = 'border-top:2px solid #ef5350;';
+        topBorder = 'border-top:2px solid #ef5350;box-shadow:inset 0 2px 0 0 #ef5350;';
       }
     }
     html += '<tr>';
@@ -1773,7 +1773,7 @@ function renderAtmTable() {
     var topBorder = '';
     if(prevFl !== null) {
       if((prevFl > 410 && alt <= 410) || (prevFl > 290 && alt <= 290)) {
-        topBorder = 'border-top:2px solid #ef5350;';
+        topBorder = 'border-top:2px solid #ef5350;box-shadow:inset 0 2px 0 0 #ef5350;';
       }
     }
     html += '<tr>';
