@@ -1135,7 +1135,10 @@ function renderFpTable() {
 
   FP_ROWS.forEach(function(row, idx) {
     var isFirBoundary = typeof row.id === 'string' && row.id.charAt(0) === '-';
-    if(isFirBoundary) currentFir = row.id.slice(1);
+    if(isFirBoundary) {
+      currentFir = row.id.slice(1);
+      return;  // FIR 境界行は描画しない(VATSIM ポリゴン判定で FIR 列に色分け済み)
+    }
 
     // 地理的FIR判定（GeoJSON未ロード時は -XXXX 追跡にフォールバック）
     var rowFirName = null;
