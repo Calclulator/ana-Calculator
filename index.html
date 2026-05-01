@@ -804,6 +804,14 @@ function runParse() {
   var staM = txt.match(/STA\s+(\d{2})(\d{2})Z/);
   NAV_STA = staM ? (staM[1]+staM[2]) : null;
 
+  // TAXI OUT (CONX値) - 各WPの絶対時刻計算に加算する
+  // CONX PAX INFO セクションの "TAXI OUT/IN CONX:28/14MIN AVG:22/12MIN" から CONX 側の OUT 値を取得
+  var taxiM = txt.match(/TAXI\s+OUT\/IN\s+CONX:(\d+)\/\d+/i);
+  NAV_TAXI_OUT = taxiM ? parseInt(taxiM[1]) : null;
+  if(DEP_STD_MIN!==null && NAV_TAXI_OUT!==null) {
+    DEP_STD_MIN = DEP_STD_MIN + NAV_TAXI_OUT;
+  }
+
   // 出発燃料
   for(var i=0;i<lines.length;i++) {
     if(lines[i].match(/^\s+[A-Z]{4}\s+\(RDIS\)/)) {
@@ -1250,6 +1258,7 @@ function clearFpl() {
   if(typeof NAV_MLDW !== 'undefined') NAV_MLDW = null;
   if(typeof NAV_PZFW !== 'undefined') NAV_PZFW = null;
   if(typeof NAV_FOB !== 'undefined') NAV_FOB = null;
+  if(typeof NAV_TAXI_OUT !== 'undefined') NAV_TAXI_OUT = null;
   if(typeof updateNavFlightInfo === 'function') updateNavFlightInfo();
   if(typeof renderFpTable === 'function') renderFpTable();
   if(typeof drawRoute === 'function') drawRoute();
