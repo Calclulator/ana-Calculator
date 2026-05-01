@@ -625,7 +625,15 @@ function showTab(name) {
     if(ni) ni.classList.toggle('nav-act', n===name);
   });
   document.getElementById(name+'-panel').classList.add('active');
-  if(name==='wx') setTimeout(function(){map.invalidateSize();},100);
+  if(name==='wx') {
+    setTimeout(function(){
+      if(typeof map !== 'undefined' && map) {
+        map.invalidateSize();
+        // 初回切替時はビューを再センターしてタイル取得を促す
+        try { map.setView(map.getCenter(), map.getZoom()); } catch(e){}
+      }
+    }, 200);
+  }
 }
 function openNav(){
   document.getElementById('nav-panel').classList.add('open');
