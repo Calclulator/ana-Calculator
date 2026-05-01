@@ -1018,6 +1018,7 @@ function runParse() {
   var skipWords = {FL:1,DEC:1,CLM:1,TOC:1,TOD:1,MLDW:1,R:1,RMG:1,P:1,ETP:1,ETP1:1,ETP2:1,ETP3:1,ETP4:1,EEP:1,EEP1:1,EEP2:1,EEP3:1,EXP:1,EXP1:1,EXP2:1,EXP3:1,PLAN:1,NML:1,STD:1,STA:1,BOF:1,CON:1,RSV:1,ALT:1,TAX:1,REQ:1,PCF:1,EXT:1,FOB:1,FOD:1,NM:1};
   var coordRe = /([NS]\d{5}[EW]\d{6,7})/;
   var seen = {};
+  var phaseForNextWp = 'climb';
 
   for(var i=0;i<lines.length-1;i++) {
     var lineA = lines[i];
@@ -1034,6 +1035,14 @@ function runParse() {
     if(!nameM) continue;
     var wid = nameM[1];
     var isFirWp = wid.charAt(0) === '-';
+    if(!isFirWp && wid === 'TOC') {
+      phaseForNextWp = 'cruise';
+      continue;
+    }
+    if(!isFirWp && wid === 'TOD') {
+      phaseForNextWp = 'descent';
+      continue;
+    }
     if(!isFirWp && (skipWords[wid]||wid.length<2||wid.charAt(0)==='-')) continue;
     if(!isFirWp && seen[wid]) continue;
     if(!isFirWp) seen[wid] = true;
@@ -1058,7 +1067,7 @@ function runParse() {
     }
 
     console.log('[parse] WP found:', wid, c.lat.toFixed(2), c.lng.toFixed(2), 'ctme:', ctmeMin);
-    newWP.push({id:wid,lat:c.lat,lng:c.lng,t:false,ctme:ctmeMin,fuel:wfuel,alt:walt});
+    newWP.push({id:wid,lat:c.lat,lng:c.lng,t:false,ctme:ctmeMin,fuel:wfuel,alt:walt,phase:phaseForNextWp});
   }
   console.log('[parse] newWP total:', newWP.length, '| newAlts:', newAlts.length, '| newEtps:', newEtps.length);
 
@@ -1067,7 +1076,7 @@ function runParse() {
     var finalWP = [];
     // 出発空港を先頭に追加
     if(dep&&APT[dep]) {
-      finalWP.push({id:dep,lat:APT[dep].lat,lng:APT[dep].lon,t:true,ctme:0,fuel:depFuel,alt:null});
+      finalWP.push({id:dep,lat:APT[dep].lat,lng:APT[dep].lon,t:true,ctme:0,fuel:depFuel,alt:null,phase:'climb'});
     }
     // depと同じIDのWPは重複を避けて追加
     newWP.forEach(function(w){
@@ -1124,7 +1133,7 @@ function runParse() {
 // =====================================================================
 function buildFpRows(dep, depFuel) {
   FP_ROWS = [];
-  FP_ROWS.push({id:dep||WP[0].id,ctme:0,ztme:0,fuel:depFuel,alt:null,ato:'',actualFuel:'',crossAt:'',note:''});
+  FP_ROWS.push({id:dep||WP[0].id,ctme:0,ztme:0,fuel:depFuel,alt:null,ato:'',actualFuel:'',crossAt:'',note:'',phase:'climb'});
   for(var i=0;i<WP.length;i++) {
     var w = WP[i];
     if(w.id===(dep||WP[0].id)) continue;
@@ -1133,8 +1142,14 @@ function buildFpRows(dep, depFuel) {
       if(WP[j].ctme!==null){prevCtme=WP[j].ctme||0;break;}
     }
     var ztme = (w.ctme!==null) ? Math.max(0,w.ctme-prevCtme) : null;
-    FP_ROWS.push({id:w.id,ctme:w.ctme,ztme:ztme,fuel:w.fuel,alt:w.alt,ato:'',actualFuel:'',crossAt:'',note:''});
+    FP_ROWS.push({id:w.id,ctme:w.ctme,ztme:ztme,fuel:w.fuel,alt:w.alt,ato:'',actualFuel:'',crossAt:'',note:'',phase:(w.phase||'climb')});
   }
+}
+
+function atmCruiseLowFlHide(wpPhaseMap, wpId, fl) {
+  if(!wpPhaseMap) return false;
+  if(wpPhaseMap[wpId] !== 'cruise') return false;
+  return fl <= 280;
 }
 
 function calcEto(ctmeMin) {
@@ -1552,16 +1567,24 @@ function renderWsTable() {
     if(explain) explain.innerHTML = '';
     return;
   }
-  // WP順
+  // WP順 + TOC〜TOD 巡航フェーズ (FL280以下は空欄)
   var wpIds = [];
+  var wpPhaseMap = null;
   if(typeof FP_ROWS !== 'undefined' && FP_ROWS && FP_ROWS.length) {
+    wpPhaseMap = {};
     FP_ROWS.forEach(function(r){
       if(typeof r.id !== 'string') return;
       if(r.id.charAt(0) === '-') return;
-      if(WFM_DATA[r.id]) wpIds.push(r.id);
+      if(WFM_DATA[r.id]) {
+        wpIds.push(r.id);
+        wpPhaseMap[r.id] = r.phase || 'climb';
+      }
     });
   }
-  if(wpIds.length === 0) wpIds = Object.keys(WFM_DATA);
+  if(wpIds.length === 0) {
+    wpIds = Object.keys(WFM_DATA);
+    wpPhaseMap = null;
+  }
 
   var srcAlts = [120,180,240,300,340,390,450];
   var altRows = [];
@@ -1615,6 +1638,10 @@ function renderWsTable() {
     html += '<tr>';
     html += '<td style="position:sticky;left:0;z-index:2;background:#0d1620;color:#90a4ae;padding:3px 6px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;min-width:70px;width:70px;'+topBorder+'">'+(altFt.toLocaleString())+' ft</td>';
     wpIds.forEach(function(wp){
+      if(atmCruiseLowFlHide(wpPhaseMap, wp, alt)) {
+        html += '<td style="min-width:104px;width:104px;padding:3px 5px;background:transparent;color:transparent;text-align:center;border-bottom:1px solid #14202c;white-space:nowrap;'+topBorder+'"></td>';
+        return;
+      }
       var cHi = getCell(wp, alt);
       var cLo = getCell(wp, alt - 10);
       var val = null, txt = '—', sub = '';
@@ -1717,17 +1744,25 @@ function renderAtmTable() {
       'Flight Plan で NAV LOG を Apply すると、ここに Wind/Temp が表示されます</div>';
     return;
   }
-  // WP順 (FP_ROWS の順を尊重、FIR境界行は除外)
+  // WP順 (FP_ROWS の順を尊重、FIR境界行は除外) + TOC〜TOD 巡航フェーズ (FL280以下は空欄)
   var wpIds = [];
+  var wpPhaseMap = null;
   if(typeof FP_ROWS !== 'undefined' && FP_ROWS && FP_ROWS.length) {
+    wpPhaseMap = {};
     FP_ROWS.forEach(function(r){
       if(typeof r.id !== 'string') return;
       if(r.id.charAt(0) === '-') return;
-      if(WFM_DATA[r.id]) wpIds.push(r.id);
+      if(WFM_DATA[r.id]) {
+        wpIds.push(r.id);
+        wpPhaseMap[r.id] = r.phase || 'climb';
+      }
     });
   }
   // FP_ROWS から取れなかった場合は WFM_DATA のキーをそのまま使う
-  if(wpIds.length === 0) wpIds = Object.keys(WFM_DATA);
+  if(wpIds.length === 0) {
+    wpIds = Object.keys(WFM_DATA);
+    wpPhaseMap = null;
+  }
 
   // 高度カラム: WFM_DATA のキーは FL 値(120, 180...450)
   var srcAlts = [120,180,240,300,340,390,450];
@@ -1797,6 +1832,10 @@ function renderAtmTable() {
     html += '<tr>';
     html += '<td style="position:sticky;left:0;z-index:2;background:#0d1620;color:#90a4ae;padding:3px 6px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;min-width:70px;width:70px;'+topBorder+'">'+(altFt.toLocaleString())+' ft</td>';
     wpIds.forEach(function(wp){
+      if(atmCruiseLowFlHide(wpPhaseMap, wp, alt)) {
+        html += '<td style="min-width:104px;width:104px;padding:3px 5px;background:transparent;color:transparent;white-space:nowrap;border-bottom:1px solid #14202c;'+topBorder+'"></td>';
+        return;
+      }
       var c = interpAt(wp, alt);
       var bg = 'transparent';
       var txt2 = '—';
