@@ -626,13 +626,16 @@ function showTab(name) {
   });
   document.getElementById(name+'-panel').classList.add('active');
   if(name==='wx') {
-    setTimeout(function(){
-      if(typeof map !== 'undefined' && map) {
-        map.invalidateSize();
-        // 初回切替時はビューを再センターしてタイル取得を促す
-        try { map.setView(map.getCenter(), map.getZoom()); } catch(e){}
-      }
-    }, 200);
+    // 複数回 invalidateSize を呼ぶ(描画完了タイミングが端末で異なるため)
+    [50, 200, 500, 1000].forEach(function(delay){
+      setTimeout(function(){
+        if(typeof map !== 'undefined' && map) {
+          try {
+            map.invalidateSize(true);
+          } catch(e){}
+        }
+      }, delay);
+    });
   }
 }
 function openNav(){
