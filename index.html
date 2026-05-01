@@ -14,8 +14,8 @@
   .tab-btn:hover{color:#90a4ae;}
   .tab-btn.active{color:#4fc3f7;border-bottom-color:#4fc3f7;}
   #panels{display:flex;flex-direction:column;flex:1;min-height:0;}
-  .panel{display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
-  .panel.active{display:flex;}
+  .panel{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;position:absolute;left:-10000px;top:0;width:100%;height:100%;visibility:hidden;}
+  .panel.active{position:relative;left:0;top:auto;visibility:visible;}
   .bar{background:#0d1117;border-bottom:1px solid #1e2a38;padding:4px 8px;display:flex;flex-wrap:wrap;align-items:center;gap:5px;flex-shrink:0;}
   .lbl{color:#546e7a;font-size:10px;letter-spacing:.06em;white-space:nowrap;}
   .btn{font-size:11px;font-family:inherit;padding:2px 8px;background:transparent;border:1px solid #2a3a4e;border-radius:3px;cursor:pointer;color:#90a4ae;}
@@ -1244,24 +1244,37 @@ function onAtoChange(idx,val) {
 }
 function onFuelChange(idx,val)  { FP_ROWS[idx].actualFuel=val.trim(); renderFpTable(); }
 function onCrossChange(idx,val) {
-  // 入力値を FLxxx 形式に整形
-  // 受け付ける形式: "400", "40000", "FL400", "fl400", "F400" → すべて "FL400" に
+  // 入力値を FLxxx 形式に整形(400/40000/FL400 → FL400)
   var raw = val.trim().toUpperCase().replace(/[^0-9]/g,'');
   var formatted = '';
+  var enteredFl = null;
   if(raw.length>0) {
     var n = parseInt(raw);
     if(!isNaN(n)) {
-      // 5桁(40000)なら100で割る、3桁(400)ならそのまま、4桁(4000)なら10で割る
       if(n>=10000) n = Math.round(n/100);
       else if(n>=1000) n = Math.round(n/10);
-      // 2桁(例:40)は FL040 ではなく入力ミスとみなさず一応許容
       formatted = 'FL' + (n<100 ? ('0'+n).slice(-3) : String(n));
+      enteredFl = n;
     }
   }
   FP_ROWS[idx].crossAt = formatted;
-  // 以降の WP にも同じ値を伝播(ユーザーが個別に上書きしていない場合のみ)
-  for(var i=idx+1; i<FP_ROWS.length; i++) {
-    FP_ROWS[i].crossAt = formatted;
+  // 以降の WP に伝播するが、計画高度がそれより高いWPは上書きしない
+  if(enteredFl!==null) {
+    for(var i=idx+1; i<FP_ROWS.length; i++) {
+      var planAlt = parseInt(FP_ROWS[i].alt);
+      var planFl = (!isNaN(planAlt) && planAlt>=1000) ? Math.round(planAlt/100) : null;
+      if(planFl!==null && planFl > enteredFl) {
+        // 計画高度の方が高い → ここから先は計画通りなので上書きせずクリア
+        FP_ROWS[i].crossAt = '';
+      } else {
+        FP_ROWS[i].crossAt = formatted;
+      }
+    }
+  } else {
+    // 空欄入力(クリア)の場合は以降も全部クリア
+    for(var j=idx+1; j<FP_ROWS.length; j++) {
+      FP_ROWS[j].crossAt = '';
+    }
   }
   renderFpTable();
 }
