@@ -270,6 +270,9 @@
     <span style="font-size:10px;color:#90a4ae;margin-left:8px;">Cell shows:</span>
     <button class="btn on" id="atm-show-wt" onclick="setAtmShow('wt')">Wind &amp; temp</button>
     <button class="btn" id="atm-show-isa" onclick="setAtmShow('isa')">ISA deviation</button>
+    <span style="font-size:10px;color:#90a4ae;margin-left:8px;">Display:</span>
+    <button class="btn" id="atm-disp-orig" onclick="setAtmDisp('original')">Original</button>
+    <button class="btn on" id="atm-disp-interp" onclick="setAtmDisp('interpolated')">Interpolated</button>
   </div>
   <div style="flex:1;overflow:auto;padding:6px;">
     <div id="atm-tbody-wrap">
@@ -1387,6 +1390,16 @@ function toggleFpl() {
 // ===== ATMOSPHERE ANALYSIS =====
 var ATM_HEAT = 'wind';  // 'temp' | 'wind' | 'off'
 var ATM_SHOW = 'wt';    // 'wt' | 'isa'
+var ATM_DISP = 'interpolated'; // 'original' | 'interpolated'
+
+function setAtmDisp(mode) {
+  ATM_DISP = mode;
+  ['orig','interp'].forEach(function(m){
+    var btn = document.getElementById('atm-disp-'+m);
+    if(btn) btn.className = 'btn' + ((m==='orig'&&mode==='original')||(m==='interp'&&mode==='interpolated') ? ' on' : '');
+  });
+  renderAtmTable();
+}
 
 function setAtmHeat(mode) {
   ATM_HEAT = mode;
@@ -1464,11 +1477,16 @@ function renderAtmTable() {
   // FP_ROWS から取れなかった場合は WFM_DATA のキーをそのまま使う
   if(wpIds.length === 0) wpIds = Object.keys(WFM_DATA);
 
-  // 高度カラム: 12000-45000ft, 1000ft刻み(NAVLOGの7点を線形補間)
-  // 注: WFM_DATA のキーは FL 値(120, 180...450)で保存されているため、それに揃える
+  // 高度カラム: WFM_DATA のキーは FL 値(120, 180...450)
   var srcAlts = [120,180,240,300,340,390,450];
   var altRows = [];
-  for(var fl=450; fl>=120; fl-=10) altRows.push(fl);
+  if(ATM_DISP === 'original') {
+    // Original: NAVLOG の生データ7段階のみ
+    for(var oi=srcAlts.length-1; oi>=0; oi--) altRows.push(srcAlts[oi]);
+  } else {
+    // Interpolated: 1000ft 刻みに線形補間
+    for(var fl=450; fl>=120; fl-=10) altRows.push(fl);
+  }
 
   // 補間関数: WP, alt → {dir, spd, tmp}
   function interpAt(wpId, alt) {
