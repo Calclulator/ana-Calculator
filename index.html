@@ -294,8 +294,12 @@
     <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.06em;font-size:12px;">WIND SHEAR &amp; TURBULENCE</span>
     <span style="font-size:10px;color:#90a4ae;margin-left:14px;">Method:</span>
     <button class="btn on" id="atm-ws-co" onclick="setAtmWs('company')">Company</button>
-    <button class
-
+    <button class="btn" id="atm-ws-vws" onclick="setAtmWs('vws')">VWS</button>
+    <button class="btn" id="atm-ws-b787" onclick="setAtmWs('b787')">B787 Ri</button>
+  </div>
+  <div id="atm-ws-explain" style="font-size:10px;color:#546e7a;padding:6px 12px;border-bottom:1px solid #1e2a38;line-height:1.5;"></div>
+  <div id="atm-ws-wrap" style="flex:1;overflow:auto;padding:6px;"></div>
+</div><!-- atm-panel -->
 </div><!-- #panels -->
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
