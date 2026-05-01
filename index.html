@@ -693,6 +693,18 @@ function onSatTimeApply() {
   loadSat(satKey);
 }
 function onSatTimeLatest() {
+  // 衛星時刻一覧のキャッシュをクリア(本当の最新を再取得するため)
+  if(typeof SAT_API_CACHE !== 'undefined') {
+    for(var k in SAT_API_CACHE) { if(SAT_API_CACHE.hasOwnProperty(k)) delete SAT_API_CACHE[k]; }
+  }
+  // プリロード済みタイルレイヤーもクリア
+  if(typeof SAT_LAYER_CACHE !== 'undefined') {
+    Object.keys(SAT_LAYER_CACHE).forEach(function(ck) {
+      var e = SAT_LAYER_CACHE[ck];
+      if(e && e.ly && map.hasLayer(e.ly)) { try { map.removeLayer(e.ly); } catch(x) {} }
+      delete SAT_LAYER_CACHE[ck];
+    });
+  }
   var sl = document.getElementById('satTimeSlider');
   sl.value = sl.max;
   onSatTimeSlide(sl.max);
