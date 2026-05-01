@@ -14,8 +14,8 @@
   .tab-btn:hover{color:#90a4ae;}
   .tab-btn.active{color:#4fc3f7;border-bottom-color:#4fc3f7;}
   #panels{display:flex;flex-direction:column;flex:1;min-height:0;}
-  .panel{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
-  .panel:not(.active){position:absolute!important;left:-10000px!important;visibility:hidden!important;pointer-events:none!important;width:1px!important;height:1px!important;}
+  .panel{display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
+  .panel.active{display:flex;}
   .bar{background:#0d1117;border-bottom:1px solid #1e2a38;padding:4px 8px;display:flex;flex-wrap:wrap;align-items:center;gap:5px;flex-shrink:0;}
   .lbl{color:#546e7a;font-size:10px;letter-spacing:.06em;white-space:nowrap;}
   .btn{font-size:11px;font-family:inherit;padding:2px 8px;background:transparent;border:1px solid #2a3a4e;border-radius:3px;cursor:pointer;color:#90a4ae;}
@@ -109,7 +109,7 @@
 <div id="panels">
 
 <!-- ===== WEATHER RADAR ===== -->
-<div id="wx-panel" class="panel">
+<div id="wx-panel" class="panel active">
 
   <!-- BAR1: メイン -->
   <div class="bar">
@@ -207,7 +207,7 @@
 </div><!-- wx-panel -->
 
 <!-- ===== FLIGHT PLAN ===== -->
-<div id="fp-panel" class="panel active">
+<div id="fp-panel" class="panel">
   <div class="bar">
     <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.08em;">Flight Plan</span>
     <span id="fp-route-lbl" style="color:#546e7a;margin-left:10px;font-size:11px;">----→----</span>
@@ -695,6 +695,16 @@ function navTo(tab){
   showTab(tab);
   closeNav();
 }
+
+// 起動時: 一瞬 WX で地図初期化 → Flight Plan に切替
+window.addEventListener('load', function(){
+  setTimeout(function(){
+    if(typeof map !== 'undefined' && map) {
+      try { map.invalidateSize(true); } catch(e){}
+    }
+    setTimeout(function(){ showTab('fp'); }, 300);
+  }, 200);
+});
 
 // =====================================================================
 // TIME UTILITIES
