@@ -1837,6 +1837,10 @@ function setBase(k) {
   }).addTo(map);
   LY.base.bringToBack();
 }
+function applyMapTheme() {
+  var isDark = document.body.classList.contains('dark-mode');
+  setBase(isDark ? 'dark' : 'light');
+}
 setBase('light');
 toggleMode();
 
@@ -2455,6 +2459,7 @@ function toggleMode() {
   document.body.style.background = DAY_MODE ? '#e8eaf0' : '#0a0c16';
   document.body.style.color = DAY_MODE ? '#1a1a1a' : '#cfd8dc';
   document.body.classList.toggle('day-mode', DAY_MODE);
+  document.body.classList.toggle('dark-mode', !DAY_MODE);
   var style = document.getElementById('day-mode-style');
   if(!style){ style = document.createElement('style'); style.id='day-mode-style'; document.head.appendChild(style); }
   style.textContent = DAY_MODE ? `
@@ -2491,8 +2496,7 @@ function toggleMode() {
     #atm-panel td:first-child{background:#f0f4f8!important;color:#546e7a!important;}
     #atm-ws-explain{color:#546e7a!important;}
   ` : '';
-  var k = DAY_MODE ? 'light' : 'dark';
-  setBase(k);
+  applyMapTheme();
   if(LY.sat) LY.sat.bringToFront();
   setTimeout(function(){ bringTop(); }, 200);
 }
