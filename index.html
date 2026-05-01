@@ -1198,7 +1198,17 @@ function renderFpTable() {
     }
 
     var altPh = '';
-    if(row.alt&&row.alt!=='CLM'&&row.alt!=='DEC') altPh = row.alt;
+    if(row.alt&&row.alt!=='CLvar altPh = '';
+    if(row.alt&&row.alt!=='CLM'&&row.alt!=='DEC') {
+      // 35000 → FL350、38000 → FL380 形式に変換
+      var altNum = parseInt(row.alt);
+      if(!isNaN(altNum) && altNum>=1000) {
+        altPh = 'FL'+String(Math.round(altNum/100)).padStart ? ('FL'+String(Math.round(altNum/100)).padStart(3,'0')) : ('FL'+Math.round(altNum/100));
+      } else {
+        altPh = row.alt;
+      }
+    }
+    var ztmeStr = (row.ztme!==null) ? String(row.ztme) : '—';M'&&row.alt!=='DEC') altPh = row.alt;
     var ztmeStr = (row.ztme!==null) ? String(row.ztme) : '—';
 
     // FIR cell
@@ -1235,7 +1245,28 @@ function onAtoChange(idx,val) {
   renderFpTable();
 }
 function onFuelChange(idx,val)  { FP_ROWS[idx].actualFuel=val.trim(); renderFpTable(); }
-function onCrossChange(idx,val) { FP_ROWS[idx].crossAt=val.trim(); }
+function onCrossChange(idx,val) {
+  // 入力値を FLxxx 形式に整形
+  // 受け付ける形式: "400", "40000", "FL400", "fl400", "F400" → すべて "FL400" に
+  var raw = val.trim().toUpperCase().replace(/[^0-9]/g,'');
+  var formatted = '';
+  if(raw.length>0) {
+    var n = parseInt(raw);
+    if(!isNaN(n)) {
+      // 5桁(40000)なら100で割る、3桁(400)ならそのまま、4桁(4000)なら10で割る
+      if(n>=10000) n = Math.round(n/100);
+      else if(n>=1000) n = Math.round(n/10);
+      // 2桁(例:40)は FL040 ではなく入力ミスとみなさず一応許容
+      formatted = 'FL' + (n<100 ? ('0'+n).slice(-3) : String(n));
+    }
+  }
+  FP_ROWS[idx].crossAt = formatted;
+  // 以降の WP にも同じ値を伝播(ユーザーが個別に上書きしていない場合のみ)
+  for(var i=idx+1; i<FP_ROWS.length; i++) {
+    FP_ROWS[i].crossAt = formatted;
+  }
+  renderFpTable();
+}
 function onNoteChange(idx,val)  { FP_ROWS[idx].note=val.trim(); }
 
 // =====================================================================
