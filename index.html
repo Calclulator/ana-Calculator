@@ -1237,6 +1237,23 @@ function toggleFpl() {
 function clearFpl() {
   document.getElementById('fpl-txt').value='';
   document.getElementById('parse-result').textContent='';
+  var pdfInput = document.getElementById('fpl-pdf');
+  if(pdfInput) pdfInput.value='';
+  WAYPOINTS = [];
+  if(typeof FP_ROWS !== 'undefined') FP_ROWS = [];
+  if(typeof etpsAlts !== 'undefined') etpsAlts = [];
+  if(typeof etpPoints !== 'undefined') etpPoints = [];
+  if(typeof NAV_DEP !== 'undefined') NAV_DEP = null;
+  if(typeof NAV_DEST !== 'undefined') NAV_DEST = null;
+  if(typeof NAV_STD !== 'undefined') NAV_STD = null;
+  if(typeof NAV_STA !== 'undefined') NAV_STA = null;
+  if(typeof NAV_MLDW !== 'undefined') NAV_MLDW = null;
+  if(typeof NAV_PZFW !== 'undefined') NAV_PZFW = null;
+  if(typeof NAV_FOB !== 'undefined') NAV_FOB = null;
+  if(typeof updateNavFlightInfo === 'function') updateNavFlightInfo();
+  if(typeof renderFpTable === 'function') renderFpTable();
+  if(typeof drawRoute === 'function') drawRoute();
+  if(typeof drawEtops === 'function') drawEtops();
 }
 
 // =====================================================================
