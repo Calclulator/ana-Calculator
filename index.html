@@ -371,6 +371,7 @@ var ALTS = [];
 var ETPS = [];
 var FP_ROWS = [];
 var NAV_MLDW = null;
+var NAV_PZFW = null;
 var DEP_ATO_MIN = null;
 var DEP_STD_MIN = null;
 var WP_FONT_SIZE = 11;
@@ -836,6 +837,10 @@ function runParse() {
   var mldwM = txt.match(/\bMLDW\s+(\d{5,7})/);
   NAV_MLDW = mldwM ? parseInt(mldwM[1]) / 1000 : null;
 
+  // PZFW (例: PZFW 500600 → 500.6 klbs) - 着陸重量計算用
+  var pzfwM = txt.match(/\bPZFW\s+(\d{5,7})/);
+  NAV_PZFW = pzfwM ? parseInt(pzfwM[1]) / 1000 : null;
+
   // ── ETOPS代替空港: RALT/ 行を最優先で解析 ──
   // 例: RALT/RJTT PGUM YBCS  または  RALT/PGUM YBCS
   var altSeen = {};
@@ -1153,22 +1158,36 @@ function renderFpTable() {
       firNextIdx++;
     }
 
-    // MLDW marker: planned fuelがMLDW以下に初めて下がる直前に挿入
-    if(NAV_MLDW !== null && !isFirBoundary && row.fuel !== null) {
-      var prevFuel = null;
-      for(var j = idx-1; j >= 0; j--) {
-        if(FP_ROWS[j].fuel !== null) { prevFuel = FP_ROWS[j].fuel; break; }
+    // MLDW marker: 着陸重量(PZFW + 残燃料)が初めて MLDW 以下になる WP の直前に挿入
+  // actualFuel が入力されていればそれを優先、なければ Plan fuel を使用
+  if(NAV_MLDW !== null && NAV_PZFW !== null && !isFirBoundary && row.fuel !== null) {
+    function _wtAt(r) {
+      if(r === null || r.fuel === null) return null;
+      var f = r.fuel;
+      if(r.actualFuel !== '' && r.actualFuel != null) {
+        var af = parseFloat(r.actualFuel);
+        if(!isNaN(af)) f = af;
       }
-      if(prevFuel !== null && prevFuel > NAV_MLDW && row.fuel <= NAV_MLDW) {
-        var mldwTr = document.createElement('tr');
-        mldwTr.style.cssText = 'background:rgba(255,152,0,.15);';
-        mldwTr.innerHTML = '<td colspan="11" style="text-align:center;color:#ff9800;font-weight:bold;' +
-          'font-size:11px;letter-spacing:.12em;padding:5px 0;' +
-          'border-top:1.5px solid rgba(255,152,0,.55);border-bottom:1.5px solid rgba(255,152,0,.55);">' +
-          '&#9660; MLDW &nbsp;' + NAV_MLDW.toFixed(1) + '</td>';
-        tbody.appendChild(mldwTr);
-      }
+      return NAV_PZFW + f;
     }
+    var curWt = _wtAt(row);
+    var prevWt = null;
+    for(var j = idx-1; j >= 0; j--) {
+      var pr = FP_ROWS[j];
+      if(pr && typeof pr.id === 'string' && pr.id.charAt(0) === '-') continue; // FIR境界行は無視
+      var w = _wtAt(pr);
+      if(w !== null) { prevWt = w; break; }
+    }
+    if(curWt !== null && prevWt !== null && prevWt > NAV_MLDW && curWt <= NAV_MLDW) {
+      var mldwTr = document.createElement('tr');
+      mldwTr.style.cssText = 'background:rgba(255,152,0,.15);';
+      mldwTr.innerHTML = '<td colspan="11" style="text-align:center;color:#ff9800;font-weight:bold;' +
+        'font-size:11px;letter-spacing:.12em;padding:5px 0;' +
+        'border-top:1.5px solid rgba(255,152,0,.55);border-bottom:1.5px solid rgba(255,152,0,.55);">' +
+        '&#9660; MLDW &nbsp;' + NAV_MLDW.toFixed(1) + '</td>';
+      tbody.appendChild(mldwTr);
+    }
+  }
 
     var pal = FIR_PAL[(rowFirName && firMap[rowFirName] !== undefined) ? firMap[rowFirName] : 0];
     var tr = document.createElement('tr');
@@ -1312,6 +1331,7 @@ function clearFpl() {
   if(typeof NAV_STD !== 'undefined') NAV_STD = null;
   if(typeof NAV_STA !== 'undefined') NAV_STA = null;
   if(typeof NAV_MLDW !== 'undefined') NAV_MLDW = null;
+  if(typeof NAV_PZFW !== 'undefined') NAV_PZFW = null;
   if(typeof NAV_PZFW !== 'undefined') NAV_PZFW = null;
   if(typeof NAV_FOB !== 'undefined') NAV_FOB = null;
   if(typeof NAV_TAXI_OUT !== 'undefined') NAV_TAXI_OUT = null;
