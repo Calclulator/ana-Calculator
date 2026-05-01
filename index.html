@@ -297,6 +297,7 @@
     <button class="btn" id="atm-ws-vws" onclick="setAtmWs('vws')">VWS</button>
     <button class="btn" id="atm-ws-b787" onclick="setAtmWs('b787')">B787 Ri</button>
   </div>
+  <div id="atm-ws-legend" style="font-size:10px;color:#90a4ae;padding:4px 12px 6px;border-bottom:1px solid #1e2a38;line-height:1.5;"></div>
   <div id="atm-ws-explain" style="font-size:10px;color:#546e7a;padding:6px 12px;border-bottom:1px solid #1e2a38;line-height:1.5;"></div>
   <div id="atm-ws-wrap" style="flex:1;min-height:0;overflow:auto;padding:6px;"></div>
 </div><!-- atm-panel -->
@@ -1540,6 +1541,46 @@ function riToEdr(ri) {
   return 'EDR 5';
 }
 
+function renderAtmWsLegend() {
+  var el = document.getElementById('atm-ws-legend');
+  if(!el) return;
+  function badge(bg, label) {
+    return '<span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;margin-bottom:4px;font-size:10px;white-space:nowrap;">'+
+      '<span class="atm-ws-leg-swatch" style="flex-shrink:0;width:14px;height:14px;background:'+bg+';border:1px solid rgba(129,147,168,.55);"></span>'+
+      label+'</span>';
+  }
+  function row(parts) {
+    return '<div style="display:flex;flex-wrap:wrap;align-items:center;line-height:1.5;">'+parts.join('')+'</div>';
+  }
+  var html = '';
+  if(ATM_WS === 'company') {
+    html = row([
+      badge('rgba(100,181,246,.30)','Smooth (0-3 kt/1,000 ft)'),
+      badge('rgba(255,213,79,.32)','Moderate (4-6)'),
+      badge('rgba(239,83,80,.35)','Severe (&gt;6)')
+    ]);
+  } else if(ATM_WS === 'vws') {
+    html = row([
+      badge('rgba(100,181,246,.30)','Smooth (0-4 kt/1,000 ft)'),
+      badge('rgba(102,187,106,.32)','Light- (5-6)'),
+      badge('rgba(174,213,129,.32)','Light (7-9)'),
+      badge('rgba(255,238,88,.32)','Light+ (10-12)'),
+      badge('rgba(255,167,38,.35)','Moderate (13-17)'),
+      badge('rgba(239,83,80,.40)','Severe (18+)')
+    ]);
+  } else {
+    html = row([
+      badge('rgba(100,181,246,.30)','Smooth Ri&gt;1 (EDR 0)'),
+      badge('rgba(102,187,106,.32)','Light- Ri&gt;0.5 (EDR 1)'),
+      badge('rgba(174,213,129,.32)','Light Ri&gt;0.3 (EDR 2)'),
+      badge('rgba(255,238,88,.32)','Light+ Ri&gt;0.25 (EDR 3)'),
+      badge('rgba(255,167,38,.35)','Moderate Ri&gt;0.2 (EDR 4)'),
+      badge('rgba(239,83,80,.40)','Severe Ri&amp;le;0.2 (EDR 5)')
+    ]);
+  }
+  el.innerHTML = html;
+}
+
 var atmSyncing = false;
 var atmHScrollSyncInited = false;
 function atmSyncScroll(src, dst) {
@@ -1562,6 +1603,7 @@ function renderWsTable() {
   var wrap = document.getElementById('atm-ws-wrap');
   var explain = document.getElementById('atm-ws-explain');
   if(!wrap) return;
+  renderAtmWsLegend();
   if(!WFM_DATA || Object.keys(WFM_DATA).length === 0) {
     wrap.innerHTML = '';
     if(explain) explain.innerHTML = '';
@@ -2568,6 +2610,8 @@ function toggleMode() {
     #atm-panel td{color:#1a2a3a!important;border-bottom-color:#e8ecf0!important;}
     #atm-panel td:first-child{background:#f0f4f8!important;color:#546e7a!important;}
     #atm-ws-explain{color:#546e7a!important;}
+    #atm-ws-legend{color:#546e7a!important;border-bottom-color:#d0d8e4!important;}
+    #atm-ws-legend .atm-ws-leg-swatch{border-color:rgba(84,110,122,.45)!important;}
   ` : '';
   applyMapTheme();
   if(LY.sat) LY.sat.bringToFront();
@@ -3143,6 +3187,7 @@ setInterval(function(){
 // HIMAWARI IR SANDWICH
 
 initAtmHScrollSync();
+renderAtmWsLegend();
 
 </script>
 
