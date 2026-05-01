@@ -283,8 +283,18 @@
     <div style="font-size:10px;color:#546e7a;padding:8px;text-align:right;">
       Wind: lower (green) → higher (red) range 1-127kt &nbsp;|&nbsp; Temp: warmer (red) → colder (blue)
     </div>
+    <div style="font-size:10px;color:#90a4ae;padding:0 8px 8px;line-height:1.6;">
+      Wind &amp; temp: NAVLOG の WIND/TEMP ALOFT FCST セクションから取得した各WP/各高度の予報値です。Interpolated は7段階の生データを1000ft刻みに線形補間したものです。<br>
+      ISA deviation: 実際の予報温度 − ISA温度(15°C − 1.98×FL、対流圏界面以上は−56.5°C)で計算した標準大気からの偏差です。
+    </div>
   </div>
-</div><!-- atm-panel -->
+
+  <!-- Wind Shear & Turbulence -->
+  <div style="border-top:1px solid #1e2a38;padding:8px 12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+    <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.06em;font-size:12px;">WIND SHEAR &amp; TURBULENCE</span>
+    <span style="font-size:10px;color:#90a4ae;margin-left:14px;">Method:</span>
+    <button class="btn on" id="atm-ws-co" onclick="setAtmWs('company')">Company</button>
+    <button class
 
 </div><!-- #panels -->
 
@@ -658,6 +668,7 @@ function showTab(name) {
   document.getElementById(name+'-panel').classList.add('active');
   if(name==='atm') {
     if(typeof renderAtmTable === 'function') renderAtmTable();
+    if(typeof renderWsTable === 'function') renderWsTable();
   }
   if(name==='wx') {
     // 複数回 invalidateSize を呼ぶ(描画完了タイミングが端末で異なるため)
@@ -1399,6 +1410,207 @@ function setAtmDisp(mode) {
     if(btn) btn.className = 'btn' + ((m==='orig'&&mode==='original')||(m==='interp'&&mode==='interpolated') ? ' on' : '');
   });
   renderAtmTable();
+}
+
+// ===== WIND SHEAR & TURBULENCE =====
+var ATM_WS = 'company'; // 'company' | 'vws' | 'b787'
+
+function setAtmWs(mode) {
+  ATM_WS = mode;
+  [['co','company'],['vws','vws'],['b787','b787']].forEach(function(p){
+    var btn = document.getElementById('atm-ws-'+p[0]);
+    if(btn) btn.className = 'btn' + (p[1]===mode ? ' on' : '');
+  });
+  renderWsTable();
+}
+
+// VWS 計算: 上下風ベクトル差のノルム / 高度差
+function vwsValue(c1, c2, dAlt) {
+  if(!c1 || !c2 || c1.dir===null || c2.dir===null) return null;
+  var u1 = c1.spd * Math.sin(c1.dir * Math.PI / 180);
+  var v1 = c1.spd * Math.cos(c1.dir * Math.PI / 180);
+  var u2 = c2.spd * Math.sin(c2.dir * Math.PI / 180);
+  var v2 = c2.spd * Math.cos(c2.dir * Math.PI / 180);
+  var diff = Math.sqrt((u2-u1)*(u2-u1) + (v2-v1)*(v2-v1));
+  return diff / (dAlt / 1000);
+}
+
+// Company 方式: 上下WSCP(NAVLOG)= |風速差|/1000ft (近い実装)
+function companyValue(c1, c2, dAlt) {
+  if(!c1 || !c2) return null;
+  return Math.abs(c2.spd - c1.spd) / (dAlt / 1000);
+}
+
+// B787 Richardson Number 簡易版
+// Ri = (g/T)(dθ/dz) / ((du/dz)² + (dv/dz)²)
+// θ ≈ T+0.0098*alt(K)、g=9.81m/s²
+function b787RiValue(c1, c2, alt1Ft, alt2Ft) {
+  if(!c1 || !c2 || c1.dir===null || c2.dir===null) return null;
+  var t1K = c1.tmp + 273.15;
+  var t2K = c2.tmp + 273.15;
+  var z1 = alt1Ft * 0.3048;
+  var z2 = alt2Ft * 0.3048;
+  var dz = z2 - z1;
+  if(Math.abs(dz) < 1) return null;
+  // potential temperature 近似
+  var th1 = t1K + 0.0098 * z1;
+  var th2 = t2K + 0.0098 * z2;
+  var dthdz = (th2 - th1) / dz;
+  // 風成分 (kt → m/s)
+  var KT = 0.5144;
+  var u1 = c1.spd * KT * Math.sin(c1.dir * Math.PI / 180);
+  var v1 = c1.spd * KT * Math.cos(c1.dir * Math.PI / 180);
+  var u2 = c2.spd * KT * Math.sin(c2.dir * Math.PI / 180);
+  var v2 = c2.spd * KT * Math.cos(c2.dir * Math.PI / 180);
+  var dudz = (u2 - u1) / dz;
+  var dvdz = (v2 - v1) / dz;
+  var shear2 = dudz*dudz + dvdz*dvdz;
+  if(shear2 < 1e-9) return 999;
+  var avgT = (t1K + t2K) / 2;
+  return (9.81 / avgT) * dthdz / shear2;
+}
+
+// 値→色 (方式別)
+function wsColor(val, mode) {
+  if(val === null || isNaN(val)) return 'transparent';
+  if(mode === 'company') {
+    // Smooth 0-3, Moderate 4-6, Severe >6
+    if(val <= 3) return 'rgba(100,181,246,.30)';   // 青
+    if(val <= 6) return 'rgba(255,213,79,.32)';    // 黄
+    return 'rgba(239,83,80,.35)';                  // 赤
+  }
+  if(mode === 'vws') {
+    // Smooth 0-4, Light- 5-6, Light 7-9, Light+ 10-12, Moderate 13-17, Severe 18+
+    if(val <= 4) return 'rgba(100,181,246,.30)';
+    if(val <= 6) return 'rgba(102,187,106,.32)';
+    if(val <= 9) return 'rgba(174,213,129,.32)';
+    if(val <= 12) return 'rgba(255,238,88,.32)';
+    if(val <= 17) return 'rgba(255,167,38,.35)';
+    return 'rgba(239,83,80,.40)';
+  }
+  if(mode === 'b787') {
+    // Ri: 大きいほど安定。Smooth >1, Light- 0.5-1, Light 0.3-0.5, Light+ 0.25-0.3, Mod 0.2-0.25, Severe ≤0.2
+    if(val > 1) return 'rgba(100,181,246,.30)';
+    if(val > 0.5) return 'rgba(102,187,106,.32)';
+    if(val > 0.3) return 'rgba(174,213,129,.32)';
+    if(val > 0.25) return 'rgba(255,238,88,.32)';
+    if(val > 0.2) return 'rgba(255,167,38,.35)';
+    return 'rgba(239,83,80,.40)';
+  }
+  return 'transparent';
+}
+
+// EDR 推定 (B787)
+function riToEdr(ri) {
+  if(ri === null || isNaN(ri)) return '';
+  if(ri > 1) return 'EDR 0';
+  if(ri > 0.5) return 'EDR 1';
+  if(ri > 0.3) return 'EDR 2';
+  if(ri > 0.25) return 'EDR 3';
+  if(ri > 0.2) return 'EDR 4';
+  return 'EDR 5';
+}
+
+function renderWsTable() {
+  var wrap = document.getElementById('atm-ws-wrap');
+  var explain = document.getElementById('atm-ws-explain');
+  if(!wrap) return;
+  if(!WFM_DATA || Object.keys(WFM_DATA).length === 0) {
+    wrap.innerHTML = '';
+    if(explain) explain.innerHTML = '';
+    return;
+  }
+  // WP順
+  var wpIds = [];
+  if(typeof FP_ROWS !== 'undefined' && FP_ROWS && FP_ROWS.length) {
+    FP_ROWS.forEach(function(r){
+      if(typeof r.id !== 'string') return;
+      if(r.id.charAt(0) === '-') return;
+      if(WFM_DATA[r.id]) wpIds.push(r.id);
+    });
+  }
+  if(wpIds.length === 0) wpIds = Object.keys(WFM_DATA);
+
+  var srcAlts = [120,180,240,300,340,390,450];
+  var altRows = [];
+  for(var fl=450; fl>=120; fl-=10) altRows.push(fl);
+
+  // 補間取得 (renderAtmTable と同じロジックの簡易版)
+  function getCell(wpId, fl) {
+    var d = WFM_DATA[wpId];
+    if(!d) return null;
+    if(d[fl]) return d[fl];
+    var lo=null, hi=null;
+    for(var i=0;i<srcAlts.length;i++){
+      if(srcAlts[i] <= fl && d[srcAlts[i]]) lo = srcAlts[i];
+      if(srcAlts[i] >= fl && d[srcAlts[i]] && hi===null) hi = srcAlts[i];
+    }
+    if(lo===null && hi===null) return null;
+    if(lo===null) return d[hi];
+    if(hi===null) return d[lo];
+    if(lo===hi) return d[lo];
+    var f = (fl - lo) / (hi - lo);
+    var dlo=d[lo], dhi=d[hi];
+    var diff = dhi.dir - dlo.dir;
+    if(diff > 180) diff -= 360;
+    if(diff < -180) diff += 360;
+    return {
+      dir: (dlo.dir + diff*f + 360) % 360,
+      spd: dlo.spd + (dhi.spd - dlo.spd)*f,
+      tmp: dlo.tmp + (dhi.tmp - dlo.tmp)*f
+    };
+  }
+
+  // テーブル: 各高度の「その層下から1000ft」のシア
+  var html = '<table style="border-collapse:collapse;font-size:10px;width:100%;">';
+  html += '<thead><tr>';
+  html += '<th style="position:sticky;left:0;background:#0d1620;color:#90a4ae;padding:4px 8px;text-align:right;border-right:1px solid #1e2a38;z-index:2;">Altitude</th>';
+  wpIds.forEach(function(wp){
+    html += '<th style="color:#cfd8dc;padding:4px 8px;font-weight:600;border-bottom:1px solid #1e2a38;white-space:nowrap;">'+wp+'</th>';
+  });
+  html += '</tr></thead><tbody>';
+  altRows.forEach(function(alt){
+    var altFt = alt * 100;
+    if(alt <= 120) return; // 一番下は計算不能
+    var altLowFt = altFt - 1000;
+    html += '<tr>';
+    html += '<td style="position:sticky;left:0;background:#0d1620;color:#90a4ae;padding:3px 8px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;z-index:1;">'+(altFt.toLocaleString())+' ft</td>';
+    wpIds.forEach(function(wp){
+      var cHi = getCell(wp, alt);
+      var cLo = getCell(wp, alt - 10);
+      var val = null, txt = '—', sub = '';
+      if(ATM_WS === 'company') val = companyValue(cLo, cHi, 1000);
+      else if(ATM_WS === 'vws') val = vwsValue(cLo, cHi, 1000);
+      else if(ATM_WS === 'b787') val = b787RiValue(cLo, cHi, altLowFt, altFt);
+      if(val !== null && !isNaN(val)) {
+        if(ATM_WS === 'b787') {
+          txt = (val > 99 ? '>99' : val.toFixed(2));
+          sub = '<div style="font-size:8px;color:#78909c;">'+riToEdr(val)+'</div>';
+        } else {
+          txt = val.toFixed(1);
+        }
+      }
+      var bg = wsColor(val, ATM_WS);
+      html += '<td style="padding:3px 8px;background:'+bg+';color:#cfd8dc;text-align:center;border-bottom:1px solid #14202c;">'+txt+sub+'</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+
+  // 根拠説明
+  if(explain) {
+    if(ATM_WS === 'company') {
+      explain.innerHTML = 'Company 方式: 上下層の風速差の絶対値を高度差(1000ft)で割った値(kt/1000ft)です。' +
+        '閾値は Smooth 0-3、Moderate 4-6、Severe >6。NAVLOG の WSCP に最も近い計算方式です。';
+    } else if(ATM_WS === 'vws') {
+      explain.innerHTML = 'VWS (Vector Wind Shear): 上下層の風ベクトル差(東西成分・南北成分の差)のノルムを高度差で割った値です。' +
+        '計算式: √((u2-u1)²+(v2-v1)²)/(Δz/1000ft)。閾値 Smooth 0-4、Light- 5-6、Light 7-9、Light+ 10-12、Moderate 13-17、Severe 18+。';
+    } else {
+      explain.innerHTML = 'B787 Richardson Number: Ri = (g/T)(dθ/dz) / ((du/dz)²+(dv/dz)²)。' +
+        '大気の安定度を表す無次元量で、値が小さい(0.25未満)ほど乱気流発生の可能性が高い。EDR は B787 用に Ri から推定した乱気流強度(0-5)です。';
+    }
+  }
 }
 
 function setAtmHeat(mode) {
@@ -2263,6 +2475,7 @@ function toggleMode() {
     #atm-panel th{background:#f0f4f8!important;color:#546e7a!important;border-bottom-color:#d0d8e4!important;}
     #atm-panel td{color:#1a2a3a!important;border-bottom-color:#e8ecf0!important;}
     #atm-panel td:first-child{background:#f0f4f8!important;color:#546e7a!important;}
+    #atm-ws-explain{color:#546e7a!important;}
   ` : '';
   var k = DAY_MODE ? 'light' : 'dark';
   setBase(k);
