@@ -34,6 +34,7 @@
   #vleg{position:absolute;right:8px;top:10px;z-index:900;background:rgba(8,10,20,.92);border:1px solid #1e2a38;border-radius:4px;padding:6px 10px 6px 6px;pointer-events:none;display:flex;flex-direction:row;align-items:flex-start;gap:10px;max-width:calc(100vw - 16px);flex-wrap:wrap;justify-content:flex-end;}
   #wx-fl-panel .wx-fl-btn{cursor:pointer;padding:3px 8px;margin-bottom:4px;border-radius:3px;font-size:13px;font-family:monospace;text-align:center;min-width:52px;box-sizing:border-box;}
   .etops-opts{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;max-width:min(320px,90vw);}
+  #lightning-attrib{font-size:9px;color:#78909c;pointer-events:none;line-height:1.35;}
   #statusbar{background:#080a12;border-top:1px solid #1a2535;padding:3px 8px;padding-bottom:max(3px,env(safe-area-inset-bottom));display:flex;flex-wrap:wrap;gap:12px;font-size:10px;color:#546e7a;flex-shrink:0;}
   #msg{color:#ffa726;}
   #ac-lbl{color:#4fc3f7;}
@@ -165,6 +166,7 @@
     <label class="ck"><input type="checkbox" id="oGlide" onchange="updateGlide()"> Glide (B787)</label>
     <label class="ck"><input type="checkbox" id="oFir" checked onchange="drawFir()"> FIR</label>
     <label class="ck"><input type="checkbox" id="oSig" checked onchange="loadSigmets()"> SIGMETs</label>
+    <label class="ck"><input type="checkbox" id="oLightning" onchange="toggleLightning()"> Lightning</label>
     <label class="ck"><input type="checkbox" id="oTurb" checked onchange="drawRoute()"> Turbulence corridor</label>
     <select id="turbMethodSel" class="btn" onchange="onWxTurbMethodChange()" style="max-width:200px;">
       <option value="company">Company (3段階)</option>
@@ -183,6 +185,9 @@
 
   <!-- MAP -->
   <div id="map-wrap">
+    <div id="lightning-attrib" style="display:none;position:absolute;right:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:850;max-width:min(280px,calc(100vw - 100px));text-align:right;background:rgba(8,10,20,.82);padding:4px 8px;border-radius:4px;border:1px solid #1e2a38;">
+      Lightning data: Blitzortung.org / lightningmaps.org
+    </div>
     <div id="map"></div>
     <div id="vleg">
       <div id="wx-fl-panel" style="pointer-events:auto;display:flex;flex-direction:column;align-items:stretch;"></div>
@@ -666,6 +671,11 @@ var acInt = null;
 var acPos = null;
 var acReg = '--';
 var acIcao = null;
+
+var lightningWS = null;
+var lightningStrikes = [];
+var lightningUpdateTimer = null;
+var lightningReconnectTimer = null;
 
 // =====================================================================
 // TABS
@@ -3292,6 +3302,220 @@ function updateWxFlPanel() {
   panel.innerHTML = html;
 }
 
+function blitzortungDecodeLatin1(str) {
+  var e = {};
+  var codes = [];
+  for(var i = 0; i < str.length; i++) codes.push(str.charCodeAt(i) & 255);
+  if(codes.length < 1) return null;
+  var c = String.fromCharCode(codes[0]);
+  var f = c;
+  var g = [c];
+  var h = 256;
+  var o = h;
+  for(var bi = 1; bi < codes.length; bi++) {
+    var aOrd = codes[bi];
+    var a;
+    if(h > aOrd) {
+      a = String.fromCharCode(aOrd);
+    } else {
+      a = e[aOrd] !== undefined ? e[aOrd] : (f + c);
+    }
+    g.push(a);
+    c = a.charAt(0);
+    e[o] = f + c;
+    o += 1;
+    f = a;
+  }
+  return g.join('');
+}
+
+function lightningStrikeTimeMs(t) {
+  if(t == null || isNaN(t)) return Date.now();
+  var x = Number(t);
+  if(x > 1e18) return Math.floor(x / 1e6);
+  if(x > 1e15) return Math.floor(x / 1e3);
+  if(x > 1e12) return Math.floor(x);
+  if(x > 1e9) return Math.floor(x * 1000);
+  return Date.now();
+}
+
+function ingestLightningJson(obj) {
+  if(!obj) return;
+  if(Object.prototype.toString.call(obj) === '[object Array]') {
+    for(var i = 0; i < obj.length; i++) ingestLightningJson(obj[i]);
+    return;
+  }
+  if(typeof obj.lat === 'number' && typeof obj.lon === 'number') {
+    addLightningStrike({lat: obj.lat, lon: obj.lon, time: obj.time});
+  }
+}
+
+function addLightningStrike(d) {
+  var lat = d.lat;
+  var lon = d.lon;
+  if(lat == null || lon == null || isNaN(lat) || isNaN(lon)) return;
+  var tms = lightningStrikeTimeMs(d.time);
+  var ageMin = (Date.now() - tms) / 60000;
+  if(ageMin > 30) return;
+  var sty = lightningStyleForAgeMin(ageMin);
+  var ly = L.circleMarker([lat, lon], {
+    radius: sty.r,
+    fillColor: sty.fill,
+    fillOpacity: sty.op,
+    color: sty.fill,
+    weight: 1,
+    opacity: sty.op
+  }).addTo(map);
+  lightningStrikes.push({ly: ly, time: tms});
+}
+
+function lightningStyleForAgeMin(ageMin) {
+  if(ageMin <= 10) return {r: 5, fill: '#ef5350', op: 0.9};
+  if(ageMin <= 20) return {r: 4, fill: '#ffa726', op: 0.7};
+  if(ageMin <= 30) return {r: 3, fill: '#ffee58', op: 0.5};
+  return {r: 3, fill: '#ffee58', op: 0.25};
+}
+
+function updateLightningColors() {
+  var now = Date.now();
+  var keep = [];
+  for(var i = 0; i < lightningStrikes.length; i++) {
+    var s = lightningStrikes[i];
+    var ageMin = (now - s.time) / 60000;
+    if(ageMin > 30) {
+      try { map.removeLayer(s.ly); } catch(e) {}
+      continue;
+    }
+    var sty = lightningStyleForAgeMin(ageMin);
+    try {
+      s.ly.setStyle({
+        radius: sty.r,
+        fillColor: sty.fill,
+        fillOpacity: sty.op,
+        color: sty.fill,
+        opacity: sty.op
+      });
+    } catch(e) {}
+    keep.push(s);
+  }
+  lightningStrikes = keep;
+}
+
+function connectLightningSocket() {
+  if(lightningWS) {
+    try {
+      lightningWS._boIgnoreReconnect = true;
+      lightningWS.close();
+    } catch(e) {}
+    lightningWS = null;
+  }
+  var chk = document.getElementById('oLightning');
+  if(!chk || !chk.checked) return;
+  var sn = 1 + Math.floor(Math.random() * 7);
+  var url = 'wss://ws' + sn + '.blitzortung.org/';
+  var ws;
+  try {
+    ws = new WebSocket(url);
+  } catch(err) {
+    scheduleLightningReconnect();
+    return;
+  }
+  lightningWS = ws;
+  ws.binaryType = 'arraybuffer';
+  ws.onopen = function() {
+    if(lightningReconnectTimer) {
+      clearTimeout(lightningReconnectTimer);
+      lightningReconnectTimer = null;
+    }
+    try { ws.send('{"a": 111}'); } catch(e) {}
+  };
+  ws.onmessage = function(ev) {
+    var raw = ev.data;
+    var text = null;
+    if(typeof raw === 'string') {
+      var t0 = raw.charAt(0);
+      if(t0 === '{' || t0 === '[') {
+        try {
+          ingestLightningJson(JSON.parse(raw));
+          return;
+        } catch(e1) {}
+      }
+      text = blitzortungDecodeLatin1(raw);
+    } else if(raw instanceof ArrayBuffer) {
+      var u8 = new Uint8Array(raw);
+      var bin = '';
+      for(var j = 0; j < u8.length; j++) bin += String.fromCharCode(u8[j]);
+      text = blitzortungDecodeLatin1(bin);
+    }
+    if(!text) return;
+    try {
+      ingestLightningJson(JSON.parse(text));
+    } catch(e2) {}
+  };
+  ws.onerror = function() {
+    if(!ws._boIgnoreReconnect) scheduleLightningReconnect();
+  };
+  ws.onclose = function() {
+    lightningWS = null;
+    if(ws._boIgnoreReconnect) return;
+    if(document.getElementById('oLightning') && document.getElementById('oLightning').checked) {
+      scheduleLightningReconnect();
+    }
+  };
+}
+
+function scheduleLightningReconnect() {
+  if(lightningReconnectTimer) clearTimeout(lightningReconnectTimer);
+  lightningReconnectTimer = setTimeout(function() {
+    lightningReconnectTimer = null;
+    if(!document.getElementById('oLightning') || !document.getElementById('oLightning').checked) return;
+    connectLightningSocket();
+  }, 6000);
+}
+
+function disconnectLightning() {
+  if(lightningUpdateTimer) {
+    clearInterval(lightningUpdateTimer);
+    lightningUpdateTimer = null;
+  }
+  if(lightningReconnectTimer) {
+    clearTimeout(lightningReconnectTimer);
+    lightningReconnectTimer = null;
+  }
+  if(lightningWS) {
+    try {
+      lightningWS._boIgnoreReconnect = true;
+      lightningWS.close();
+    } catch(e) {}
+    lightningWS = null;
+  }
+  for(var i = 0; i < lightningStrikes.length; i++) {
+    try { map.removeLayer(lightningStrikes[i].ly); } catch(e2) {}
+  }
+  lightningStrikes = [];
+  var att = document.getElementById('lightning-attrib');
+  if(att) att.style.display = 'none';
+}
+
+function connectLightning() {
+  disconnectLightning();
+  var chk = document.getElementById('oLightning');
+  if(!chk || !chk.checked) return;
+  var att = document.getElementById('lightning-attrib');
+  if(att) att.style.display = 'block';
+  connectLightningSocket();
+  lightningUpdateTimer = setInterval(updateLightningColors, 30000);
+}
+
+function toggleLightning() {
+  var chk = document.getElementById('oLightning');
+  if(!chk.checked) {
+    disconnectLightning();
+    return;
+  }
+  connectLightning();
+}
+
 function bringTop() {
   if(LY.sig)   try{LY.sig.bringToFront();}catch(e){}
   if(LY.radar) try{LY.radar.bringToFront();}catch(e){}
@@ -3305,6 +3529,7 @@ function bringTop() {
   LY.alt.forEach(function(l){try{l.bringToFront();}catch(e){}});
   LY.wpts.forEach(function(m){try{m.bringToFront();}catch(e){}});
   LY.metar.forEach(function(m){try{m.bringToFront();}catch(e){}});
+  lightningStrikes.forEach(function(s){ try{s.ly.bringToFront();}catch(e){} });
   if(LY.ac) try{LY.ac.bringToFront();}catch(e){}
 }
 
