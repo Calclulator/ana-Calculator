@@ -8,7 +8,7 @@
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   html{height:-webkit-fill-available;}
-  body{background:#0a0c16;color:#cfd8dc;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;height:100vh;height:100dvh;overflow:hidden;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);}
+  body{background:#0a0c16;color:#cfd8dc;font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;height:100vh;height:100dvh;overflow:hidden;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);}
   #tab-bar{background:#060810;border-bottom:1px solid #1e2a38;display:flex;gap:0;flex-shrink:0;}
   .tab-btn{padding:6px 18px;background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;color:#546e7a;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;letter-spacing:.05em;}
   .tab-btn:hover{color:#90a4ae;}
@@ -39,7 +39,7 @@
     .wx-ovl-break{display:block;}
   }
   #fp-navlog{background:#060a12;border-bottom:1px solid #1e2a38;display:flex;padding:8px;flex-direction:column;gap:6px;flex-shrink:0;}
-  #fp-navlog textarea{width:100%;height:88px;background:#030608;border:1px solid #1e2a38;border-radius:3px;color:#90a4ae;font-family:inherit;font-size:11px;padding:5px 7px;resize:vertical;line-height:1.5;}
+  #fp-navlog textarea{width:100%;height:88px;background:#030608;border:1px solid #1e2a38;border-radius:3px;color:#90a4ae;font-family:inherit;font-size:1em;padding:5px 7px;resize:vertical;line-height:1.5;}
   #fp-navlog textarea:focus{outline:none;border-color:#1565c0;color:#cfd8dc;}
   #map-wrap{position:relative;flex:1;min-height:0;}
   #map{height:100%;width:100%;background:#080a12;}
@@ -53,11 +53,21 @@
   #ac-lbl{color:#4fc3f7;}
   /* Flight Plan */
   .fp-wrap{flex:1;overflow-y:auto;}
-  .fp-table{width:100%;border-collapse:collapse;font-size:11px;}
+  .fp-table{width:100%;border-collapse:collapse;}
+  #fp-panel .fp-table{font-size:1em;}
   .fp-table th{background:#0d1117;color:#546e7a;font-weight:normal;padding:5px 8px;text-align:left;border-bottom:1px solid #1e2a38;position:sticky;top:0;white-space:nowrap;z-index:10;}
   .fp-table td{padding:3px 6px;border-bottom:.5px solid #0f1825;vertical-align:middle;white-space:nowrap;}
   .fp-table tr:hover td{background:#0d1a28;}
-  .fp-in{background:transparent;border:none;border-bottom:.5px solid #1e2a38;color:#cfd8dc;font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;padding:1px 3px;width:56px;}
+  #fp-panel .fp-in{background:transparent;border:none;border-bottom:.5px solid #1e2a38;color:#cfd8dc;font-family:'Helvetica Neue',Arial,sans-serif;font-size:1em;padding:1px 3px;width:56px;}
+  #fp-panel .btn{font-size:1em;}
+  #fp-panel .btn.go{font-size:1.1em;}
+  #fp-panel #fp-route-lbl{font-size:1em;}
+  #fp-panel #parse-result,
+  #fp-panel #fpl-info{font-size:0.95em;}
+  #atm-panel .btn{font-size:1em;}
+  #atm-panel #atm-route-lbl{font-size:1em;}
+  #atm-panel #atm-ws-legend,
+  #atm-panel #atm-ws-explain{font-size:1em;}
   .fp-in:focus{outline:none;border-bottom-color:#4fc3f7;background:#060a14;}
   .fp-in::placeholder{color:#2a3a4e;}
   .fp-note{width:90px;}
@@ -227,7 +237,7 @@
 <div id="fp-panel" class="panel">
   <div class="bar">
     <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.08em;">Flight Plan</span>
-    <span id="fp-route-lbl" style="color:#546e7a;margin-left:10px;font-size:11px;">----→----</span>
+    <span id="fp-route-lbl" style="color:#546e7a;margin-left:10px;">----→----</span>
     <button class="btn" onclick="window.print()" style="margin-left:auto;">🖨 Print / PDF</button>
   </div>
   <div id="fp-navlog">
@@ -236,13 +246,13 @@
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">
         <input type="file" id="pdf-file" accept=".pdf" style="display:none;" onchange="loadNavPdf(this)">
         <button class="btn" onclick="document.getElementById('pdf-file').click()">📄 Upload PDF</button>
-        <button class="btn go" onclick="runParse()" style="font-size:12px;padding:3px 12px;">▶ Apply</button>
+        <button class="btn go" onclick="runParse()" style="padding:3px 12px;">▶ Apply</button>
         <button class="btn" onclick="clearFpl()">✕ Clear</button>
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:10px;">
-      <span id="parse-result" style="font-size:10px;color:#66bb6a;"></span>
-      <span id="fpl-info" style="font-size:10px;color:#4fc3f7;"></span>
+      <span id="parse-result" style="color:#66bb6a;"></span>
+      <span id="fpl-info" style="color:#4fc3f7;"></span>
     </div>
   </div>
   <div class="fp-wrap">
@@ -277,30 +287,30 @@
 <div id="atm-panel" class="panel">
   <div class="bar">
     <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.08em;">Atmosphere Analysis</span>
-    <span id="atm-route-lbl" style="color:#546e7a;margin-left:10px;font-size:11px;">----→----</span>
+    <span id="atm-route-lbl" style="color:#546e7a;margin-left:10px;">----→----</span>
   </div>
   <div style="padding:8px 12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #1e2a38;">
-    <span style="font-size:10px;color:#90a4ae;">Heat map:</span>
+    <span style="font-size:1em;color:#90a4ae;">Heat map:</span>
     <button class="btn" id="atm-heat-temp" onclick="setAtmHeat('temp')">Temp</button>
     <button class="btn on" id="atm-heat-wind" onclick="setAtmHeat('wind')">Wind</button>
     <button class="btn" id="atm-heat-off" onclick="setAtmHeat('off')">Off</button>
-    <span style="font-size:10px;color:#90a4ae;margin-left:8px;">Cell shows:</span>
+    <span style="font-size:1em;color:#90a4ae;margin-left:8px;">Cell shows:</span>
     <button class="btn on" id="atm-show-wt" onclick="setAtmShow('wt')">Wind &amp; temp</button>
     <button class="btn" id="atm-show-isa" onclick="setAtmShow('isa')">ISA deviation</button>
-    <span style="font-size:10px;color:#90a4ae;margin-left:8px;">Display:</span>
+    <span style="font-size:1em;color:#90a4ae;margin-left:8px;">Display:</span>
     <button class="btn" id="atm-disp-orig" onclick="setAtmDisp('original')">Original</button>
     <button class="btn on" id="atm-disp-interp" onclick="setAtmDisp('interpolated')">Interpolated</button>
   </div>
   <div id="atm-scroll-top" style="flex:1;min-height:0;overflow:auto;padding:6px;">
     <div id="atm-tbody-wrap">
-      <div style="color:#546e7a;padding:24px;text-align:center;font-size:12px;">
+      <div style="color:#546e7a;padding:24px;text-align:center;font-size:1em;">
         Flight Plan で NAV LOG を Apply すると、ここに Wind/Temp が表示されます
       </div>
     </div>
-    <div style="font-size:10px;color:#546e7a;padding:8px;text-align:right;">
+    <div style="font-size:1em;color:#546e7a;padding:8px;text-align:right;">
       Wind: lower (green) → higher (red) range 1-127kt &nbsp;|&nbsp; Temp: warmer (red) → colder (blue)
     </div>
-    <div style="font-size:10px;color:#90a4ae;padding:0 8px 8px;line-height:1.6;">
+    <div style="font-size:1em;color:#90a4ae;padding:0 8px 8px;line-height:1.6;">
       Wind &amp; temp: NAVLOG の WIND/TEMP ALOFT FCST セクションから取得した各WP/各高度の予報値です。Interpolated は7段階の生データを1000ft刻みに線形補間したものです。<br>
       ISA deviation: 実際の予報温度 − ISA温度(15°C − 1.98×FL、対流圏界面以上は−56.5°C)で計算した標準大気からの偏差です。
     </div>
@@ -308,14 +318,14 @@
 
   <!-- Wind Shear & Turbulence -->
   <div style="border-top:1px solid #1e2a38;padding:8px 12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
-    <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.06em;font-size:12px;">WIND SHEAR &amp; TURBULENCE</span>
-    <span style="font-size:10px;color:#90a4ae;margin-left:14px;">Method:</span>
+    <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.06em;font-size:1em;">WIND SHEAR &amp; TURBULENCE</span>
+    <span style="font-size:1em;color:#90a4ae;margin-left:14px;">Method:</span>
     <button class="btn on" id="atm-ws-co" onclick="setAtmWs('company')">Company</button>
     <button class="btn" id="atm-ws-vws" onclick="setAtmWs('vws')">VWS</button>
     <button class="btn" id="atm-ws-b787" onclick="setAtmWs('b787')">B787 Ri</button>
   </div>
-  <div id="atm-ws-legend" style="font-size:10px;color:#90a4ae;padding:4px 12px 6px;border-bottom:1px solid #1e2a38;line-height:1.5;"></div>
-  <div id="atm-ws-explain" style="font-size:10px;color:#546e7a;padding:6px 12px;border-bottom:1px solid #1e2a38;line-height:1.5;"></div>
+  <div id="atm-ws-legend" style="color:#90a4ae;padding:4px 12px 6px;border-bottom:1px solid #1e2a38;line-height:1.5;"></div>
+  <div id="atm-ws-explain" style="color:#546e7a;padding:6px 12px;border-bottom:1px solid #1e2a38;line-height:1.5;"></div>
   <div id="atm-ws-wrap" style="flex:1;min-height:0;overflow:auto;padding:6px;"></div>
 </div><!-- atm-panel -->
 </div><!-- #panels -->
@@ -1323,7 +1333,7 @@ function renderFpTable() {
       var mldwTr = document.createElement('tr');
       mldwTr.style.cssText = 'background:rgba(255,152,0,.15);';
       mldwTr.innerHTML = '<td colspan="11" style="text-align:center;color:#ff9800;font-weight:bold;' +
-        'font-size:11px;letter-spacing:.12em;padding:5px 0;' +
+        'font-size:1em;letter-spacing:.12em;padding:5px 0;' +
         'border-top:1.5px solid rgba(255,152,0,.55);border-bottom:1.5px solid rgba(255,152,0,.55);">' +
         '&#9660; MLDW &nbsp;' + NAV_MLDW.toFixed(1) + '</td>';
       tbody.appendChild(mldwTr);
@@ -1375,8 +1385,8 @@ function renderFpTable() {
     // FIR cell
     var displayFir = rowFirName || '----';
     var firHtml = isFirBoundary
-      ? '<td style="color:'+pal.ac+';font-size:10px;font-weight:bold;padding:3px 6px;white-space:nowrap;">&#x2192; '+displayFir+'</td>'
-      : '<td style="color:#37474f;font-size:10px;padding:3px 6px;white-space:nowrap;">'+displayFir+'</td>';
+      ? '<td style="color:'+pal.ac+';font-size:0.9em;font-weight:bold;padding:3px 6px;white-space:nowrap;">&#x2192; '+displayFir+'</td>'
+      : '<td style="color:#37474f;font-size:0.9em;padding:3px 6px;white-space:nowrap;">'+displayFir+'</td>';
 
     tr.innerHTML =
       '<td style="color:'+(isFirBoundary?'#cfd8dc':'#90a4ae')+';padding:3px 8px;">'+row.id+'</td>'+
@@ -1713,7 +1723,7 @@ function renderAtmWsLegend() {
   var el = document.getElementById('atm-ws-legend');
   if(!el) return;
   function badge(bg, label) {
-    return '<span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;margin-bottom:4px;font-size:10px;white-space:nowrap;">'+
+    return '<span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;margin-bottom:4px;font-size:1em;white-space:nowrap;">'+
       '<span class="atm-ws-leg-swatch" style="flex-shrink:0;width:14px;height:14px;background:'+bg+';border:1px solid rgba(129,147,168,.55);"></span>'+
       label+'</span>';
   }
@@ -1827,7 +1837,7 @@ function renderWsTable() {
   }
 
   // テーブル: 各高度の「その層下から1000ft」のシア
-  var html = '<table style="table-layout:fixed;border-collapse:collapse;font-size:10px;width:100%;">';
+  var html = '<table style="table-layout:fixed;border-collapse:collapse;font-size:1em;width:100%;">';
   html += '<thead><tr>';
   html += '<th style="position:sticky;top:0;left:0;z-index:4;background:#0d1620;color:#90a4ae;padding:4px 6px;text-align:right;border-right:1px solid #1e2a38;min-width:70px;width:70px;">Altitude</th>';
   wpIds.forEach(function(wp){
@@ -1861,7 +1871,7 @@ function renderWsTable() {
       if(val !== null && !isNaN(val)) {
         if(ATM_WS === 'b787') {
           txt = (val > 99 ? '>99' : val.toFixed(2));
-          sub = '<div style="font-size:8px;color:#78909c;">'+riToEdr(val)+'</div>';
+          sub = '<div style="font-size:0.72em;color:#78909c;">'+riToEdr(val)+'</div>';
         } else {
           txt = val.toFixed(1);
         }
@@ -1954,7 +1964,7 @@ function renderAtmTable() {
   }
   // データなし
   if(!WFM_DATA || Object.keys(WFM_DATA).length === 0) {
-    wrap.innerHTML = '<div style="color:#546e7a;padding:24px;text-align:center;font-size:12px;">'+
+    wrap.innerHTML = '<div style="color:#546e7a;padding:24px;text-align:center;font-size:1em;">'+
       'Flight Plan で NAV LOG を Apply すると、ここに Wind/Temp が表示されます</div>';
     return;
   }
@@ -2027,7 +2037,7 @@ function renderAtmTable() {
   }
 
   // テーブル組み立て
-  var html = '<table style="table-layout:fixed;border-collapse:collapse;font-size:10px;width:100%;">';
+  var html = '<table style="table-layout:fixed;border-collapse:collapse;font-size:1em;width:100%;">';
   html += '<thead><tr>';
   html += '<th style="position:sticky;top:0;left:0;z-index:4;background:#0d1620;color:#90a4ae;padding:4px 6px;text-align:right;border-right:1px solid #1e2a38;min-width:70px;width:70px;">Altitude</th>';
   wpIds.forEach(function(wp){
@@ -2762,7 +2772,7 @@ function updateNavFlightInfo() {
 }
 setInterval(updateNavClock, 60000);
 updateNavClock();
-var TEXT_SIZE = 12;
+var TEXT_SIZE = 14;
 function changeTextSize(d) {
   TEXT_SIZE = Math.max(10, Math.min(16, TEXT_SIZE + d));
   document.body.style.fontSize = TEXT_SIZE + 'px';
