@@ -700,6 +700,10 @@ function showTab(name) {
             map.invalidateSize(true);
           } catch(e){}
         }
+        if(delay === 200 && typeof loadSat === 'function') {
+          var sel = document.getElementById('satSel');
+          if(sel) loadSat(sel.value);
+        }
       }, delay);
     });
   }
@@ -2366,7 +2370,7 @@ function loadSat(k) {
   LY.sat.on('tileerror',function(){ document.getElementById('sat-lbl').textContent = s.label+' (データなし '+t.slice(11,16)+'Z)'; });
   setTimeout(function(){ bringTop(); }, 300);
 }
-loadSat('himawari-fd-sandwich');
+loadSat(document.getElementById('satSel').value);
 
 function setSatOp(v) {
   var val = parseFloat(v);
