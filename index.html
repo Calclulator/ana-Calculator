@@ -1858,13 +1858,17 @@ function renderWsTable() {
   if(explain) {
     if(ATM_WS === 'company') {
       explain.innerHTML = 'Company 方式: 上下層の風速差の絶対値を高度差(1000ft)で割った値(kt/1000ft)です。' +
-        '閾値は Smooth 0-3、Moderate 4-6、Severe >6。NAVLOG の WSCP に最も近い計算方式です。';
+        '閾値は Smooth 0-3、Moderate 4-6、Severe >6。NAVLOG の WSCP に最も近い計算方式です。' +
+        '<br>※ これは予測値です。実際の揺れ (EDR) は気象状況により変動します。';
     } else if(ATM_WS === 'vws') {
       explain.innerHTML = 'VWS (Vector Wind Shear): 上下層の風ベクトル差(東西成分・南北成分の差)のノルムを高度差で割った値です。' +
-        '計算式: √((u2-u1)²+(v2-v1)²)/(Δz/1000ft)。閾値 Smooth 0-4、Light- 5-6、Light 7-9、Light+ 10-12、Moderate 13-17、Severe 18+。';
+        '計算式: √((u2-u1)²+(v2-v1)²)/(Δz/1000ft)。閾値 Smooth 0-4、Light- 5-6、Light 7-9、Light+ 10-12、Moderate 13-17、Severe 18+。' +
+        '<br>※ これは予測値です。実際の揺れ (EDR) は気象状況により変動します。';
     } else {
       explain.innerHTML = 'B787 Richardson Number: Ri = (g/T)(dθ/dz) / ((du/dz)²+(dv/dz)²)。' +
-        '大気の安定度を表す無次元量で、値が小さい(0.25未満)ほど乱気流発生の可能性が高い。EDR は B787 用に Ri から推定した乱気流強度(0-5)です。';
+        '大気の安定度を表す無次元量で、値が小さい(0.25未満)ほど乱気流発生の可能性が高い。EDR は B787 用に Ri から推定した乱気流強度(0-5)です。' +
+        '<br>※ これは予測値です。実際の揺れ (EDR) は気象状況により変動します。' +
+        '<br>精度向上のため将来的に GFS データを使った Ellrod Index 等の実装を予定しています。';
     }
   }
 }
