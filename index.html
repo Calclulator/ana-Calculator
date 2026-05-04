@@ -31,7 +31,9 @@
   #map-wrap{position:relative;flex:1;min-height:0;}
   #map{height:100%;width:100%;background:#080a12;}
   body.day-mode #map{background:#ffffff;}
-  #vleg{position:absolute;right:8px;top:10px;z-index:900;background:rgba(8,10,20,.92);border:1px solid #1e2a38;border-radius:4px;padding:6px 24px 6px 5px;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:2px;}
+  #vleg{position:absolute;right:8px;top:10px;z-index:900;background:rgba(8,10,20,.92);border:1px solid #1e2a38;border-radius:4px;padding:6px 10px 6px 6px;pointer-events:none;display:flex;flex-direction:row;align-items:flex-start;gap:10px;max-width:calc(100vw - 16px);flex-wrap:wrap;justify-content:flex-end;}
+  #wx-fl-panel .wx-fl-btn{cursor:pointer;padding:3px 8px;margin-bottom:4px;border-radius:3px;font-size:13px;font-family:monospace;text-align:center;min-width:52px;box-sizing:border-box;}
+  .etops-opts{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;max-width:min(320px,90vw);}
   #statusbar{background:#080a12;border-top:1px solid #1a2535;padding:3px 8px;padding-bottom:max(3px,env(safe-area-inset-bottom));display:flex;flex-wrap:wrap;gap:12px;font-size:10px;color:#546e7a;flex-shrink:0;}
   #msg{color:#ffa726;}
   #ac-lbl{color:#4fc3f7;}
@@ -156,18 +158,21 @@
   <!-- BAR4: OVERLAYS -->
   <div class="bar">
     <span class="lbl">OVERLAYS</span>
-    <label class="ck"><input type="checkbox" id="oEtops" onchange="drawEtops()"> ETOPS rings</label>
-    <select id="etopsSel" class="btn" onchange="drawEtops()" style="max-width:170px;">
-      <option value="NH8A">NH8A 435/1252NM</option>
-      <option value="NH8C">NH8C 429/1237NM</option>
-      <option value="NH9K">NH9K 431/1248NM</option>
-      <option value="NH9D">NH9D 420/1210NM</option>
-      <option value="NHXK">NHXK 431/1248NM</option>
-    </select>
+    <label class="ck"><input type="checkbox" id="oEtops" onchange="toggleEtopsOpts()"> ETOPS rings</label>
+    <span id="etopsOptsWrap" class="etops-opts" style="display:none;">
+      <label class="ck" style="font-size:10px;"><input type="checkbox" id="oEtops60" checked onchange="drawEtops()"> 60min</label>
+      <label class="ck" style="font-size:10px;"><input type="checkbox" id="oEtops180" onchange="drawEtops()"> 180min</label>
+      <label class="ck" style="font-size:10px;"><input type="checkbox" id="oEtops207" onchange="drawEtops()"> 207min</label>
+    </span>
     <label class="ck"><input type="checkbox" id="oGlide" onchange="updateGlide()"> Glide (B787)</label>
     <label class="ck"><input type="checkbox" id="oFir" checked onchange="drawFir()"> FIR</label>
     <label class="ck"><input type="checkbox" id="oSig" checked onchange="loadSigmets()"> SIGMETs</label>
     <label class="ck"><input type="checkbox" id="oTurb" checked onchange="drawRoute()"> Turbulence corridor</label>
+    <select id="turbMethodSel" class="btn" onchange="onWxTurbMethodChange()" style="max-width:200px;">
+      <option value="company">Company (3段階)</option>
+      <option value="vws" selected>VWS (6段階)</option>
+      <option value="b787">Ri (B787 Richardson, 6段階)</option>
+    </select>
     <label class="ck"><input type="checkbox" id="oMetar" onchange="drawAlt()"> A/P</label>
     <span class="lbl" style="margin-left:8px;">回避</span>
     <button class="btn" id="avoidL" onclick="setAvoidSide('L')" style="padding:2px 6px;">L</button>
@@ -182,19 +187,14 @@
   <div id="map-wrap">
     <div id="map"></div>
     <div id="vleg">
-      <div style="font-size:9px;color:#78909c;margin-bottom:2px;">VWS</div>
-      <div style="position:relative;width:14px;height:80px;">
-        <div style="width:14px;height:80px;
-             background:linear-gradient(to bottom,#b71c1c,#e53935 15%,#fb8c00 35%,#fdd835 55%,#43a047 75%,#1565c0);
-             border-radius:2px;"></div>
-        <div style="position:absolute;left:18px;top:0;font-size:8px;color:#999;white-space:nowrap;line-height:1;">
-          <div style="color:#e53935;margin-bottom:9px;">&gt;6</div>
-          <div style="color:#fb8c00;margin-bottom:9px;">4-6</div>
-          <div style="color:#fdd835;margin-bottom:9px;">2-4</div>
-          <div style="color:#43a047;">0-2</div>
+      <div id="wx-fl-panel" style="pointer-events:auto;display:flex;flex-direction:column;align-items:stretch;"></div>
+      <div style="pointer-events:auto;display:flex;flex-direction:column;align-items:center;flex-shrink:0;">
+        <div id="wx-turb-leg-title" style="font-size:12px;color:#78909c;margin-bottom:4px;text-align:center;">VWS</div>
+        <div style="display:flex;flex-direction:row;align-items:stretch;gap:8px;">
+          <div id="wx-turb-leg-gradient" style="width:21px;height:120px;border-radius:3px;border:1px solid rgba(129,147,168,.35);flex-shrink:0;"></div>
+          <div id="wx-turb-leg-labels" style="font-size:12px;color:#90a4ae;line-height:1.2;white-space:nowrap;display:flex;flex-direction:column;justify-content:space-between;min-height:120px;padding:2px 0;"></div>
         </div>
       </div>
-      <div id="rvsm-panel" style="margin-top:8px;pointer-events:auto;width:44px;"></div>
     </div>
   </div>
 
@@ -387,6 +387,14 @@ var ETOPS_DATA = {
   NHXK:{nm60:431,nm180:1248}
 };
 
+var ETOPS_RING_NM = {
+  NH8A:{60:435,180:1252,207:1437},
+  NH8C:{60:429,180:1237,207:1419},
+  NH9K:{60:431,180:1248,207:1431},
+  NH9D:{60:420,180:1210,207:1387},
+  NHXK:{60:431,180:1248,207:null}
+};
+
 
 var GIBS = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best';
 var SATS = {
@@ -409,6 +417,8 @@ var BASES = {
 // =====================================================================
 var WP = [];
 var CURRENT_FL = 35;
+var WX_TURB_METHOD = 'vws';
+var ACTIVE_ETOPS_KEY = 'NH9D';
 var VWS = {};
 var VWS_BY_FL = {};
 var WFM_DATA = {};
@@ -1101,10 +1111,14 @@ function runParse() {
     WFM_DATA = newWfmData;
     console.log(VWS_BY_FL);
     console.log('WFM_DATA WPs:', Object.keys(WFM_DATA).length);
+    applyDefaultCorridorFl();
   }
   if(newAlts.length>0) ALTS = newAlts;
   if(newEtps.length>0) ETPS = newEtps;
   if(reg) acReg = reg;
+
+  ACTIVE_ETOPS_KEY = (etopsKey && ETOPS_DATA[etopsKey]) ? etopsKey : 'NH9D';
+  syncEtops207Availability();
 
   buildFpRows(dep, depFuel);
 
@@ -1113,14 +1127,13 @@ function runParse() {
     document.getElementById('route-lbl').textContent = dep+' → '+dest;
     document.getElementById('fp-route-lbl').textContent = dep+' → '+dest;
   }
-  var eLabel = etopsKey
-    ? (etopsKey+' '+ETOPS_DATA[etopsKey].nm60+'/'+ETOPS_DATA[etopsKey].nm180+'NM') : '--';
+  var eLabel = ETOPS_DATA[ACTIVE_ETOPS_KEY]
+    ? (ACTIVE_ETOPS_KEY+' '+ETOPS_DATA[ACTIVE_ETOPS_KEY].nm60+'/'+ETOPS_DATA[ACTIVE_ETOPS_KEY].nm180+'NM') : '--';
   document.getElementById('fpl-info').textContent =
-    '機番:'+acReg+'  機材:'+(etopsKey||'--')+'  ETOPS:'+eLabel
+    '機番:'+acReg+'  機材:'+ACTIVE_ETOPS_KEY+'  ETOPS:'+eLabel
     +'  WP:'+WP.length+'点  代替:'+ALTS.map(function(a){return a.id;}).join(' ');
   document.getElementById('parse-result').textContent =
     '✓ 完了: '+WP.length+'WP / ETP'+ETPS.length+'点 / 代替'+ALTS.length+'空港';
-  if(etopsKey&&ETOPS_DATA[etopsKey]) document.getElementById('etopsSel').value = etopsKey;
 
   renderFpTable();
   updateNavFlightInfo();
@@ -1530,6 +1543,141 @@ function wsColor(val, mode) {
   return 'transparent';
 }
 
+function getWfmInterpolatedCell(wpId, fl) {
+  var d = WFM_DATA[wpId];
+  if(!d) return null;
+  if(d[fl]) return d[fl];
+  var srcAlts = [120,180,240,300,340,390,450];
+  var lo=null, hi=null;
+  for(var i=0;i<srcAlts.length;i++){
+    if(srcAlts[i] <= fl && d[srcAlts[i]]) lo = srcAlts[i];
+    if(srcAlts[i] >= fl && d[srcAlts[i]] && hi===null) hi = srcAlts[i];
+  }
+  if(lo===null && hi===null) return null;
+  if(lo===null) return d[hi];
+  if(hi===null) return d[lo];
+  if(lo===hi) return d[lo];
+  var f = (fl - lo) / (hi - lo);
+  var dlo=d[lo], dhi=d[hi];
+  var diff = dhi.dir - dlo.dir;
+  if(diff > 180) diff -= 360;
+  if(diff < -180) diff += 360;
+  return {
+    dir: (dlo.dir + diff*f + 360) % 360,
+    spd: dlo.spd + (dhi.spd - dlo.spd)*f,
+    tmp: dlo.tmp + (dhi.tmp - dlo.tmp)*f
+  };
+}
+
+function corridorShearValue(wpId) {
+  var flTen = Math.round(CURRENT_FL * 10);
+  var flLo = flTen - 10;
+  var cHi = getWfmInterpolatedCell(wpId, flTen);
+  var cLo = getWfmInterpolatedCell(wpId, flLo);
+  var altLowFt = flLo * 100;
+  var altFt = flTen * 100;
+  var mode = WX_TURB_METHOD;
+  if(mode === 'company') return companyValue(cLo, cHi, 1000);
+  if(mode === 'vws') return vwsValue(cLo, cHi, 1000);
+  if(mode === 'b787') return b787RiValue(cLo, cHi, altLowFt, altFt);
+  return null;
+}
+
+function corridorAggMetricForFl(flKey) {
+  var prev = CURRENT_FL;
+  CURRENT_FL = flKey;
+  var mode = WX_TURB_METHOD;
+  var agg = null;
+  for(var wi=0; wi<WP.length; wi++) {
+    var val = corridorShearValue(WP[wi].id);
+    if(val === null || isNaN(val)) continue;
+    if(mode === 'b787') {
+      if(agg === null || val < agg) agg = val;
+    } else {
+      if(agg === null || val > agg) agg = val;
+    }
+  }
+  CURRENT_FL = prev;
+  return agg;
+}
+
+function renderWxCorridorLegend() {
+  var grad = document.getElementById('wx-turb-leg-gradient');
+  var labs = document.getElementById('wx-turb-leg-labels');
+  var ttl = document.getElementById('wx-turb-leg-title');
+  if(!grad || !labs) return;
+  var mode = WX_TURB_METHOD;
+  if(ttl) {
+    ttl.textContent = mode === 'company' ? 'Company' : (mode === 'b787' ? 'Ri' : 'VWS');
+  }
+  if(mode === 'company') {
+    grad.style.background = 'linear-gradient(to bottom,'+
+      'rgba(239,83,80,.88) 0%, rgba(239,83,80,.88) 34%,'+
+      'rgba(255,213,79,.85) 34%, rgba(255,213,79,.85) 67%,'+
+      'rgba(100,181,246,.82) 67%, rgba(100,181,246,.82) 100%)';
+    labs.innerHTML = '<div style="color:#e57373;">Severe (&gt;6)</div>'+
+      '<div style="color:#fdd835;">Moderate (4-6)</div>'+
+      '<div style="color:#64b5f6;">Smooth (0-3)</div>';
+    labs.style.justifyContent = 'space-between';
+    return;
+  }
+  if(mode === 'vws') {
+    grad.style.background = 'linear-gradient(to bottom,'+
+      'rgba(239,83,80,.9) 0%, rgba(255,167,38,.9) 16.66%, rgba(255,238,88,.9) 33.33%,'+
+      'rgba(174,213,129,.9) 50%, rgba(102,187,106,.9) 66.66%, rgba(100,181,246,.9) 100%)';
+    labs.innerHTML = '<div style="color:#e57373;">Severe (18+)</div>'+
+      '<div style="color:#ffb74d;">Moderate (13-17)</div>'+
+      '<div style="color:#fff59d;">Light+ (10-12)</div>'+
+      '<div style="color:#c5e1a5;">Light (7-9)</div>'+
+      '<div style="color:#aed581;">Light- (5-6)</div>'+
+      '<div style="color:#64b5f6;">Smooth (0-4)</div>';
+    labs.style.justifyContent = 'space-between';
+    return;
+  }
+  grad.style.background = 'linear-gradient(to bottom,'+
+    'rgba(239,83,80,.9) 0%, rgba(255,167,38,.9) 16.66%, rgba(255,238,88,.9) 33.33%,'+
+    'rgba(174,213,129,.9) 50%, rgba(102,187,106,.9) 66.66%, rgba(100,181,246,.9) 100%)';
+  labs.innerHTML = '<div style="color:#e57373;">Severe Ri≤0.2</div>'+
+    '<div style="color:#ffb74d;">Moderate &gt;0.2</div>'+
+    '<div style="color:#fff59d;">Light+ &gt;0.25</div>'+
+    '<div style="color:#c5e1a5;">Light &gt;0.3</div>'+
+    '<div style="color:#aed581;">Light- &gt;0.5</div>'+
+    '<div style="color:#64b5f6;">Smooth Ri&gt;1</div>';
+  labs.style.justifyContent = 'space-between';
+}
+
+function onWxTurbMethodChange() {
+  var sel = document.getElementById('turbMethodSel');
+  if(!sel) return;
+  WX_TURB_METHOD = sel.value;
+  renderWxCorridorLegend();
+  drawRoute();
+}
+
+function toggleEtopsOpts() {
+  var wrap = document.getElementById('etopsOptsWrap');
+  var chk = document.getElementById('oEtops');
+  if(wrap && chk) wrap.style.display = chk.checked ? 'inline-flex' : 'none';
+  syncEtops207Availability();
+  drawEtops();
+}
+
+function syncEtops207Availability() {
+  var cb = document.getElementById('oEtops207');
+  if(!cb) return;
+  var dis = ACTIVE_ETOPS_KEY === 'NHXK';
+  cb.disabled = dis;
+  if(dis) cb.checked = false;
+}
+
+function applyDefaultCorridorFl() {
+  if(WP.length < 2) return;
+  var brg = bearing(WP[0].lat, WP[0].lng, WP[WP.length-1].lat, WP[WP.length-1].lng);
+  var hdg = (brg*180/Math.PI+360)%360;
+  var east = hdg < 180;
+  CURRENT_FL = east ? 37 : 36;
+}
+
 // EDR 推定 (B787)
 function riToEdr(ri) {
   if(ri === null || isNaN(ri)) return '';
@@ -1920,6 +2068,8 @@ function clearFpl() {
   if(typeof NAV_PZFW !== 'undefined') NAV_PZFW = null;
   if(typeof NAV_FOB !== 'undefined') NAV_FOB = null;
   if(typeof NAV_TAXI_OUT !== 'undefined') NAV_TAXI_OUT = null;
+  ACTIVE_ETOPS_KEY = 'NH9D';
+  if(typeof syncEtops207Availability === 'function') syncEtops207Availability();
   if(typeof updateNavFlightInfo === 'function') updateNavFlightInfo();
   if(typeof renderFpTable === 'function') renderFpTable();
   if(typeof drawRoute === 'function') drawRoute();
@@ -2346,17 +2496,16 @@ function drawRoute() {
   LY.wpts.forEach(function(m){map.removeLayer(m);}); LY.wpts=[];
 
   var turbOn = document.getElementById('oTurb').checked;
-  var curFL = CURRENT_FL;
-  var vwsObj = VWS_BY_FL[curFL] || VWS;
+  var turbMode = WX_TURB_METHOD;
 
   for(var i=0;i<WP.length-1;i++) {
     var a=WP[i], b=WP[i+1];
     if(isNaN(a.lat)||isNaN(a.lng)||isNaN(b.lat)||isNaN(b.lng)) continue;
-    var v   = turbOn ? (vwsObj[a.id]||0) : 0;
-    var col = vwsCol(v);
+    var segVal = turbOn ? corridorShearValue(a.id) : null;
+    var col = turbOn ? wsColor(segVal, turbMode === 'b787' ? 'b787' : turbMode) : 'transparent';
     var brg = bearing(a.lat,a.lng,b.lat,b.lng);
 
-    if(turbOn) {
+    if(turbOn && col !== 'transparent') {
       // 10NMコリドーポリゴン（片側5NM）
       var aL = perpPoint(a.lat,a.lng, brg-Math.PI/2, 5);
       var aR = perpPoint(a.lat,a.lng, brg+Math.PI/2, 5);
@@ -2411,7 +2560,7 @@ function drawRoute() {
 
   drawAlt();
   bringTop();
-  updateRvsmPanel();
+  updateWxFlPanel();
 }
 drawRoute();
 var NAV_DEP = null, NAV_DEST = null, NAV_STD = null, NAV_STA = null;
@@ -2691,19 +2840,24 @@ map.on('zoomend',function() {
 function drawEtops() {
   LY.etops.forEach(function(l){map.removeLayer(l);}); LY.etops=[];
   if(!document.getElementById('oEtops').checked) return;
-  var key  = document.getElementById('etopsSel').value;
-  var data = ETOPS_DATA[key]||{nm60:420,nm180:1210};
+  var key = ACTIVE_ETOPS_KEY;
+  var nmTab = ETOPS_RING_NM[key] || ETOPS_RING_NM.NH9D;
+  var el60 = document.getElementById('oEtops60');
+  var el180 = document.getElementById('oEtops180');
+  var el207 = document.getElementById('oEtops207');
+  var show60 = el60 && el60.checked;
+  var show180 = el180 && el180.checked;
+  var show207 = el207 && el207.checked && !el207.disabled && nmTab[207];
+  var ringDefs = [];
+  if(show207) ringDefs.push({min:207,nm:nmTab[207],w:1,da:'8 5',c:'rgba(210,200,90,0.38)'});
+  if(show180) ringDefs.push({min:180,nm:nmTab[180],w:1.35,da:null,c:'rgba(215,220,120,0.68)'});
+  if(show60) ringDefs.push({min:60,nm:nmTab[60],w:2.1,da:null,c:'rgba(230,240,160,0.92)'});
   ALTS.forEach(function(a) {
-    var rings = [
-      [data.nm60,  'rgba(100,200,100,.7)',  1.5, null,  '60min'],
-      [data.nm180, 'rgba(100,200,100,.55)', 1.5, '7 5', '180min']
-    ];
-    rings.forEach(function(cfg) {
-      var nm=cfg[0],col=cfg[1],w=cfg[2],da=cfg[3],lbl=cfg[4];
+    ringDefs.forEach(function(rd) {
       var c = L.circle([a.lat,a.lng],{
-        radius:nm*NM, color:col, weight:w, fill:false, dashArray:da
+        radius:rd.nm*NM, color:rd.c, weight:rd.w, fill:false, dashArray:rd.da
       }).addTo(map);
-      c.bindTooltip(a.id+' ETOPS '+lbl+': '+nm+' NM',{className:'wxt',sticky:true});
+      c.bindTooltip(a.id+' ETOPS '+rd.min+'min: '+rd.nm+' NM',{className:'wxt',sticky:true});
       LY.etops.push(c);
     });
     var ic = L.divIcon({
@@ -3145,37 +3299,33 @@ function hexToRgba(hex, a) {
 function setFlFromRvsm(fl) {
   CURRENT_FL = fl/10;
   drawRoute();
-  updateRvsmPanel();
 }
 
-function updateRvsmPanel() {
-  var panel = document.getElementById('rvsm-panel');
+function updateWxFlPanel() {
+  var panel = document.getElementById('wx-fl-panel');
   if(!panel) return;
-  var flList, dir;
+  var flList;
   if(WP.length >= 2) {
     var brg = bearing(WP[0].lat,WP[0].lng,WP[WP.length-1].lat,WP[WP.length-1].lng);
     var hdg = (brg*180/Math.PI+360)%360;
-    if(hdg < 180) { flList=[410,390,370,350,330,310,290]; dir='→ EAST'; }
-    else          { flList=[400,380,360,340,320,300];     dir='← WEST'; }
+    if(hdg < 180) { flList=[410,390,370,350,330,310,290]; }
+    else          { flList=[400,380,360,340,320,300]; }
   } else {
-    flList=[410,390,370,350,330,310,290]; dir='----';
+    flList=[410,390,370,350,330,310,290];
   }
   var curFL = CURRENT_FL;
-  var html = '<div style="font-size:8px;color:#78909c;margin-bottom:2px;text-align:center;">RVSM</div>'
-           + '<div style="font-size:8px;color:#546e7a;margin-bottom:3px;text-align:center;">'+dir+'</div>';
+  var mode = WX_TURB_METHOD;
+  var html = '';
   flList.forEach(function(fl) {
     var flKey = fl/10;
-    var vwsData = VWS_BY_FL[flKey] || VWS;
-    var maxV = 0;
-    WP.forEach(function(w){ var v=vwsData[w.id]||0; if(v>maxV) maxV=v; });
-    var col = vwsCol(maxV);
+    var agg = corridorAggMetricForFl(flKey);
+    var col = wsColor(agg, mode === 'b787' ? 'b787' : mode);
     var isSel = (flKey === curFL);
-    html += '<div onclick="setFlFromRvsm('+fl+')" style="cursor:pointer;padding:1px 3px;margin-bottom:1px;'
-          + 'border-radius:2px;font-size:9px;font-family:monospace;text-align:center;'
-          + (isSel
-              ? 'background:#0d2a3e;border:1px solid #1565c0;color:#4fc3f7;'
-              : 'background:'+hexToRgba(col,0.18)+';border:1px solid '+hexToRgba(col,0.35)+';color:'+col+';')
-          + '">FL'+fl+'</div>';
+    var borderCol = (agg !== null && !isNaN(agg)) ? col : '#455a64';
+    html += '<div class="wx-fl-btn" onclick="setFlFromRvsm('+fl+')" style="'
+          + (isSel ? 'outline:2px solid #4fc3f7;outline-offset:-2px;' : '')
+          + 'cursor:pointer;background:rgba(8,14,22,.94);border:1px solid '+borderCol+';color:'
+          + (isSel ? '#4fc3f7' : '#cfd8dc')+'">FL'+fl+'</div>';
   });
   panel.innerHTML = html;
 }
@@ -3229,6 +3379,12 @@ setInterval(function(){
 
 initAtmHScrollSync();
 renderAtmWsLegend();
+(function(){
+  var s = document.getElementById('turbMethodSel');
+  if(s) WX_TURB_METHOD = s.value;
+})();
+renderWxCorridorLegend();
+updateWxFlPanel();
 
 </script>
 
