@@ -47,7 +47,6 @@
   #vleg{position:absolute;right:8px;top:10px;z-index:900;background:rgba(8,10,20,.92);border:1px solid #1e2a38;border-radius:4px;padding:6px 10px 6px 6px;pointer-events:none;display:flex;flex-direction:row;align-items:flex-start;gap:10px;max-width:calc(100vw - 16px);flex-wrap:wrap;justify-content:flex-end;}
   #wx-fl-panel .wx-fl-btn{cursor:pointer;padding:3px 8px;margin-bottom:4px;border-radius:3px;font-size:13px;font-family:monospace;text-align:center;min-width:52px;box-sizing:border-box;}
   .etops-opts{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;max-width:min(320px,90vw);}
-  #lightning-attrib{font-size:9px;color:#78909c;pointer-events:none;line-height:1.35;}
   #statusbar{background:#080a12;border-top:1px solid #1a2535;padding:3px 8px;padding-bottom:max(3px,env(safe-area-inset-bottom));display:flex;flex-wrap:wrap;gap:12px;font-size:10px;color:#546e7a;flex-shrink:0;}
   #msg{color:#ffa726;}
   #ac-lbl{color:#4fc3f7;}
@@ -189,7 +188,7 @@
     <label class="ck"><input type="checkbox" id="oGlide" onchange="updateGlide()"> Glide (B787)</label>
     <label class="ck"><input type="checkbox" id="oFir" checked onchange="drawFir()"> FIR</label>
     <label class="ck"><input type="checkbox" id="oSig" checked onchange="loadSigmets()"> SIGMETs</label>
-    <label class="ck"><input type="checkbox" id="oLightning" onchange="toggleLightning()"> Lightning</label>
+    <label class="ck" style="display:none;"><input type="checkbox" id="oLightning" onchange="toggleLightning()"> Lightning</label>
     <span class="wx-ovl-break"></span>
     <label class="ck"><input type="checkbox" id="oTurb" checked onchange="drawRoute()"> Turbulence corridor</label>
     <select id="turbMethodSel" class="btn" onchange="onWxTurbMethodChange()" style="max-width:200px;">
@@ -209,9 +208,6 @@
 
   <!-- MAP -->
   <div id="map-wrap">
-    <div id="lightning-attrib" style="display:none;position:absolute;right:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:850;max-width:min(280px,calc(100vw - 100px));text-align:right;background:rgba(8,10,20,.82);padding:4px 8px;border-radius:4px;border:1px solid #1e2a38;">
-      Lightning data: Blitzortung.org / lightningmaps.org
-    </div>
     <div id="map"></div>
     <div id="vleg">
       <div id="wx-fl-panel" style="pointer-events:auto;display:flex;flex-direction:column;align-items:stretch;"></div>
