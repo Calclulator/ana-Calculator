@@ -2121,9 +2121,9 @@ var map = L.map('map',{
   maxZoom: 18,
   zoomControl:false,
   attributionControl:false,
-  maxBounds: [[-85, -180], [85, 180]],
-  maxBoundsViscosity: 1.0,
-  worldCopyJump: false
+  maxBounds: [[-85, -1e9], [85, 1e9]],
+  maxBoundsViscosity: 0,
+  worldCopyJump: true
 });
 L.control.zoom({position:'topleft'}).addTo(map);
 map.on('mousemove',function(e){
