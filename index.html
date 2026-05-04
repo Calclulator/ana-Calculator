@@ -2144,8 +2144,7 @@ function setBase(k) {
     updateWhenIdle:lowBw,
     keepBuffer:lowBw?0:2,
     errorTileUrl:BLANK_TILE,
-    noWrap: true,
-    bounds: TILE_WORLD_BOUNDS
+    noWrap: false
   }).addTo(map);
   LY.base.bringToBack();
 }
