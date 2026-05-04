@@ -168,7 +168,7 @@
     <label class="ck"><input type="checkbox" id="oFir" checked onchange="drawFir()"> FIR</label>
     <label class="ck"><input type="checkbox" id="oSig" checked onchange="loadSigmets()"> SIGMETs</label>
     <label class="ck"><input type="checkbox" id="oTurb" checked onchange="drawRoute()"> Turbulence corridor</label>
-    <label class="ck"><input type="checkbox" id="oMetar" onchange="loadMetars()"> METAR</label>
+    <label class="ck"><input type="checkbox" id="oMetar" onchange="drawAlt()"> A/P</label>
     <span class="lbl" style="margin-left:8px;">回避</span>
     <button class="btn" id="avoidL" onclick="setAvoidSide('L')" style="padding:2px 6px;">L</button>
     <button class="btn" id="avoidR" onclick="setAvoidSide('R')" style="padding:2px 6px;">R</button>
@@ -646,7 +646,7 @@ var APT = {
 var BLANK_TILE=(function(){var c=document.createElement('canvas');c.width=c.height=1;return c.toDataURL();})();
 var LY = {
   base:null, sat:null, radar:null,
-  corridor:[], route:[], wpts:[], etops:[],
+  corridor:[], route:[], wpts:[], etops:[], alt:[],
   fir:null, sig:null, metar:[], glide:null, ac:null, avoidL:null, avoidR:null
 };
 var lowBw = false;
@@ -2298,6 +2298,47 @@ var KEY_WP = {
   PGUM:1,VAMOS:1,RIDLL:1,FACED:1,UKATA:1,LOEBB:1
 };
 
+function drawAlt() {
+  LY.alt.forEach(function(l){ try { map.removeLayer(l); } catch(e) {} });
+  LY.alt = [];
+  if(!document.getElementById('oMetar').checked) return;
+  if(!WP.length || !ALTS.length) return;
+  var limitM = 400 * NM;
+  ALTS.forEach(function(a) {
+    var minD = Infinity;
+    var aptPt = L.latLng(a.lat, a.lng);
+    for(var i = 0; i < WP.length; i++) {
+      var d = aptPt.distanceTo(L.latLng(WP[i].lat, WP[i].lng));
+      if(d < minD) minD = d;
+    }
+    if(minD > limitM) return;
+    var cOut = L.circle([a.lat, a.lng], {
+      radius: 400 * NM,
+      color: 'rgba(100,200,100,0.7)',
+      weight: 1.5,
+      fill: false,
+      interactive: false
+    }).addTo(map);
+    var cIn = L.circle([a.lat, a.lng], {
+      radius: 200 * NM,
+      color: 'rgba(100,200,100,0.5)',
+      weight: 1,
+      fill: false,
+      interactive: false
+    }).addTo(map);
+    LY.alt.push(cOut, cIn);
+    var ic = L.divIcon({
+      html: '<span style="font-size:9px;color:rgba(130,230,130,.95);font-family:monospace;'
+          +'background:rgba(6,10,20,.82);padding:1px 4px;border-radius:2px;">'+a.id+'</span>',
+      className: '',
+      iconSize: [40, 14],
+      iconAnchor: [20, 7]
+    });
+    LY.alt.push(L.marker([a.lat, a.lng], {icon: ic, interactive: false}).addTo(map));
+  });
+  bringTop();
+}
+
 function drawRoute() {
   // 既存レイヤー削除
   LY.corridor.forEach(function(l){map.removeLayer(l);}); LY.corridor=[];
@@ -2368,6 +2409,7 @@ function drawRoute() {
     LY.wpts.push(L.marker([e.lat,e.lng],{icon:ic}).addTo(map));
   });
 
+  drawAlt();
   bringTop();
   updateRvsmPanel();
 }
@@ -3148,6 +3190,7 @@ function bringTop() {
   if(LY.avoidL) try{LY.avoidL.bringToFront();}catch(e){}
   if(LY.avoidR) try{LY.avoidR.bringToFront();}catch(e){}
   LY.etops.forEach(function(l){try{l.bringToFront();}catch(e){}});
+  LY.alt.forEach(function(l){try{l.bringToFront();}catch(e){}});
   LY.wpts.forEach(function(m){try{m.bringToFront();}catch(e){}});
   LY.metar.forEach(function(m){try{m.bringToFront();}catch(e){}});
   if(LY.ac) try{LY.ac.bringToFront();}catch(e){}
@@ -3166,7 +3209,7 @@ function refreshAll() {
   if(radarOn) loadRadar();
   if(document.getElementById('oSig').checked)   loadSigmets();
   if(document.getElementById('dep').checked)    fetchAc();
-  if(document.getElementById('oMetar').checked) loadMetars();
+  if(typeof drawAlt === 'function') drawAlt();
 }
 
 function toggleBw() {
