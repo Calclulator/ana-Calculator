@@ -2086,6 +2086,8 @@ var TILE_WORLD_BOUNDS = L.latLngBounds([-90, -180], [90, 180]);
 var map = L.map('map',{
   center:[20,130],
   zoom:4,
+  minZoom: 3,
+  maxZoom: 18,
   zoomControl:false,
   attributionControl:false,
   maxBounds: [[-90, -180], [90, 180]],
@@ -2914,7 +2916,7 @@ drawFir();
 function loadSigmets() {
   if(LY.sig){map.removeLayer(LY.sig); LY.sig=null;}
   if(!document.getElementById('oSig').checked) return;
-  fetch('https://aviationweather.gov/api/data/airsigmet?format=geojson&type=sigmet')
+  fetch('https://sigmet.nomadic-tamuzo00.workers.dev/api/data/airsigmet?format=geojson&type=sigmet')
     .then(function(r){return r.json();})
     .then(function(d){
       if(!d.features||!d.features.length) return;
