@@ -229,6 +229,9 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
       global.GFS.elapsedMs = Date.now() - t0;
       global.GFS.urls = urls;
       console.log('[GFS] ready ' + out.length + '/' + urls.length + ' slices, ' + global.GFS.elapsedMs + 'ms cycle=' + cycle);
+      if (typeof applyGfsRadarForCurrentMethod === 'function') {
+        try { applyGfsRadarForCurrentMethod(); } catch (e2) {}
+      }
     }).catch(function(err) {
       global.GFS.status = 'error';
       global.GFS.error = String(err && err.message ? err.message : err);
