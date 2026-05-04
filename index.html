@@ -2916,7 +2916,7 @@ drawFir();
 function loadSigmets() {
   if(LY.sig){map.removeLayer(LY.sig); LY.sig=null;}
   if(!document.getElementById('oSig').checked) return;
-  fetch('https://sigmet.nomadic-tamuzo00.workers.dev/api/data/airsigmet?format=geojson&type=sigmet')
+  fetch('https://sigmet.nomadic-tamuzo00.workers.dev/api/data/isigmet?format=geojson')
     .then(function(r){return r.json();})
     .then(function(d){
       if(!d.features||!d.features.length) return;
