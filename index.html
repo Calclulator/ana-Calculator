@@ -3472,8 +3472,7 @@ function connectLightningSocket() {
   }
   var chk = document.getElementById('oLightning');
   if(!chk || !chk.checked) return;
-  var sn = 1 + Math.floor(Math.random() * 7);
-  var url = 'wss://ws' + sn + '.blitzortung.org/';
+  var url = 'wss://sigmet.nomadic-tamuzo00.workers.dev/lightning';
   var ws;
   try {
     ws = new WebSocket(url);
