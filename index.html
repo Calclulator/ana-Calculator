@@ -2920,6 +2920,9 @@ function loadSigmets() {
     .then(function(r){return r.json();})
     .then(function(d){
       if(!d.features||!d.features.length) return;
+      function sigPopupEsc(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
       LY.sig = L.geoJSON(d,{
         style:function(f){
           var h=(f.properties.hazard||'').toUpperCase();
@@ -2927,10 +2930,20 @@ function loadSigmets() {
           return{color:c,weight:1.5,fillOpacity:.1,fillColor:c};
         },
         onEachFeature:function(f,l){
+          var props = f.properties || {};
           l.bindTooltip(
-            (f.properties.hazard||'SIGMET')+'\n'+(f.properties.rawAirSigmet||'').slice(0,80),
+            (props.hazard||'SIGMET')+'\n'+(props.rawAirSigmet||props.rawSigmet||'').slice(0,80),
             {className:'sgx',sticky:true}
           );
+          var hazard = (props.hazard || 'SIGMET').toUpperCase();
+          var firLabel = props.firName || props.firId || props.icaoId || '';
+          var title = hazard + (firLabel ? ' - ' + firLabel : '');
+          var raw = props.rawAirSigmet || props.rawSigmet || '(本文なし)';
+          var html = '<div style="font-family:monospace;font-size:11px;max-width:400px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">'
+            + '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;">' + sigPopupEsc(title) + '</div>'
+            + '<pre style="white-space:pre-wrap;margin:0;color:#263238;">' + sigPopupEsc(raw) + '</pre>'
+            + '</div>';
+          l.bindPopup(html, {maxWidth: 450});
         }
       }).addTo(map);
       bringTop();
