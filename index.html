@@ -137,7 +137,7 @@
       <option value="bom-radar">BOM Radar</option>
       <option value="himawari-fd-vis">Himawari-9 可視光</option>
       <option value="himawari-fd-wv">Himawari-9 水蒸気</option>
-      <option value="himawari-fd-sandwich">Himawari-9 雲頂強調</option>
+      <option value="himawari-fd-sandwich" selected>Himawari-9 雲頂強調</option>
       <option value="iem-nexrad">NEXRAD Radar (US)</option>
       <option value="none">衛星なし</option>
     </select>
@@ -156,7 +156,7 @@
   <!-- BAR4: OVERLAYS -->
   <div class="bar">
     <span class="lbl">OVERLAYS</span>
-    <label class="ck"><input type="checkbox" id="oEtops" checked onchange="drawEtops()"> ETOPS rings</label>
+    <label class="ck"><input type="checkbox" id="oEtops" onchange="drawEtops()"> ETOPS rings</label>
     <select id="etopsSel" class="btn" onchange="drawEtops()" style="max-width:170px;">
       <option value="NH8A">NH8A 435/1252NM</option>
       <option value="NH8C">NH8C 429/1237NM</option>
@@ -652,7 +652,7 @@ var LY = {
 var lowBw = false;
 var firGeoJSON = null;
 var radarOn = false;
-var satKey = 'himawari';
+var satKey = 'himawari-fd-sandwich';
 var satOffsetMins = 0; // 0=最新, 10=10分前, ...最大180分前
 var SAT_LAYER_CACHE = {};   // satKey+'|'+offsetMins → {ly, timeLabel, source}
 var SAT_API_CACHE   = {};   // satKey → API data (JMA list / RainViewer frames)
@@ -2227,7 +2227,7 @@ function loadSat(k) {
   LY.sat.on('tileerror',function(){ document.getElementById('sat-lbl').textContent = s.label+' (データなし '+t.slice(11,16)+'Z)'; });
   setTimeout(function(){ bringTop(); }, 300);
 }
-loadSat('himawari');
+loadSat('himawari-fd-sandwich');
 
 function setSatOp(v) {
   var val = parseFloat(v);
@@ -2710,20 +2710,18 @@ function drawFir() {
     return;
   }
   var url1 = 'https://raw.githubusercontent.com/vatsimnetwork/vatspy-data-project/master/Boundaries.geojson';
-  var url2 = 'https://raw.githubusercontent.com/nicovince/airspace/refs/heads/main/data/AP_FIR.geojson';
-  Promise.all([
-    fetch(url1).then(function(r){ return r.json(); }).catch(function(){ return {type:'FeatureCollection',features:[]}; }),
-    fetch(url2).then(function(r){ return r.json(); }).then(function(d){ console.log('AP FIR features:', d.features ? d.features.length : 0); return d; }).catch(function(e){ console.log('AP FIR fetch failed:', e.message); return {type:'FeatureCollection',features:[]}; })
-  ]).then(function(results){
-    console.log('url1 FIR features:', results[0].features ? results[0].features.length : 0);
-    firGeoJSON = {
-      type: 'FeatureCollection',
-      features: (results[0].features||[]).concat(results[1].features||[])
-    };
-    buildFirIndex(firGeoJSON);
-    renderFir(firGeoJSON);
-    if(FP_ROWS.length) renderFpTable();
-  });
+  fetch(url1)
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      console.log('FIR features:', data.features ? data.features.length : 0);
+      firGeoJSON = data;
+      buildFirIndex(firGeoJSON);
+      renderFir(firGeoJSON);
+      if(FP_ROWS.length) renderFpTable();
+    })
+    .catch(function(){
+      firGeoJSON = {type:'FeatureCollection',features:[]};
+    });
 }
 drawFir();
 
