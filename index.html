@@ -860,6 +860,35 @@ function navCoord(s) {
   return {lat:lat, lng:lng};
 }
 
+function gfsWaypointsFromWP() {
+  var a = [];
+  var i, w;
+  for (i = 0; i < WP.length; i++) {
+    w = WP[i];
+    a.push({
+      lat: w.lat,
+      lon: w.lng,
+      ctme: (w.ctme === undefined || w.ctme === null) ? null : w.ctme
+    });
+  }
+  return a;
+}
+
+function gfsDepartureUtcDate() {
+  var refMin = DEP_ATO_MIN !== null ? DEP_ATO_MIN : DEP_STD_MIN;
+  var d = new Date();
+  if (refMin === null || typeof refMin !== 'number') {
+    return new Date(Date.UTC(
+      d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(),
+      d.getUTCHours(), d.getUTCMinutes(), 0
+    ));
+  }
+  return new Date(Date.UTC(
+    d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(),
+    Math.floor(refMin / 60), refMin % 60, 0
+  ));
+}
+
 function runParse() {
   var txt = document.getElementById('fpl-txt').value;
   if(!txt||txt.length<30) {
@@ -1150,7 +1179,7 @@ function runParse() {
 
   if (fplParseOk) {
     try {
-      gfsLoad(WP, DEP_ATO_MIN !== null ? DEP_ATO_MIN : DEP_STD_MIN);
+      gfsLoad(gfsWaypointsFromWP(), gfsDepartureUtcDate());
     } catch (e) {
       console.error('GFS load init failed:', e);
     }
