@@ -191,10 +191,13 @@
     <label class="ck" style="display:none;"><input type="checkbox" id="oLightning" onchange="toggleLightning()"> Lightning</label>
     <span class="wx-ovl-break"></span>
     <label class="ck"><input type="checkbox" id="oTurb" checked onchange="drawRoute()"> Turbulence corridor</label>
-    <select id="turbMethodSel" class="btn" onchange="onWxTurbMethodChange()" style="max-width:200px;">
+    <select id="turbMethodSel" class="btn" onchange="onWxTurbMethodChange()" style="max-width:220px;">
       <option value="company">Company (3段階)</option>
       <option value="vws" selected>VWS (6段階)</option>
       <option value="b787">Ri (B787 Richardson, 6段階)</option>
+      <option value="GFS-VWS">GFS-VWS</option>
+      <option value="GFS-Ellrod TI1">GFS-Ellrod TI1</option>
+      <option value="GFS-Ellrod TI2">GFS-Ellrod TI2</option>
     </select>
     <label class="ck"><input type="checkbox" id="oMetar" onchange="drawAlt()"> A/P</label>
     <span class="lbl" style="margin-left:8px;">回避</span>
@@ -329,6 +332,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="gfs-client.js"></script>
+<script src="gfs-radar-layer.js"></script>
 <script>
 // =====================================================================
 // PDF.js
@@ -440,6 +444,7 @@ var BASES = {
 var WP = [];
 var CURRENT_FL = 35;
 var WX_TURB_METHOD = 'vws';
+var gfsRadarLayer = null;
 var ACTIVE_ETOPS_KEY = 'NH9D';
 var VWS = {};
 var VWS_BY_FL = {};
@@ -1606,6 +1611,7 @@ function wsColor(val, mode) {
     if(val > 0.2) return 'rgba(255,167,38,.35)';
     return 'rgba(239,83,80,.40)';
   }
+  if(typeof mode === 'string' && mode.indexOf('GFS-') === 0) return 'transparent';
   return 'transparent';
 }
 
@@ -1643,6 +1649,7 @@ function corridorShearValue(wpId) {
   var altLowFt = flLo * 100;
   var altFt = flTen * 100;
   var mode = WX_TURB_METHOD;
+  if(typeof mode === 'string' && mode.indexOf('GFS-') === 0) return null;
   if(mode === 'company') return companyValue(cLo, cHi, 1000);
   if(mode === 'vws') return vwsValue(cLo, cHi, 1000);
   if(mode === 'b787') return b787RiValue(cLo, cHi, altLowFt, altFt);
@@ -1674,7 +1681,16 @@ function renderWxCorridorLegend() {
   if(!grad || !labs) return;
   var mode = WX_TURB_METHOD;
   if(ttl) {
-    ttl.textContent = mode === 'company' ? 'Company' : (mode === 'b787' ? 'Ri' : 'VWS');
+    if(typeof mode === 'string' && mode.indexOf('GFS-') === 0) ttl.textContent = mode;
+    else ttl.textContent = mode === 'company' ? 'Company' : (mode === 'b787' ? 'Ri' : 'VWS');
+  }
+  if(typeof mode === 'string' && mode.indexOf('GFS-') === 0) {
+    grad.style.background = 'linear-gradient(to bottom,'+
+      'rgba(100,181,246,.92) 0%, rgba(174,213,129,.88) 35%, rgba(255,167,38,.88) 70%, rgba(239,83,80,.92) 100%)';
+    labs.innerHTML = '<div style="color:#e3f2fd;">GFS proxy field</div>'+
+      '<div style="color:#90a4ae;font-size:11px;">NAV LOG Apply後にGFS readyで表示</div>';
+    labs.style.justifyContent = 'center';
+    return;
   }
   if(mode === 'company') {
     grad.style.background = 'linear-gradient(to bottom,'+
@@ -1718,6 +1734,7 @@ function onWxTurbMethodChange() {
   WX_TURB_METHOD = sel.value;
   renderWxCorridorLegend();
   drawRoute();
+  applyGfsRadarForCurrentMethod();
 }
 
 function toggleEtopsOpts() {
@@ -2617,6 +2634,30 @@ function drawRoute() {
   bringTop();
   updateWxFlPanel();
 }
+
+function applyGfsRadarForCurrentMethod() {
+  if(typeof map === 'undefined' || !map) return;
+  if(gfsRadarLayer) {
+    try { map.removeLayer(gfsRadarLayer); } catch(e) {}
+    gfsRadarLayer = null;
+  }
+  var method = WX_TURB_METHOD;
+  if(method.indexOf('GFS-') !== 0) return;
+  var methodKey = method === 'GFS-VWS' ? 'VWS'
+    : method === 'GFS-Ellrod TI1' ? 'TI1'
+    : method === 'GFS-Ellrod TI2' ? 'TI2' : null;
+  if(methodKey && window.GFS && window.GFS.status === 'ready') {
+    if(typeof GfsRadar !== 'undefined' && GfsRadar.render) {
+      gfsRadarLayer = GfsRadar.render(map, {
+        method: methodKey,
+        fl: CURRENT_FL,
+        validUtc: new Date()
+      });
+    }
+  }
+  bringTop();
+}
+
 drawRoute();
 var NAV_DEP = null, NAV_DEST = null, NAV_STD = null, NAV_STA = null;
 
@@ -3367,6 +3408,7 @@ function hexToRgba(hex, a) {
 function setFlFromRvsm(fl) {
   CURRENT_FL = fl/10;
   drawRoute();
+  applyGfsRadarForCurrentMethod();
 }
 
 function updateWxFlPanel() {
@@ -3616,6 +3658,7 @@ function bringTop() {
   if(LY.radar) try{LY.radar.bringToFront();}catch(e){}
   if(LY.fir)   try{LY.fir.bringToFront();}catch(e){}
   if(LY.glide) try{LY.glide.bringToFront();}catch(e){}
+  if(gfsRadarLayer) try{gfsRadarLayer.bringToFront();}catch(e){}
   LY.corridor.forEach(function(l){try{l.bringToFront();}catch(e){}});
   LY.route.forEach(function(l){try{l.bringToFront();}catch(e){}});
   if(LY.avoidL) try{LY.avoidL.bringToFront();}catch(e){}
