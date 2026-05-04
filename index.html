@@ -135,12 +135,10 @@
     <span class="lbl">SAT</span>
     <select id="satSel" class="btn" onchange="loadSat(this.value)" style="max-width:210px;">
       <option value="himawari">Himawari-9（アジア太平洋）</option>
-      <option value="rainviewer-radar">RainViewer Radar</option>
-      <option value="bom-radar">BOM Radar</option>
+      <option value="rainviewer-radar">RainViewer Radar (世界)</option>
       <option value="himawari-fd-vis">Himawari-9 可視光</option>
       <option value="himawari-fd-wv">Himawari-9 水蒸気</option>
       <option value="himawari-fd-sandwich" selected>Himawari-9 雲頂強調</option>
-      <option value="iem-nexrad">NEXRAD Radar (US)</option>
       <option value="none">衛星なし</option>
     </select>
     <span class="lbl">透過度</span>
@@ -399,9 +397,7 @@ var ETOPS_RING_NM = {
 var GIBS = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best';
 var SATS = {
   'himawari':{jma:true,area:'fd',band:'B13',prod:'TBB',label:'Himawari-9 (IR)'},
-  'rainviewer-radar':{rainviewer:true,label:'RainViewer Radar'},
-  'bom-radar':{rainviewer:true,label:'BOM Radar'},
-  'iem-nexrad':{wms:true,url:'https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0r.cgi',layers:'nexrad-n0r-900913',label:'NEXRAD Radar (US)'},
+  'rainviewer-radar':{rainviewer:true,label:'RainViewer Radar (世界)'},
   'himawari-fd-vis':{jma:true,area:'fd',band:'B03',prod:'ALBD',label:'Himawari-9 可視光'},
   'himawari-fd-wv':{jma:true,area:'fd',band:'B08',prod:'TBB',label:'Himawari-9 水蒸気'},
   'himawari-fd-sandwich':{jma:true,area:'fd',band:'SND',prod:'ETC',label:'Himawari-9 雲頂強調'}
@@ -816,13 +812,6 @@ function toggleSatPlay() {
     sl.value = cur + 1;
     onSatTimeSlide(cur + 1);
   }, 1000);
-}
-function onSatTimeChange(val) {
-  satOffsetMins = parseInt(val)*10;
-  var t = gibsTimeOffset(satOffsetMins);
-  var lbl = document.getElementById('satTimeLbl');
-  lbl.textContent = satOffsetMins===0 ? '最新 ('+t.slice(11,16)+'Z)' : satOffsetMins+'分前 ('+t.slice(11,16)+'Z)';
-  loadSat(satKey);
 }
 
 // =====================================================================
@@ -2215,20 +2204,6 @@ function _makeRvEntry(k, host, past, offset) {
   return entry;
 }
 
-function _makeWmsEntry(k, s, offset) {
-  var ck = _satCk(k, offset);
-  if(SAT_LAYER_CACHE[ck]) return SAT_LAYER_CACHE[ck];
-  var tgt = new Date(Date.now() - offset*60*1000);
-  tgt.setUTCMinutes(Math.floor(tgt.getUTCMinutes()/5)*5, 0, 0);
-  var ts = tgt.getUTCFullYear()+'-'+('0'+(tgt.getUTCMonth()+1)).slice(-2)+'-'+('0'+tgt.getUTCDate()).slice(-2)+
-           'T'+('0'+tgt.getUTCHours()).slice(-2)+':'+('0'+tgt.getUTCMinutes()).slice(-2)+':00Z';
-  var tl = ('0'+tgt.getUTCHours()).slice(-2)+':'+('0'+tgt.getUTCMinutes()).slice(-2)+'Z';
-  var ly = L.tileLayer.wms(s.url, {layers:s.layers,format:'image/png',transparent:true,opacity:0,version:'1.1.1',attribution:'IEM/NEXRAD',TIME:ts});
-  var entry = {ly:ly, timeLabel:tl, source:'IEM'};
-  SAT_LAYER_CACHE[ck] = entry;
-  return entry;
-}
-
 function loadSat(k) {
   var prevKey = satKey;
   satKey = k;
@@ -2244,7 +2219,7 @@ function loadSat(k) {
     LY.sat = null;
   }
 
-  if(k!=='rainviewer-radar' && k!=='bom-radar') {
+  if(k!=='rainviewer-radar') {
     radarOn = false;
     if(LY.radar){ map.removeLayer(LY.radar); LY.radar=null; }
   }
@@ -2273,7 +2248,7 @@ function loadSat(k) {
     return;
   }
 
-  // ── RainViewer Radar / BOM Radar ──────────────────────────────────────
+  // ── RainViewer Radar ──────────────────────────────────────────────────
   if(s.rainviewer) {
     function _showRv(host, past) {
       var e = _makeRvEntry(k, host, past, capturedOffset);
@@ -2306,19 +2281,6 @@ function loadSat(k) {
         if(e && e.name==='AbortError') return;
         document.getElementById('sat-lbl').textContent = label+' (取得失敗)';
       });
-    return;
-  }
-
-  // ── NEXRAD WMS (IEM) ──────────────────────────────────────────────────
-  if(s.wms) {
-    var we = _makeWmsEntry(k, s, capturedOffset);
-    we.ly.on('tileerror', function(){
-      document.getElementById('sat-lbl').textContent = capturedOffset>0
-        ? label+' (過去データ未対応の可能性あり)' : label+' (タイルエラー)';
-    });
-    _activateSat(we, op, label, capturedOffset);
-    var wmsOthers = _allOffsets().filter(function(o){ return o !== capturedOffset; });
-    _preloadEntries(wmsOthers.map(function(o){ return _makeWmsEntry(k, s, o); }));
     return;
   }
 

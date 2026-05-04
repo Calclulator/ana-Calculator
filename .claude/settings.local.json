@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(\\(Get-Content \"C:\\\\Users\\\\nomad\\\\OneDrive\\\\ドキュメント\\\\GitHub\\\\ana-Calculator\\\\index.html\" | Measure-Object -Line\\).Lines)"
+    ]
+  }
+}
