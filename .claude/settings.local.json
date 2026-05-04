@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(\\(Get-Content \"C:\\\\Users\\\\nomad\\\\OneDrive\\\\ドキュメント\\\\GitHub\\\\ana-Calculator\\\\index.html\" | Measure-Object -Line\\).Lines)"
+      "PowerShell(\\(Get-Content \"C:\\\\Users\\\\nomad\\\\OneDrive\\\\ドキュメント\\\\GitHub\\\\ana-Calculator\\\\index.html\" | Measure-Object -Line\\).Lines)",
+      "WebSearch",
+      "WebFetch(domain:api.rainviewer.com)",
+      "WebFetch(domain:docs.lightningmaps.org)",
+      "WebFetch(domain:openweathermap.org)",
+      "WebFetch(domain:www.rainviewer.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.limaps.org)",
+      "WebFetch(domain:www.gkbrk.com)"
     ]
   }
 }
