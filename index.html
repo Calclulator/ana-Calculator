@@ -328,6 +328,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="gfs-client.js"></script>
 <script>
 // =====================================================================
 // PDF.js
@@ -866,6 +867,7 @@ function runParse() {
     return;
   }
   clearSatCache();
+  var fplParseOk = false;
   var newWP=[], newVWS={}, newAlts=[], newEtps=[], newVWS_BY_FL={}, newWfmData={};
   var dep=null, dest=null, reg=null, etopsKey=null, depFuel=null;
   var lines = txt.split('\n');
@@ -1135,6 +1137,7 @@ function runParse() {
     console.log(VWS_BY_FL);
     console.log('WFM_DATA WPs:', Object.keys(WFM_DATA).length);
     applyDefaultCorridorFl();
+    fplParseOk = true;
   }
   if(newAlts.length>0) ALTS = newAlts;
   if(newEtps.length>0) ETPS = newEtps;
@@ -1144,6 +1147,14 @@ function runParse() {
   syncEtops207Availability();
 
   buildFpRows(dep, depFuel);
+
+  if (fplParseOk) {
+    try {
+      gfsLoad(WP, DEP_ATO_MIN !== null ? DEP_ATO_MIN : DEP_STD_MIN);
+    } catch (e) {
+      console.error('GFS load init failed:', e);
+    }
+  }
 
   // UI更新
   if(dep&&dest) {
