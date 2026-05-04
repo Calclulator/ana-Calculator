@@ -25,6 +25,15 @@
   select.btn{padding:2px 4px;}
   .ck{display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#90a4ae;}
   .ck input{margin:0;cursor:pointer;width:12px;height:12px;accent-color:#4fc3f7;}
+  #wx-panel .wx-ctrl-bar .lbl{font-size:13px;}
+  #wx-panel .wx-ctrl-bar .btn{font-size:14px;padding:3px 9px;}
+  #wx-panel .wx-ctrl-bar .ck{font-size:14px;}
+  #wx-panel .wx-ctrl-bar .ck input{width:14px;height:14px;}
+  #wx-panel .wx-ctrl-bar #etopsOptsWrap .ck{font-size:13px!important;}
+  #wx-panel .wx-ctrl-bar #satOpV,
+  #wx-panel .wx-ctrl-bar #satTimeLbl{font-size:13px!important;}
+  #wx-panel .wx-ctrl-bar #sat-lbl{font-size:12px!important;}
+  #wx-panel .wx-ctrl-bar #avoidNm{font-size:14px!important;}
   #fp-navlog{background:#060a12;border-bottom:1px solid #1e2a38;display:flex;padding:8px;flex-direction:column;gap:6px;flex-shrink:0;}
   #fp-navlog textarea{width:100%;height:88px;background:#030608;border:1px solid #1e2a38;border-radius:3px;color:#90a4ae;font-family:inherit;font-size:11px;padding:5px 7px;resize:vertical;line-height:1.5;}
   #fp-navlog textarea:focus{outline:none;border-color:#1565c0;color:#cfd8dc;}
@@ -119,11 +128,11 @@
     <span style="color:#4fc3f7;font-size:13px;font-weight:bold;letter-spacing:.1em;">AJX WX</span>
     <span style="color:#546e7a;font-size:10px;">v2.5</span>
     <span id="route-lbl" style="color:#78909c;font-size:11px;margin:0 6px;">----→----</span>
-    <label class="ck"><input type="checkbox" id="dep" onchange="onDep(this)"> 巡航についたらチェックしてください</label>
+    <label class="ck"><input type="checkbox" id="dep" onchange="onDep(this)"> 機体位置表示を有効</label>
     <button class="btn" onclick="map.zoomOut()">−</button>
     <button class="btn" onclick="map.zoomIn()">＋</button>
-    <button class="btn" onclick="frameRoute()">全体表示</button>
-    <button class="btn" onclick="goToAircraft()">Now</button>
+    <button class="btn" onclick="frameRoute()">RTE全体表示</button>
+    <button class="btn" onclick="goToAircraft()">現在位置表示</button>
         
     <label class="ck" style="margin-left:auto;">
       <span class="lbl">低速モード</span>
@@ -132,7 +141,7 @@
   </div>
 
   <!-- BAR2: SAT時刻スライダー -->
-  <div class="bar">
+  <div class="bar wx-ctrl-bar">
     <span class="lbl">SAT</span>
     <select id="satSel" class="btn" onchange="loadSat(this.value)" style="max-width:210px;">
       <option value="himawari">Himawari-9（アジア太平洋）</option>
@@ -155,7 +164,7 @@
   </div>
 
   <!-- BAR4: OVERLAYS -->
-  <div class="bar">
+  <div class="bar wx-ctrl-bar">
     <span class="lbl">OVERLAYS</span>
     <label class="ck"><input type="checkbox" id="oEtops" onchange="toggleEtopsOpts()"> ETOPS rings</label>
     <span id="etopsOptsWrap" class="etops-opts" style="display:none;">
@@ -2094,9 +2103,9 @@ var map = L.map('map',{
   maxZoom: 18,
   zoomControl:false,
   attributionControl:false,
-  maxBounds: [[-90, -180], [90, 180]],
-  maxBoundsViscosity: 1.0,
-  worldCopyJump: false
+  maxBounds: [[-90, -1e9], [90, 1e9]],
+  maxBoundsViscosity: 0,
+  worldCopyJump: true
 });
 L.control.zoom({position:'topleft'}).addTo(map);
 map.on('mousemove',function(e){
@@ -2229,7 +2238,7 @@ function _makeRvEntry(k, host, past, offset) {
   var ts = new Date(frame.time*1000);
   var tl = ('0'+ts.getUTCHours()).slice(-2)+':'+('0'+ts.getUTCMinutes()).slice(-2)+'Z';
   var url = host+frame.path+'/256/{z}/{x}/{y}/4/1_1.png';
-  var ly = L.tileLayer(url, {opacity:0,maxZoom:10,updateWhenIdle:false,keepBuffer:0,errorTileUrl:BLANK_TILE,noWrap:true,bounds:TILE_WORLD_BOUNDS});
+  var ly = L.tileLayer(url, {opacity:0,maxZoom:12,maxNativeZoom:7,updateWhenIdle:false,keepBuffer:0,errorTileUrl:BLANK_TILE,noWrap:true,bounds:TILE_WORLD_BOUNDS});
   var entry = {ly:ly, timeLabel:tl, source:'RainViewer'};
   SAT_LAYER_CACHE[ck] = entry;
   return entry;
@@ -2392,7 +2401,7 @@ function loadRadar() {
       if(LY.radar){map.removeLayer(LY.radar); LY.radar=null;}
       LY.radar = L.tileLayer(
         d.host+f.path+'/256/{z}/{x}/{y}/4/1_1.png',
-        {opacity:0.65,maxZoom:10,updateWhenIdle:lowBw,keepBuffer:lowBw?0:2,noWrap:true,bounds:TILE_WORLD_BOUNDS}
+        {opacity:0.65,maxZoom:12,maxNativeZoom:7,updateWhenIdle:lowBw,keepBuffer:lowBw?0:2,noWrap:true,bounds:TILE_WORLD_BOUNDS}
       ).addTo(map);
       bringTop();
     }).catch(function(){});
@@ -2507,8 +2516,8 @@ function drawRoute() {
       if(!isNaN(aL[0])&&!isNaN(aL[1])&&!isNaN(aR[0])&&!isNaN(aR[1])&&
          !isNaN(bL[0])&&!isNaN(bL[1])&&!isNaN(bR[0])&&!isNaN(bR[1])) {
         var poly = L.polygon([aL,bL,bR,aR],{
-          fillColor:col, fillOpacity:0.30,
-          stroke:false
+          fillColor:col, fillOpacity:0.55,
+          stroke:true, color:col, weight:2, opacity:0.85
         }).addTo(map);
         LY.corridor.push(poly);
       }
