@@ -1399,6 +1399,9 @@ function onAtoChange(idx,val) {
     }
   }
   renderFpTable();
+  if(document.getElementById('dep') && document.getElementById('dep').checked) {
+    if(typeof fetchAc === 'function') fetchAc();
+  }
 }
 function onFuelChange(idx,val)  { FP_ROWS[idx].actualFuel=val.trim(); renderFpTable(); }
 function onCrossChange(idx,val) {
@@ -3233,7 +3236,7 @@ function onDep(cb) {
   if(cb.checked) {
     console.log('acIcao:', acIcao, 'acReg:', acReg);
     fetchAc();
-    acInt = setInterval(fetchAc,30000);
+    acInt = setInterval(fetchAc,10000);
   } else {
     if(acInt){clearInterval(acInt); acInt=null;}
     if(LY.ac){map.removeLayer(LY.ac); LY.ac=null;}
