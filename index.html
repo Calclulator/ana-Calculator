@@ -2229,7 +2229,7 @@ function _makeJmaEntry(k, s, jmaList, offset) {
   var latest = jmaList[idx].basetime;
   var tl = latest.slice(8,10)+':'+latest.slice(10,12)+'Z';
   var url = 'https://www.jma.go.jp/bosai/himawari/data/satimg/'+latest+'/'+s.area+'/'+latest+'/'+s.band+'/'+s.prod+'/{z}/{x}/{y}.jpg';
-  var ly = L.tileLayer(url, {opacity:0,minZoom:1,maxZoom:10,maxNativeZoom:5,updateWhenIdle:false,keepBuffer:0,errorTileUrl:BLANK_TILE,noWrap:true,bounds:TILE_WORLD_BOUNDS});
+  var ly = L.tileLayer(url, {opacity:0,minZoom:1,maxZoom:10,maxNativeZoom:5,updateWhenIdle:false,keepBuffer:0,errorTileUrl:BLANK_TILE,noWrap:false});
   var entry = {ly:ly, timeLabel:tl, source:'JMA'};
   SAT_LAYER_CACHE[ck] = entry;
   return entry;
@@ -2251,7 +2251,7 @@ function _makeRvEntry(k, host, past, offset) {
   var ts = new Date(frame.time*1000);
   var tl = ('0'+ts.getUTCHours()).slice(-2)+':'+('0'+ts.getUTCMinutes()).slice(-2)+'Z';
   var url = host+frame.path+'/256/{z}/{x}/{y}/4/1_1.png';
-  var ly = L.tileLayer(url, {opacity:0,maxZoom:12,maxNativeZoom:7,updateWhenIdle:false,keepBuffer:0,errorTileUrl:BLANK_TILE,noWrap:true,bounds:TILE_WORLD_BOUNDS});
+  var ly = L.tileLayer(url, {opacity:0,maxZoom:12,maxNativeZoom:7,updateWhenIdle:false,keepBuffer:0,errorTileUrl:BLANK_TILE,noWrap:false});
   var entry = {ly:ly, timeLabel:tl, source:'RainViewer'};
   SAT_LAYER_CACHE[ck] = entry;
   return entry;
@@ -2385,7 +2385,7 @@ function loadSat(k) {
   var t = gibsTimeOffset(satOffsetMins);
   var url = s.url ? s.url : (GIBS+'/'+s.l+'/default/'+t+'/GoogleMapsCompatible/{z}/{y}/{x}.'+s.e);
   document.getElementById('sat-lbl').textContent = s.label+' '+t.slice(11,16)+'Z 読込中...';
-  LY.sat = L.tileLayer(url, {opacity:op,maxZoom:9,updateWhenIdle:false,keepBuffer:0,errorTileUrl:BLANK_TILE,noWrap:true,bounds:TILE_WORLD_BOUNDS});
+  LY.sat = L.tileLayer(url, {opacity:op,maxZoom:9,updateWhenIdle:false,keepBuffer:0,errorTileUrl:BLANK_TILE,noWrap:false});
   LY.sat.addTo(map);
   if(LY.base) LY.base.bringToBack();
   LY.sat.on('load',     function(){ document.getElementById('sat-lbl').textContent = s.label+' '+t.slice(11,16)+'Z'; });
@@ -2414,7 +2414,7 @@ function loadRadar() {
       if(LY.radar){map.removeLayer(LY.radar); LY.radar=null;}
       LY.radar = L.tileLayer(
         d.host+f.path+'/256/{z}/{x}/{y}/4/1_1.png',
-        {opacity:0.65,maxZoom:12,maxNativeZoom:7,updateWhenIdle:lowBw,keepBuffer:lowBw?0:2,noWrap:true,bounds:TILE_WORLD_BOUNDS}
+        {opacity:0.65,maxZoom:12,maxNativeZoom:7,updateWhenIdle:lowBw,keepBuffer:lowBw?0:2,noWrap:false}
       ).addTo(map);
       bringTop();
     }).catch(function(){});
