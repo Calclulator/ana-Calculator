@@ -37,8 +37,8 @@
   // VWS in s^-1 (typical jet stream values: 0.005..0.025).
   var VWS_THRESH = [0.020, 0.015, 0.010, 0.007, 0.004];
   // Ellrod values: raw multiplied by 1e7 for human-readable thresholding.
-  var TI1_THRESH = [12, 8, 5, 3, 1];
-  var TI2_THRESH = [16, 11, 7, 4, 2];
+  var TI1_THRESH = [50, 30, 15, 8, 3];
+  var TI2_THRESH = [70, 40, 20, 10, 5];
 
   function flToMb(fl) {
     if (fl <= FL_TABLE[0][0]) return FL_TABLE[0][1];
