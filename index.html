@@ -2650,7 +2650,7 @@ function applyGfsRadarForCurrentMethod() {
     if(typeof GfsRadar !== 'undefined' && GfsRadar.render) {
       gfsRadarLayer = GfsRadar.render(map, {
         method: methodKey,
-        fl: CURRENT_FL,
+        fl: CURRENT_FL * 10,
         validUtc: new Date()
       });
     }

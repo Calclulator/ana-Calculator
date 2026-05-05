@@ -1,268 +1,346 @@
-// gfs-radar-layer.js — Canvas field from window.GFS + gfsValueAt (Leaflet image overlay)
-// ES5. Depends: gfs-client.js (gfsValueAt, window.GFS).
+// gfs-radar-layer.js
+// Leaflet layer drawing GFS-derived turbulence indices (VWS / Ellrod TI1 / TI2)
+// as colored 0.25-deg cells. Reads window.GFS.slices populated by gfsLoad().
 //
-// Public: window.GfsRadar.render(map, opts) -> L.ImageOverlay | null
-//   opts.method  'VWS' | 'TI1' | 'TI2'
-//   opts.fl      flight level (e.g. 35 for FL350); ignored if opts.levelMb set
-//   opts.levelMb optional pressure (hPa) — bypasses FL→pressure (debug / console tests)
-//   opts.validUtc Date (UTC) for gfsValueAt slice pick
-// Preconditions: Flight Plan Apply completed gfsLoad; window.GFS.status === 'ready'.
-//
-// VWS: |Delta V| between pressure surfaces ~FL and FL-10 (1000 ft), kt (wind m/s * 1.94384).
-// TI1: total deformation * |relative vorticity| at cruise pressure (finite differences).
-// TI2: TI1 scaled by divergence magnitude (empirical blend for display).
-//
-// Canvas is downsampled (nx~88) for mobile; increase nx in render() for sharper desktop fields.
+// Usage:
+//   var layer = GfsRadar.render(map, { method: 'VWS', fl: 360, validUtc: new Date() });
+//   layer.remove();   // when switching method/altitude
+// ES5 only, no fullwidth quotes.
 
-var GfsRadar = (function() {
-  var D2R = Math.PI / 180;
-  var MS_TO_KT = 1.94384;
+(function () {
+  'use strict';
 
-  function flToPressureHpa(fl) {
-    var zM = fl * 30.48;
-    return 1013.25 * Math.pow(Math.max(1e-6, 1 - 2.25577e-5 * zM), 5.25588);
-  }
+  var R_EARTH_M = 6371008.8;
 
-  function sortedLevelsFromGfs() {
-    var G = window.GFS;
-    if (!G || !G.levelsMb || !G.levelsMb.length) return [150, 200, 250, 300];
-    return G.levelsMb.slice().sort(function(a, b) { return a - b; });
-  }
+  // Approximate ICAO standard atmosphere FL -> mb.
+  // Used to map cockpit-friendly FLs to the 4 GFS pressure levels we have.
+  var FL_TABLE = [
+    [250, 376], [270, 344], [290, 315], [300, 301],
+    [310, 287], [320, 274], [330, 261], [340, 250],
+    [350, 238], [360, 227], [370, 217], [380, 207],
+    [390, 197], [400, 188], [410, 179], [420, 170],
+    [430, 162], [440, 154], [450, 147]
+  ];
+  var GFS_LEVELS = [300, 250, 200, 150];
 
-  function bracketPressureMb(pMb) {
-    var L = sortedLevelsFromGfs();
-    var n = L.length;
-    if (n === 1) return { lo: L[0], hi: L[0] };
-    if (pMb <= L[0]) return { lo: L[0], hi: L[0] };
-    if (pMb >= L[n - 1]) return { lo: L[n - 1], hi: L[n - 1] };
-    var i;
-    for (i = 0; i < n - 1; i++) {
-      if (pMb >= L[i] && pMb <= L[i + 1]) return { lo: L[i], hi: L[i + 1] };
+  // Default 6-bucket palette (Severe -> Smooth)
+  var PALETTE = [
+    '#7e0023', // 0 Severe
+    '#cf2027', // 1 Heavy
+    '#ed6f23', // 2 Moderate
+    '#f7c84a', // 3 Light
+    '#9bd06f', // 4 Minimal
+    '#3a78f0'  // 5 Smooth
+  ];
+
+  // Thresholds: bucket 0 if v >= thr[0], 1 if >= thr[1], ..., 5 if v < thr[4].
+  // VWS in s^-1 (typical jet stream values: 0.005..0.025).
+  var VWS_THRESH = [0.020, 0.015, 0.010, 0.007, 0.004];
+  // Ellrod values: raw multiplied by 1e7 for human-readable thresholding.
+  var TI1_THRESH = [12, 8, 5, 3, 1];
+  var TI2_THRESH = [16, 11, 7, 4, 2];
+
+  function flToMb(fl) {
+    if (fl <= FL_TABLE[0][0]) return FL_TABLE[0][1];
+    var n = FL_TABLE.length;
+    if (fl >= FL_TABLE[n - 1][0]) return FL_TABLE[n - 1][1];
+    for (var i = 1; i < n; i++) {
+      if (fl <= FL_TABLE[i][0]) {
+        var f0 = FL_TABLE[i - 1][0], m0 = FL_TABLE[i - 1][1];
+        var f1 = FL_TABLE[i][0], m1 = FL_TABLE[i][1];
+        var t = (fl - f0) / (f1 - f0);
+        return m0 + t * (m1 - m0);
+      }
     }
-    return { lo: L[n - 2], hi: L[n - 1] };
+    return FL_TABLE[n - 1][1];
   }
 
-  function gfsVal(lat, lon, levMb, varName, validUtc) {
-    if (typeof gfsValueAt !== 'function') return null;
-    return gfsValueAt(lat, lon, levMb, varName, validUtc);
+  // Snap arbitrary mb to one of GFS_LEVELS (closest by log pressure).
+  function snapLevel(mb) {
+    var best = GFS_LEVELS[0], bestDiff = 1e9;
+    for (var i = 0; i < GFS_LEVELS.length; i++) {
+      var d = Math.abs(Math.log(GFS_LEVELS[i]) - Math.log(mb));
+      if (d < bestDiff) { bestDiff = d; best = GFS_LEVELS[i]; }
+    }
+    return best;
   }
 
-  function windUvAtP(lat, lon, pMb, validUtc) {
-    var br = bracketPressureMb(pMb);
-    var u0 = gfsVal(lat, lon, br.lo, 'UGRD', validUtc);
-    var v0 = gfsVal(lat, lon, br.lo, 'VGRD', validUtc);
-    if (u0 === null || v0 === null || isNaN(u0) || isNaN(v0)) return null;
-    if (br.lo === br.hi) return { u: u0, v: v0 };
-    var u1 = gfsVal(lat, lon, br.hi, 'UGRD', validUtc);
-    var v1 = gfsVal(lat, lon, br.hi, 'VGRD', validUtc);
-    if (u1 === null || v1 === null || isNaN(u1) || isNaN(v1)) return null;
-    var f = (pMb - br.lo) / (br.hi - br.lo);
-    return { u: u0 + f * (u1 - u0), v: v0 + f * (v1 - v0) };
+  function bucket(value, thr) {
+    if (value === null || value === undefined || isNaN(value)) return -1;
+    for (var i = 0; i < thr.length; i++) {
+      if (value >= thr[i]) return i;
+    }
+    return thr.length;
   }
 
-  function scalarVwsKt(lat, lon, fl, validUtc) {
-    var pHi = flToPressureHpa(fl);
-    var pLo = flToPressureHpa(fl - 10);
-    var wHi = windUvAtP(lat, lon, pHi, validUtc);
-    var wLo = windUvAtP(lat, lon, pLo, validUtc);
-    if (!wHi || !wLo) return null;
-    var du = (wHi.u - wLo.u) * MS_TO_KT;
-    var dv = (wHi.v - wLo.v) * MS_TO_KT;
-    var mag = Math.sqrt(du * du + dv * dv);
-    return mag;
-  }
-
-  /** VWS between cruiseMb (upper air) and cruiseMb + DELTA (≈1000 ft lower). */
-  function scalarVwsKtFromMb(lat, lon, cruiseMb, validUtc) {
-    var DELTA_MB = 42;
-    var pUpper = cruiseMb;
-    var pLower = cruiseMb + DELTA_MB;
-    var wHi = windUvAtP(lat, lon, pUpper, validUtc);
-    var wLo = windUvAtP(lat, lon, pLower, validUtc);
-    if (!wHi || !wLo) return null;
-    var du = (wHi.u - wLo.u) * MS_TO_KT;
-    var dv = (wHi.v - wLo.v) * MS_TO_KT;
-    return Math.sqrt(du * du + dv * dv);
-  }
-
-  function metersPerDegLon(lat) {
-    return 6371000 * Math.cos(lat * D2R) * D2R;
-  }
-
-  function metersPerDegLat() {
-    return 6371000 * D2R;
-  }
-
-  function ellrodDerivs(lat, lon, levMb, validUtc, dDeg) {
-    var dx = metersPerDegLon(lat) * dDeg;
-    var dy = metersPerDegLat() * dDeg;
-    if (dx < 1e3 || dy < 1e3) return null;
-    var u = function(la, lo) { return gfsVal(la, lo, levMb, 'UGRD', validUtc); };
-    var v = function(la, lo) { return gfsVal(la, lo, levMb, 'VGRD', validUtc); };
-    var uc = u(lat, lon);
-    var vc = v(lat, lon);
-    var ue = u(lat, lon + dDeg);
-    var uw = u(lat, lon - dDeg);
-    var vn = v(lat + dDeg, lon);
-    var vs = v(lat - dDeg, lon);
-    if ([uc, vc, ue, uw, vn, vs].some(function(x) { return x === null || isNaN(x); })) return null;
-    var dudx = (ue - uw) / (2 * dx);
-    var dvdy = (vn - vs) / (2 * dy);
-    var dudy = (u(lat + dDeg, lon) - u(lat - dDeg, lon)) / (2 * dy);
-    var dvdx = (v(lat, lon + dDeg) - v(lat, lon - dDeg)) / (2 * dx);
-    if ([dudy, dvdx].some(function(x) { return x === null || isNaN(x); })) return null;
-    return { dudx: dudx, dvdy: dvdy, dudy: dudy, dvdx: dvdx };
-  }
-
-  function ellrodTi1(lat, lon, levMb, validUtc, dDeg) {
-    var d = ellrodDerivs(lat, lon, levMb, validUtc, dDeg);
-    if (!d) return null;
-    var dst = (d.dvdx + d.dudy);
-    var dsh = (d.dudx - d.dvdy);
-    var def = Math.sqrt(dst * dst + dsh * dsh);
-    var vor = d.dvdx - d.dudy;
-    return def * Math.abs(vor);
-  }
-
-  function ellrodTi2(lat, lon, levMb, validUtc, dDeg) {
-    var d = ellrodDerivs(lat, lon, levMb, validUtc, dDeg);
-    if (!d) return null;
-    var dst = (d.dvdx + d.dudy);
-    var dsh = (d.dudx - d.dvdy);
-    var def = Math.sqrt(dst * dst + dsh * dsh);
-    var vor = d.dvdx - d.dudy;
-    var ti1 = def * Math.abs(vor);
-    if (ti1 === null || isNaN(ti1)) return null;
-    var div = d.dudx + d.dvdy;
-    return ti1 * (1 + 0.35 * Math.abs(div));
-  }
-
-  function cruiseLevMb(fl) {
-    return flToPressureHpa(fl);
-  }
-
-  function rgbaVws(v) {
-    if (v === null || isNaN(v)) return [0, 0, 0, 0];
-    var t = Math.max(0, Math.min(1, v / 18));
-    var r, g, b;
-    if (t < 0.22) {
-      r = 100 + 80 * (t / 0.22);
-      g = 181 + 30 * (t / 0.22);
-      b = 246;
-    } else if (t < 0.44) {
-      r = 102 + 72 * ((t - 0.22) / 0.22);
-      g = 187 + 26 * ((t - 0.22) / 0.22);
-      b = 106;
-    } else if (t < 0.66) {
-      r = 174 + 81 * ((t - 0.44) / 0.22);
-      g = 213 - 18 * ((t - 0.44) / 0.22);
-      b = 129;
-    } else if (t < 0.88) {
-      r = 255;
-      g = 238 - 71 * ((t - 0.66) / 0.22);
-      b = 88 - 24 * ((t - 0.66) / 0.22);
+  function colorFor(method, value) {
+    if (value === null || value === undefined || isNaN(value)) return null;
+    if (method === 'TI1') {
+      return PALETTE[Math.min(bucket(value * 1e7, TI1_THRESH), PALETTE.length - 1)];
+    } else if (method === 'TI2') {
+      return PALETTE[Math.min(bucket(value * 1e7, TI2_THRESH), PALETTE.length - 1)];
     } else {
-      r = 239;
-      g = 83 + 84 * ((t - 0.88) / 0.12);
-      b = 80;
+      return PALETTE[Math.min(bucket(value, VWS_THRESH), PALETTE.length - 1)];
     }
-    return [Math.round(r), Math.round(g), Math.round(b), 200];
   }
 
-  function rgbaTi(logNorm) {
-    if (logNorm === null || isNaN(logNorm)) return [0, 0, 0, 0];
-    var t = Math.max(0, Math.min(1, logNorm / 12));
-    var r = Math.round(100 + 139 * t);
-    var g = Math.round(181 - 98 * t);
-    var b = Math.round(246 - 166 * t);
-    return [r, g, b, 200];
-  }
-
-  function sampleScalar(methodKey, lat, lon, fl, validUtc, dDeg, levMb, vwsUseDirectMb) {
-    if (methodKey === 'VWS') {
-      if (vwsUseDirectMb) return scalarVwsKtFromMb(lat, lon, levMb, validUtc);
-      return scalarVwsKt(lat, lon, fl, validUtc);
+  function findSlice(fhr, levMb) {
+    var s = window.GFS && window.GFS.slices;
+    if (!s) return null;
+    for (var i = 0; i < s.length; i++) {
+      if (s[i].meta.fhr === fhr && s[i].meta.lev === levMb) return s[i];
     }
-    if (methodKey === 'TI1') return ellrodTi1(lat, lon, levMb, validUtc, dDeg);
-    if (methodKey === 'TI2') return ellrodTi2(lat, lon, levMb, validUtc, dDeg);
     return null;
   }
 
-  function paintCanvas(bbox, nx, ny, methodKey, fl, validUtc, levelMbOpt) {
-    var south = bbox.south;
-    var north = bbox.north;
-    var west = bbox.west;
-    var east = bbox.east;
-    var dLat = (north - south) / Math.max(1, ny - 1);
-    var dLon = (east - west) / Math.max(1, nx - 1);
-    var levMb = (typeof levelMbOpt === 'number' && !isNaN(levelMbOpt))
-      ? levelMbOpt
-      : cruiseLevMb(fl);
-    var vwsUseDirectMb = typeof levelMbOpt === 'number' && !isNaN(levelMbOpt);
-    var dDeg = 0.12;
-    var c = document.createElement('canvas');
-    c.width = nx;
-    c.height = ny;
-    var ctx = c.getContext('2d');
-    var img = ctx.createImageData(nx, ny);
-    var data = img.data;
-    var ix, iy, lat, lon, sc, rgba, p, logn;
-    for (iy = 0; iy < ny; iy++) {
-      lat = north - iy * dLat;
-      for (ix = 0; ix < nx; ix++) {
-        lon = west + ix * dLon;
-        sc = sampleScalar(methodKey, lat, lon, fl, validUtc, dDeg, levMb, vwsUseDirectMb);
-        if (methodKey === 'VWS') rgba = rgbaVws(sc);
-        else {
-          logn = sc === null || sc <= 0 ? null : Math.log(sc + 1e-18) + 18;
-          rgba = rgbaTi(logn);
-        }
-        p = (iy * nx + ix) * 4;
-        data[p] = rgba[0];
-        data[p + 1] = rgba[1];
-        data[p + 2] = rgba[2];
-        data[p + 3] = rgba[3];
+  // Find fhr in slices closest to the given valid time.
+  function nearestFhr(validUtc) {
+    var s = window.GFS && window.GFS.slices;
+    if (!s || !s.length) return null;
+    var ref = s[0].meta.refTime;
+    var refMs = Date.UTC(ref.year, ref.month - 1, ref.day, ref.hour, ref.minute || 0, ref.second || 0);
+    var diffH = (validUtc.getTime() - refMs) / 3600000;
+    var bestFhr = null, bestDiff = 1e9;
+    var seen = {};
+    for (var i = 0; i < s.length; i++) {
+      var f = s[i].meta.fhr;
+      if (seen[f]) continue;
+      seen[f] = 1;
+      var d = Math.abs(diffH - f);
+      if (d < bestDiff) { bestDiff = d; bestFhr = f; }
+    }
+    return bestFhr;
+  }
+
+  // List of available levels for a given fhr (sorted ascending mb = descending altitude).
+  function levelsForFhr(fhr) {
+    var s = window.GFS && window.GFS.slices;
+    if (!s) return [];
+    var levs = [];
+    for (var i = 0; i < s.length; i++) {
+      if (s[i].meta.fhr === fhr) levs.push(s[i].meta.lev);
+    }
+    levs.sort(function (a, b) { return a - b; });
+    return levs;
+  }
+
+  // Compute VWS, DEF, CVG plus center U/V/T/H at grid cell (ix, iy)
+  // Returns { vws, defm, cvg, u, v, t, h } or null if data missing.
+  function computeAtCell(fhr, centerMb, ix, iy) {
+    var levs = levelsForFhr(fhr);
+    var ci = -1;
+    for (var k = 0; k < levs.length; k++) if (levs[k] === centerMb) { ci = k; break; }
+    if (ci < 0) return null;
+    var sCenter = findSlice(fhr, centerMb);
+    if (!sCenter) return null;
+    var g = sCenter.grid;
+    var nx = g.nx, ny = g.ny;
+    if (ix < 0 || ix >= nx || iy < 0 || iy >= ny) return null;
+    var idx = iy * nx + ix;
+
+    var u = sCenter.vars.UGRD[idx];
+    var v = sCenter.vars.VGRD[idx];
+    var t = sCenter.vars.TMP[idx];
+    var h = sCenter.vars.HGT[idx];
+    if (u === null || v === null || u === undefined || v === undefined) return null;
+
+    // VWS via centered-or-one-sided difference between adjacent levels in our set.
+    var sUp = ci > 0 ? findSlice(fhr, levs[ci - 1]) : null;            // smaller mb = higher alt
+    var sDn = ci < levs.length - 1 ? findSlice(fhr, levs[ci + 1]) : null; // larger mb = lower alt
+    var vws = null;
+    var uA, vA, hA, uB, vB, hB;
+    if (sUp && sDn) {
+      uA = sUp.vars.UGRD[idx]; vA = sUp.vars.VGRD[idx]; hA = sUp.vars.HGT[idx];
+      uB = sDn.vars.UGRD[idx]; vB = sDn.vars.VGRD[idx]; hB = sDn.vars.HGT[idx];
+    } else if (sUp) {
+      uA = sUp.vars.UGRD[idx]; vA = sUp.vars.VGRD[idx]; hA = sUp.vars.HGT[idx];
+      uB = u; vB = v; hB = h;
+    } else if (sDn) {
+      uA = u; vA = v; hA = h;
+      uB = sDn.vars.UGRD[idx]; vB = sDn.vars.VGRD[idx]; hB = sDn.vars.HGT[idx];
+    }
+    if (uA !== undefined && uA !== null) {
+      var dz = hA - hB;
+      if (Math.abs(dz) > 1) {
+        var du = uA - uB, dv = vA - vB;
+        vws = Math.sqrt(du * du + dv * dv) / Math.abs(dz);
       }
     }
-    ctx.putImageData(img, 0, 0);
-    return c;
+
+    // Spatial derivatives at center level (centered diff, one-sided at edges).
+    var lat = g.la1 + iy * (g.la2 - g.la1) / (ny - 1);
+    var dlat = (g.la2 - g.la1) / (ny - 1);
+    var dlon = (g.lo2 - g.lo1) / (nx - 1);
+    var dy_m = dlat * Math.PI / 180 * R_EARTH_M;
+    var dx_m = dlon * Math.PI / 180 * R_EARTH_M * Math.cos(lat * Math.PI / 180);
+
+    var ix0 = Math.max(0, ix - 1), ix1 = Math.min(nx - 1, ix + 1);
+    var iy0 = Math.max(0, iy - 1), iy1 = Math.min(ny - 1, iy + 1);
+    var ue = sCenter.vars.UGRD[iy * nx + ix1];
+    var uw = sCenter.vars.UGRD[iy * nx + ix0];
+    var un = sCenter.vars.UGRD[iy1 * nx + ix];
+    var us = sCenter.vars.UGRD[iy0 * nx + ix];
+    var ve = sCenter.vars.VGRD[iy * nx + ix1];
+    var vw = sCenter.vars.VGRD[iy * nx + ix0];
+    var vn = sCenter.vars.VGRD[iy1 * nx + ix];
+    var vs = sCenter.vars.VGRD[iy0 * nx + ix];
+
+    var dUdx = (ue - uw) / ((ix1 - ix0) * dx_m);
+    var dUdy = (un - us) / ((iy1 - iy0) * dy_m);
+    var dVdx = (ve - vw) / ((ix1 - ix0) * dx_m);
+    var dVdy = (vn - vs) / ((iy1 - iy0) * dy_m);
+
+    var stretch = dUdx - dVdy;
+    var shear = dVdx + dUdy;
+    var defm = Math.sqrt(stretch * stretch + shear * shear);
+    var cvg = -(dUdx + dVdy); // positive = converging
+
+    return {
+      vws: vws,
+      defm: defm,
+      cvg: cvg,
+      u: u,
+      v: v,
+      t: (t !== null && t !== undefined) ? t - 273.15 : null,
+      h: h
+    };
   }
 
-  function canRender() {
-    var G = window.GFS;
-    return !!(G && G.status === 'ready' && G.bbox && G.slices && G.slices.length);
+  function methodValue(method, c) {
+    if (!c) return null;
+    if (method === 'TI1') return (c.vws !== null) ? c.vws * c.defm : null;
+    if (method === 'TI2') return (c.vws !== null) ? c.vws * (c.defm + Math.max(0, c.cvg)) : null;
+    return c.vws;
   }
 
+  function buildPopupHtml(method, c, levelMb, fl) {
+    var spdMs = Math.sqrt(c.u * c.u + c.v * c.v);
+    var spdKt = spdMs * 1.943844;
+    // Wind direction = where wind is FROM, in degrees true.
+    var dir = (Math.atan2(-c.u, -c.v) * 180 / Math.PI + 360) % 360;
+    var lines = [];
+    lines.push('<b>FL ' + (fl != null ? fl : '?') + ' (' + Math.round(levelMb) + ' mb)</b>');
+    lines.push('Wind: ' + Math.round(dir) + '&deg; / ' + Math.round(spdKt) + ' kt');
+    if (c.t !== null) lines.push('Temp: ' + c.t.toFixed(1) + ' &deg;C');
+    if (c.h !== null && c.h !== undefined) lines.push('HGT: ' + Math.round(c.h) + ' m');
+    if (c.vws !== null) lines.push('VWS: ' + (c.vws * 1000).toFixed(2) + ' /ks');
+    if (method === 'TI1' || method === 'TI2') {
+      var v = methodValue(method, c);
+      if (v !== null) lines.push(method + ': ' + (v * 1e7).toFixed(2) + ' (&times;1e-7)');
+    }
+    return lines.join('<br>');
+  }
+
+  // Main render. Returns L.LayerGroup (already added to map).
   function render(map, opts) {
-    if (!map || !opts) return null;
-    var G = window.GFS;
-    if (!G || G.status !== 'ready' || !G.bbox) return null;
-    var methodKey = opts.method;
-    if (methodKey !== 'VWS' && methodKey !== 'TI1' && methodKey !== 'TI2') return null;
-    var fl = typeof opts.fl === 'number' && !isNaN(opts.fl) ? opts.fl : 35;
-    var levelMbOpt = null;
-    if (typeof opts.levelMb === 'number' && !isNaN(opts.levelMb)) levelMbOpt = opts.levelMb;
-    var validUtc = opts.validUtc instanceof Date ? opts.validUtc : new Date();
-    var bbox = G.bbox;
-    var nx = 88;
-    var ny = Math.max(48, Math.round(88 * (bbox.north - bbox.south) / Math.max(0.5, bbox.east - bbox.west)));
-    if (ny > 120) ny = 120;
-    var canvas = paintCanvas(bbox, nx, ny, methodKey, fl, validUtc, levelMbOpt);
-    var url = canvas.toDataURL('image/png');
-    var bounds = L.latLngBounds(
-      [bbox.south, bbox.west],
-      [bbox.north, bbox.east]
-    );
-    var layer = L.imageOverlay(url, bounds, {
-      opacity: 0.58,
-      interactive: false,
-      className: 'gfs-radar-field'
-    });
-    layer.addTo(map);
-    return layer;
+    if (!window.GFS || !window.GFS.slices || !window.GFS.slices.length) {
+      console.warn('[GfsRadar] no GFS data loaded; call gfsLoad() first');
+      return null;
+    }
+    if (typeof L === 'undefined' || !L.layerGroup) {
+      console.warn('[GfsRadar] Leaflet not available');
+      return null;
+    }
+    opts = opts || {};
+    var method = (opts.method || 'VWS').toUpperCase();
+    if (method !== 'VWS' && method !== 'TI1' && method !== 'TI2') method = 'VWS';
+
+    var levelMb;
+    if (typeof opts.levelMb === 'number' && !isNaN(opts.levelMb)) {
+      levelMb = snapLevel(opts.levelMb);
+    } else if (opts.fl !== undefined && opts.fl !== null) {
+      levelMb = snapLevel(flToMb(opts.fl));
+    } else {
+      levelMb = 250; // default
+    }
+
+    var validUtc = opts.validUtc || new Date();
+    var fhr = nearestFhr(validUtc);
+    if (fhr === null) {
+      console.warn('[GfsRadar] no fhr available');
+      return null;
+    }
+
+    var sCenter = findSlice(fhr, levelMb);
+    if (!sCenter) {
+      console.warn('[GfsRadar] no slice for fhr=' + fhr + ' lev=' + levelMb);
+      return null;
+    }
+    var g = sCenter.grid;
+    var dlat = (g.la2 - g.la1) / (g.ny - 1);
+    var dlon = (g.lo2 - g.lo1) / (g.nx - 1);
+
+    var fillOpacity = opts.fillOpacity != null ? opts.fillOpacity : 0.35;
+    var renderer = opts.renderer || (L.canvas ? L.canvas() : undefined);
+
+    var group = L.layerGroup();
+    var nDrawn = 0, nNull = 0;
+    var t0 = Date.now();
+
+    // For popup we need to know FL too
+    var fl = (opts.fl !== undefined && opts.fl !== null) ? opts.fl : null;
+
+    for (var iy = 0; iy < g.ny; iy++) {
+      var lat = g.la1 + iy * dlat;
+      for (var ix = 0; ix < g.nx; ix++) {
+        var lon = g.lo1 + ix * dlon;
+        var c = computeAtCell(fhr, levelMb, ix, iy);
+        if (!c) { nNull++; continue; }
+        var v = methodValue(method, c);
+        var color = colorFor(method, v);
+        if (!color) { nNull++; continue; }
+
+        var bounds = [
+          [lat - dlat / 2, lon - dlon / 2],
+          [lat + dlat / 2, lon + dlon / 2]
+        ];
+        var rectOpts = {
+          color: color,
+          fillColor: color,
+          fillOpacity: fillOpacity,
+          weight: 0,
+          interactive: true
+        };
+        if (renderer) rectOpts.renderer = renderer;
+        var rect = L.rectangle(bounds, rectOpts);
+
+        (function (cellData) {
+          rect.on('click', function (e) {
+            var html = buildPopupHtml(method, cellData, levelMb, fl);
+            L.popup().setLatLng(e.latlng).setContent(html).openOn(map);
+          });
+        })(c);
+
+        rect.addTo(group);
+        nDrawn++;
+      }
+    }
+    if (map) group.addTo(map);
+    console.log('[GfsRadar] ' + method + ' lev=' + levelMb +
+                ' fhr=' + fhr + ': ' + nDrawn + ' cells, ' +
+                nNull + ' skipped, in ' + (Date.now() - t0) + 'ms');
+    return group;
   }
 
-  return { render: render, canRender: canRender, version: '1.0.0' };
+  // Public API
+  window.GfsRadar = {
+    render: render,
+    flToMb: flToMb,
+    snapLevel: snapLevel,
+    nearestFhr: nearestFhr,
+    levelsForFhr: levelsForFhr,
+    computeAtCell: computeAtCell,
+    methodValue: methodValue,
+    setPalette: function (arr) { if (arr && arr.length === 6) PALETTE = arr; },
+    setThresholds: function (m, arr) {
+      if (!arr || arr.length !== 5) return;
+      if (m === 'VWS') VWS_THRESH = arr;
+      else if (m === 'TI1') TI1_THRESH = arr;
+      else if (m === 'TI2') TI2_THRESH = arr;
+    },
+    getPalette: function () { return PALETTE.slice(); },
+    getThresholds: function (m) {
+      return m === 'TI1' ? TI1_THRESH.slice() : m === 'TI2' ? TI2_THRESH.slice() : VWS_THRESH.slice();
+    }
+  };
 })();
-
-if (typeof window !== 'undefined') window.GfsRadar = GfsRadar;
