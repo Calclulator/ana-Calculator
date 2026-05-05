@@ -333,9 +333,24 @@
     <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.06em;font-size:1em;">ATMOSPHERE ANALYSIS (GFS)</span>
     <span style="font-size:1em;color:#90a4ae;margin-left:14px;">GFS データに基づく大気解析</span>
   </div>
-  <div style="padding:24px;color:#90a4ae;text-align:center;font-size:1em;">
-    Step 3B / 3C で実装予定（テーブル描画 + GFS 値取得 + WIND SHEAR Method 切替）
+  <div style="padding:8px 12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #1e2a38;">
+    <span style="font-size:1em;color:#90a4ae;">Heat map:</span>
+    <button class="btn" id="atm-gfs-heat-temp" onclick="setAtmGfsHeat('temp')">Temp</button>
+    <button class="btn on" id="atm-gfs-heat-wind" onclick="setAtmGfsHeat('wind')">Wind</button>
+    <button class="btn" id="atm-gfs-heat-off" onclick="setAtmGfsHeat('off')">Off</button>
+    <span style="font-size:1em;color:#90a4ae;margin-left:8px;">Cell shows:</span>
+    <button class="btn on" id="atm-gfs-show-wt" onclick="setAtmGfsShow('wt')">Wind &amp; temp</button>
+    <button class="btn" id="atm-gfs-show-isa" onclick="setAtmGfsShow('isa')">ISA deviation</button>
   </div>
+  <div id="atm-gfs-tbody-wrap" style="flex:1;min-height:0;overflow:auto;padding:6px;"></div>
+  <div style="padding:8px 12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;border-top:1px solid #1e2a38;">
+    <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.06em;font-size:1em;">WIND SHEAR &amp; TURBULENCE</span>
+    <span style="font-size:1em;color:#90a4ae;margin-left:14px;">Method:</span>
+    <button class="btn on" id="atm-gfs-ws-vws" onclick="setAtmGfsWs('vws')">GFS-VWS</button>
+    <button class="btn" id="atm-gfs-ws-ti1" onclick="setAtmGfsWs('ti1')">Ellrod TI1</button>
+    <button class="btn" id="atm-gfs-ws-ti2" onclick="setAtmGfsWs('ti2')">Ellrod TI2</button>
+  </div>
+  <div id="atm-gfs-ws-wrap" style="flex:1;min-height:0;overflow:auto;padding:6px;"></div>
 </div><!-- atm-gfs-panel -->
 </div><!-- #panels -->
 
@@ -755,6 +770,10 @@ function closeNav(){
 function navTo(tab){
   showTab(tab);
   closeNav();
+  if(tab === 'atm-gfs') {
+    renderGfsAtmTable();
+    renderGfsWsTable();
+  }
 }
 
 // 起動時: 一瞬 WX で地図初期化 → Flight Plan に切替
@@ -2020,6 +2039,65 @@ function isaDevColor(dev) {
   t = Math.min(1, Math.max(0, t));
   var hue = 240 - t * 240;
   return 'hsla(' + hue.toFixed(0) + ',65%,55%,0.30)';
+}
+
+// ============== Atmosphere Analysis (GFS) ==============
+var ATM_GFS_HEAT = 'wind';
+var ATM_GFS_SHOW = 'wt';
+var ATM_GFS_WS = 'vws';
+
+function setAtmGfsHeat(mode) {
+  ATM_GFS_HEAT = mode;
+  var keys = ['temp','wind','off'];
+  for(var i=0;i<keys.length;i++) {
+    var btn = document.getElementById('atm-gfs-heat-' + keys[i]);
+    if(btn) btn.className = 'btn' + (keys[i] === mode ? ' on' : '');
+  }
+  renderGfsAtmTable();
+}
+
+function setAtmGfsShow(mode) {
+  ATM_GFS_SHOW = mode;
+  var keys = ['wt','isa'];
+  for(var i=0;i<keys.length;i++) {
+    var btn = document.getElementById('atm-gfs-show-' + keys[i]);
+    if(btn) btn.className = 'btn' + (keys[i] === mode ? ' on' : '');
+  }
+  renderGfsAtmTable();
+}
+
+function setAtmGfsWs(mode) {
+  ATM_GFS_WS = mode;
+  var keys = ['vws','ti1','ti2'];
+  for(var i=0;i<keys.length;i++) {
+    var btn = document.getElementById('atm-gfs-ws-' + keys[i]);
+    if(btn) btn.className = 'btn' + (keys[i] === mode ? ' on' : '');
+  }
+  renderGfsWsTable();
+}
+
+function renderGfsAtmTable() {
+  var wrap = document.getElementById('atm-gfs-tbody-wrap');
+  if(!wrap) return;
+  if(typeof WP === 'undefined' || !WP || !WP.length) {
+    wrap.innerHTML = '<div style="color:#90a4ae;padding:24px;text-align:center;font-size:1em;">FLT PLN を Apply してください</div>';
+    return;
+  }
+  if(!window.GFS || window.GFS.status !== 'ready') {
+    if(window.GFS && window.GFS.status === 'error') {
+      wrap.innerHTML = '<div style="color:#ef5350;padding:24px;text-align:center;font-size:1em;">GFS ロードエラー: ' + (window.GFS.error || 'unknown') + '</div>';
+    } else {
+      wrap.innerHTML = '<div style="color:#90a4ae;padding:24px;text-align:center;font-size:1em;">GFS データをロード中...</div>';
+    }
+    return;
+  }
+  wrap.innerHTML = '<div style="color:#90a4ae;padding:24px;text-align:center;font-size:1em;">Step 3C で実装予定（GFS テーブル描画）</div>';
+}
+
+function renderGfsWsTable() {
+  var wrap = document.getElementById('atm-gfs-ws-wrap');
+  if(!wrap) return;
+  wrap.innerHTML = '<div style="color:#90a4ae;padding:24px;text-align:center;font-size:1em;">Step 3C で実装予定（WIND SHEAR: ' + ATM_GFS_WS + '）</div>';
 }
 
 function renderAtmTable() {
