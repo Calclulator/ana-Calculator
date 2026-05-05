@@ -299,6 +299,7 @@
     <span style="font-size:1em;color:#90a4ae;margin-left:8px;">Display:</span>
     <button class="btn" id="atm-disp-orig" onclick="setAtmDisp('original')">Original</button>
     <button class="btn on" id="atm-disp-interp" onclick="setAtmDisp('interpolated')">Interpolated</button>
+    <button class="btn" id="atm-disp-gfs" onclick="setAtmDisp('gfs')">GFS</button>
   </div>
   <div id="atm-scroll-top" style="flex:1;min-height:0;overflow:auto;padding:6px;">
     <div id="atm-tbody-wrap">
@@ -1520,10 +1521,19 @@ var ATM_DISP = 'interpolated'; // 'original' | 'interpolated'
 
 function setAtmDisp(mode) {
   ATM_DISP = mode;
-  ['orig','interp'].forEach(function(m){
+  ['original','interpolated','gfs'].forEach(function(m){
     var btn = document.getElementById('atm-disp-'+m);
-    if(btn) btn.className = 'btn' + ((m==='orig'&&mode==='original')||(m==='interp'&&mode==='interpolated') ? ' on' : '');
+    if(btn) btn.className = 'btn' + (m===mode ? ' on' : '');
   });
+  if(mode === 'gfs' && (!window.GFS || window.GFS.status !== 'ready')) {
+    if(typeof gfsLoad === 'function' && typeof gfsWaypointsFromWP === 'function') {
+      console.log('[ATM] auto-loading GFS for atmosphere display');
+      gfsLoad(gfsWaypointsFromWP(), gfsDepartureUtcDate(), function(err){
+        if(!err) renderAtmTable();
+      });
+      return;
+    }
+  }
   renderAtmTable();
 }
 
@@ -2090,6 +2100,47 @@ function renderAtmTable() {
     };
   }
 
+  function gfsAtWp(wpId, alt) {
+    if(!window.GFS || window.GFS.status !== 'ready') return null;
+    if(typeof WP === 'undefined') return null;
+    var wp = null;
+    for(var i=0;i<WP.length;i++) {
+      if(WP[i].id === wpId) { wp = WP[i]; break; }
+    }
+    if(!wp) return null;
+    var ato;
+    if(typeof DEP_ATO_MIN === 'number' && DEP_ATO_MIN !== null) {
+      var now = new Date();
+      ato = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
+        Math.floor(DEP_ATO_MIN/60), DEP_ATO_MIN%60, 0));
+    } else if(typeof DEP_STD_MIN === 'number' && DEP_STD_MIN !== null) {
+      var now2 = new Date();
+      ato = new Date(Date.UTC(now2.getUTCFullYear(), now2.getUTCMonth(), now2.getUTCDate(),
+        Math.floor(DEP_STD_MIN/60), DEP_STD_MIN%60, 0));
+    } else {
+      ato = new Date();
+    }
+    var validUtc = new Date(ato.getTime() + (wp.ctme || 0) * 60000);
+    var altFt = alt * 100;
+    var mb;
+    if(altFt < 36089) mb = 1013.25 * Math.pow(1 - altFt/145442, 5.2559);
+    else mb = 226.32 * Math.exp(-(altFt - 36089) / 20805);
+    if(mb > 320) return null;
+    if(typeof gfsValueAt !== 'function') return null;
+    var u = gfsValueAt(wp.lat, wp.lng, mb, 'UGRD', validUtc);
+    var v = gfsValueAt(wp.lat, wp.lng, mb, 'VGRD', validUtc);
+    var t = gfsValueAt(wp.lat, wp.lng, mb, 'TMP', validUtc);
+    if(u === null || v === null || t === null) return null;
+    var spd = Math.sqrt(u*u + v*v) * 1.943844;
+    var dir = (Math.atan2(-u, -v) * 180/Math.PI + 360) % 360;
+    return {
+      dir: Math.round(dir/10)*10,
+      spd: Math.round(spd),
+      tmp: Math.round(t - 273.15),
+      variable: false
+    };
+  }
+
   // テーブル組み立て
   var html = '<table style="table-layout:fixed;border-collapse:collapse;font-size:1em;width:100%;">';
   html += '<thead><tr>';
@@ -2114,7 +2165,7 @@ function renderAtmTable() {
         html += '<td style="min-width:104px;width:104px;padding:3px 5px;background:transparent;color:transparent;white-space:nowrap;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'"></td>';
         return;
       }
-      var c = interpAt(wp, alt);
+      var c = (ATM_DISP === 'gfs') ? gfsAtWp(wp, alt) : interpAt(wp, alt);
       var bg = 'transparent';
       var txt2 = '—';
       if(c) {
