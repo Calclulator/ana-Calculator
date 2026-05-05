@@ -1184,7 +1184,8 @@ function runParse() {
 
   if (fplParseOk) {
     try {
-      gfsLoad(gfsWaypointsFromWP(), gfsDepartureUtcDate());
+      // gfsLoad は遅延ロード化済み (Method=GFS-* または Display=GFS で自動取得)
+      // gfsLoad(gfsWaypointsFromWP(), gfsDepartureUtcDate());
     } catch (e) {
       console.error('GFS load init failed:', e);
     }
@@ -1688,7 +1689,7 @@ function renderWxCorridorLegend() {
     grad.style.background = 'linear-gradient(to bottom,'+
       'rgba(100,181,246,.92) 0%, rgba(174,213,129,.88) 35%, rgba(255,167,38,.88) 70%, rgba(239,83,80,.92) 100%)';
     labs.innerHTML = '<div style="color:#e3f2fd;">GFS proxy field</div>'+
-      '<div style="color:#90a4ae;font-size:11px;">NAV LOG Apply後にGFS readyで表示</div>';
+      '<div style="color:#90a4ae;font-size:11px;">Method切替時に自動取得</div>';
     labs.style.justifyContent = 'center';
     return;
   }
@@ -2646,6 +2647,15 @@ function applyGfsRadarForCurrentMethod() {
   var methodKey = method === 'GFS-VWS' ? 'VWS'
     : method === 'GFS-Ellrod TI1' ? 'TI1'
     : method === 'GFS-Ellrod TI2' ? 'TI2' : null;
+  if(methodKey && (!window.GFS || window.GFS.status !== 'ready')) {
+    if(typeof gfsLoad === 'function' && typeof gfsWaypointsFromWP === 'function') {
+      console.log('[GfsRadar] auto-loading GFS on demand');
+      gfsLoad(gfsWaypointsFromWP(), gfsDepartureUtcDate(), function(err){
+        if(!err) applyGfsRadarForCurrentMethod();
+      });
+    }
+    return;
+  }
   if(methodKey && window.GFS && window.GFS.status === 'ready') {
     if(typeof GfsRadar !== 'undefined' && GfsRadar.render) {
       gfsRadarLayer = GfsRadar.render(map, {
