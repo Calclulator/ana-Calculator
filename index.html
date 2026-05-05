@@ -2170,7 +2170,8 @@ function renderGfsAtmTable() {
   var wrap = document.getElementById('atm-gfs-tbody-wrap');
   if(!wrap) return;
   if(typeof WP === 'undefined' || !WP || !WP.length) {
-    wrap.innerHTML = '<div style="color:#90a4ae;padding:24px;text-align:center;font-size:1em;">FLT PLN を Apply してください</div>';
+    wrap.innerHTML = '<div style="color:#546e7a;padding:24px;text-align:center;font-size:1em;">'+
+      'Flight Plan で NAV LOG を Apply すると、ここに GFS の Wind/Temp が表示されます</div>';
     return;
   }
   if(!window.GFS || window.GFS.status !== 'ready') {
@@ -2181,7 +2182,81 @@ function renderGfsAtmTable() {
     }
     return;
   }
-  wrap.innerHTML = '<div style="color:#90a4ae;padding:24px;text-align:center;font-size:1em;">Step 3C で実装予定（GFS テーブル描画）</div>';
+
+  // WP順 (FP_ROWS の順を尊重、FIR境界行は除外。WP 配列に存在するもののみ)
+  var wpIds = [];
+  var wpPhaseMap = null;
+  if(typeof FP_ROWS !== 'undefined' && FP_ROWS && FP_ROWS.length) {
+    wpPhaseMap = {};
+    FP_ROWS.forEach(function(r){
+      if(typeof r.id !== 'string') return;
+      if(r.id.charAt(0) === '-') return;
+      var hasWp = false;
+      for(var wi=0;wi<WP.length;wi++) {
+        if(WP[wi].id === r.id) { hasWp = true; break; }
+      }
+      if(hasWp) {
+        wpIds.push(r.id);
+        wpPhaseMap[r.id] = r.phase || 'climb';
+      }
+    });
+  }
+  if(wpIds.length === 0) {
+    for(var wi2=0;wi2<WP.length;wi2++) wpIds.push(WP[wi2].id);
+    wpPhaseMap = null;
+  }
+
+  // 高度カラム: GFS は mb 300-150 (FL280-FL450) のみカバー。1000ft 刻み
+  var altRows = [];
+  for(var fl=450; fl>=280; fl-=10) altRows.push(fl);
+
+  // テーブル組み立て
+  var html = '<table style="table-layout:fixed;border-collapse:collapse;font-size:1em;width:100%;">';
+  html += '<thead><tr>';
+  html += '<th style="position:sticky;top:0;left:0;z-index:4;background:#0d1620;color:#90a4ae;padding:4px 6px;text-align:right;border-right:1px solid #1e2a38;min-width:70px;width:70px;">Altitude</th>';
+  wpIds.forEach(function(wp){
+    html += '<th style="position:sticky;top:0;z-index:3;background:#0d1620;color:#cfd8dc;padding:4px 5px;font-weight:600;border-bottom:1px solid #1e2a38;border-right:1px solid #1e2a38;white-space:nowrap;min-width:9em;width:9em;">'+wp+'</th>';
+  });
+  html += '</tr></thead><tbody>';
+  var prevFl = null;
+  altRows.forEach(function(alt){
+    var altFt = alt * 100;
+    var topBorder = '';
+    if(prevFl !== null) {
+      if((prevFl > 410 && alt <= 410) || (prevFl > 290 && alt <= 290)) {
+        topBorder = 'border-top:2px solid #ef5350;box-shadow:inset 0 2px 0 0 #ef5350;';
+      }
+    }
+    html += '<tr>';
+    html += '<td style="position:sticky;left:0;z-index:2;background:#0d1620;color:#90a4ae;padding:3px 6px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;min-width:70px;width:70px;'+topBorder+'">'+(altFt.toLocaleString())+' ft</td>';
+    wpIds.forEach(function(wp){
+      if(typeof atmCruiseLowFlHide === 'function' && atmCruiseLowFlHide(wpPhaseMap, wp, alt)) {
+        html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:transparent;color:transparent;white-space:nowrap;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'"></td>';
+        return;
+      }
+      var c = gfsAtWp(wp, alt);
+      var bg = 'transparent';
+      var txt2 = '—';
+      if(c) {
+        if(ATM_GFS_SHOW === 'isa') {
+          var dev = c.tmp - isaTempC(altFt);
+          txt2 = (dev>=0?'+':'')+Math.round(dev)+'°C ISA';
+          if(ATM_GFS_HEAT === 'temp') bg = isaDevColor(dev);
+          else if(ATM_GFS_HEAT === 'wind') bg = windColor(c.spd);
+        } else {
+          var dirStr = c.variable ? 'VRB' : (c.dir===null?'---':((c.dir<100?'0':'')+(c.dir<10?'0':'')+c.dir+'°'));
+          txt2 = dirStr+' '+c.spd+'kt '+(c.tmp>=0?'+':'')+c.tmp+'°C';
+          if(ATM_GFS_HEAT === 'wind') bg = windColor(c.spd);
+          else if(ATM_GFS_HEAT === 'temp') bg = tempColor(c.tmp);
+        }
+      }
+      html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:'+bg+';color:#cfd8dc;white-space:nowrap;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'">'+txt2+'</td>';
+    });
+    html += '</tr>';
+    prevFl = alt;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
 }
 
 function renderGfsWsTable() {
