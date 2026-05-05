@@ -71,40 +71,35 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
     return last;
   }
 
-  function estimateFhrFromCtme(maxMin, ato, cycleStr) {
-    // Calculate fhr as absolute hours from cycle reference time to last WP arrival.
-    // ato is the departure UTC Date, cycleStr is "YYYYMMDDHH".
-    if (ato instanceof Date && cycleStr && cycleStr.length === 10) {
-      var y = parseInt(cycleStr.slice(0, 4), 10);
-      var m = parseInt(cycleStr.slice(4, 6), 10) - 1;
-      var d = parseInt(cycleStr.slice(6, 8), 10);
-      var h = parseInt(cycleStr.slice(8, 10), 10);
-      var cycleMs = Date.UTC(y, m, d, h, 0, 0);
-      var lastMs = ato.getTime() + maxMin * 60000;
-      var hrs = Math.round((lastMs - cycleMs) / 3600000);
+  function calcFhrsForRoute(waypoints, ato, cycleStr) {
+    // For each WP, calculate the absolute fhr from cycle ref to its arrival time,
+    // round to nearest 3h, deduplicate, and sort. This ensures the entire flight
+    // is covered with appropriate forecast times.
+    if (!ato || !cycleStr || cycleStr.length !== 10) return [];
+    var y = parseInt(cycleStr.slice(0, 4), 10);
+    var m = parseInt(cycleStr.slice(4, 6), 10) - 1;
+    var d = parseInt(cycleStr.slice(6, 8), 10);
+    var h = parseInt(cycleStr.slice(8, 10), 10);
+    var cycleMs = Date.UTC(y, m, d, h, 0, 0);
+    var seen = {};
+    for (var i = 0; i < waypoints.length; i++) {
+      var ctme = waypoints[i].ctme;
+      if (typeof ctme !== 'number' || isNaN(ctme)) continue;
+      var validMs = ato.getTime() + ctme * 60000;
+      var hrs = (validMs - cycleMs) / 3600000;
       if (hrs < 0) hrs = 0;
       if (hrs > 384) hrs = 384;
-      return hrs;
+      var rounded = Math.round(hrs / 3) * 3;
+      if (rounded < 0) rounded = 0;
+      if (rounded > 384) rounded = 384;
+      seen[rounded] = true;
     }
-    // Fallback for backward compatibility
-    var hrs2 = Math.round(maxMin / 60);
-    if (hrs2 < 0) hrs2 = 0;
-    if (hrs2 > 120) hrs2 = 120;
-    return hrs2;
-  }
-
-  function uniqFhList(primary) {
-    var cand = [Math.max(0, primary - 3), primary, Math.min(384, primary + 3)];
-    var seen = {};
-    var out = [];
-    var j, u;
-    for (j = 0; j < cand.length; j++) {
-      u = cand[j];
-      if (seen[u]) continue;
-      seen[u] = 1;
-      out.push(u);
+    var arr = [];
+    for (var k in seen) {
+      if (seen.hasOwnProperty(k)) arr.push(parseInt(k, 10));
     }
-    return out;
+    arr.sort(function (a, b) { return a - b; });
+    return arr;
   }
 
   function gfsUrl(cycle, fhr, lev, box) {
@@ -199,8 +194,8 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
     if (!box) return;
 
     var cycle = pickGfsCycle(ato);
-    var fhPrimary = estimateFhrFromCtme(maxCtmeMin(waypoints), ato, cycle);
-    var fhrs = uniqFhList(fhPrimary);
+    var fhrs = calcFhrsForRoute(waypoints, ato, cycle);
+    if (fhrs.length === 0) fhrs = [0];
     var t0 = Date.now();
 
     global.GFS = {
