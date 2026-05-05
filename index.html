@@ -1935,7 +1935,7 @@ function renderWsTable() {
   html += '<thead><tr>';
   html += '<th style="position:sticky;top:0;left:0;z-index:4;background:#0d1620;color:#90a4ae;padding:4px 6px;text-align:right;border-right:1px solid #1e2a38;min-width:70px;width:70px;">Altitude</th>';
   wpIds.forEach(function(wp){
-    html += '<th style="position:sticky;top:0;z-index:3;background:#0d1620;color:#cfd8dc;padding:4px 5px;font-weight:600;border-bottom:1px solid #1e2a38;white-space:nowrap;min-width:104px;width:104px;">'+wp+'</th>';
+    html += '<th style="position:sticky;top:0;z-index:3;background:#0d1620;color:#cfd8dc;padding:4px 5px;font-weight:600;border-bottom:1px solid #1e2a38;border-right:1px solid #1e2a38;white-space:nowrap;min-width:9em;width:9em;">'+wp+'</th>';
   });
   html += '</tr></thead><tbody>';
   var prevFl = null;
@@ -1953,7 +1953,7 @@ function renderWsTable() {
     html += '<td style="position:sticky;left:0;z-index:2;background:#0d1620;color:#90a4ae;padding:3px 6px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;min-width:70px;width:70px;'+topBorder+'">'+(altFt.toLocaleString())+' ft</td>';
     wpIds.forEach(function(wp){
       if(atmCruiseLowFlHide(wpPhaseMap, wp, alt)) {
-        html += '<td style="min-width:104px;width:104px;padding:3px 5px;background:transparent;color:transparent;text-align:center;border-bottom:1px solid #14202c;white-space:nowrap;'+topBorder+'"></td>';
+        html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:transparent;color:transparent;text-align:center;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;white-space:nowrap;'+topBorder+'"></td>';
         return;
       }
       var cHi = getCell(wp, alt);
@@ -1971,7 +1971,7 @@ function renderWsTable() {
         }
       }
       var bg = wsColor(val, ATM_WS);
-      html += '<td style="min-width:104px;width:104px;padding:3px 5px;background:'+bg+';color:#cfd8dc;text-align:center;border-bottom:1px solid #14202c;white-space:nowrap;'+topBorder+'">'+txt+sub+'</td>';
+      html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:'+bg+';color:#cfd8dc;text-align:center;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;white-space:nowrap;'+topBorder+'">'+txt+sub+'</td>';
     });
     html += '</tr>';
     prevFl = alt;
