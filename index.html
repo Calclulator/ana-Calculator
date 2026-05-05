@@ -1521,16 +1521,40 @@ var ATM_DISP = 'interpolated'; // 'original' | 'interpolated'
 
 function setAtmDisp(mode) {
   ATM_DISP = mode;
-  ['original','interpolated','gfs'].forEach(function(m){
-    var btn = document.getElementById('atm-disp-'+m);
+  // 実 HTML 側の id 略称に合わせて mode -> id をマップ
+  var BTN_ID = { original: 'atm-disp-orig', interpolated: 'atm-disp-interp', gfs: 'atm-disp-gfs' };
+  Object.keys(BTN_ID).forEach(function(m){
+    var btn = document.getElementById(BTN_ID[m]);
     if(btn) btn.className = 'btn' + (m===mode ? ' on' : '');
   });
   if(mode === 'gfs' && (!window.GFS || window.GFS.status !== 'ready')) {
     if(typeof gfsLoad === 'function' && typeof gfsWaypointsFromWP === 'function') {
       console.log('[ATM] auto-loading GFS for atmosphere display');
-      gfsLoad(gfsWaypointsFromWP(), gfsDepartureUtcDate(), function(err){
-        if(!err) renderAtmTable();
-      });
+      gfsLoad(gfsWaypointsFromWP(), gfsDepartureUtcDate());
+      // ロード中表示
+      var wrap = document.getElementById('atm-tbody-wrap');
+      if(wrap) {
+        wrap.innerHTML = '<div style="color:#90a4ae;padding:24px;text-align:center;font-size:1em;">' +
+          '<div style="margin-bottom:8px;">GFS データをロード中...</div>' +
+          '<div style="font-size:0.85em;color:#546e7a;">予報時刻 × 4 気圧レベルを並列取得しています</div>' +
+          '</div>';
+      }
+      // gfsLoad の callback 仕様に依存せず status をポーリングして検知
+      var pollCount = 0;
+      var pollId = setInterval(function(){
+        pollCount++;
+        if(ATM_DISP !== 'gfs') { clearInterval(pollId); return; }
+        if(window.GFS && window.GFS.status === 'ready') {
+          clearInterval(pollId);
+          renderAtmTable();
+        } else if(window.GFS && window.GFS.status === 'error') {
+          clearInterval(pollId);
+          if(wrap) wrap.innerHTML = '<div style="color:#ef5350;padding:24px;text-align:center;font-size:1em;">GFS ロードエラー: ' + (window.GFS.error || 'unknown') + '</div>';
+        } else if(pollCount > 100) {
+          clearInterval(pollId);
+          if(wrap) wrap.innerHTML = '<div style="color:#ef5350;padding:24px;text-align:center;font-size:1em;">GFS ロードがタイムアウトしました</div>';
+        }
+      }, 200);
       return;
     }
   }
