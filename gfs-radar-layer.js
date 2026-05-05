@@ -84,6 +84,32 @@
     }
   }
 
+  function approxDistNM(lat1, lon1, lat2, lon2) {
+    var avgLat = (lat1 + lat2) * 0.5;
+    var dLat = (lat2 - lat1) * 60.0;
+    var dLon = lon2 - lon1;
+    if (dLon > 180) dLon -= 360;
+    if (dLon < -180) dLon += 360;
+    var dLonNM = dLon * 60.0 * Math.cos(avgLat * Math.PI / 180);
+    return Math.sqrt(dLat * dLat + dLonNM * dLonNM);
+  }
+
+  function minDistToRouteNM(lat, lon, wps) {
+    if (!wps || !wps.length) return 0;
+    var cellLon = lon;
+    if (cellLon < 0) cellLon += 360;
+    var minD = Infinity;
+    for (var i = 0; i < wps.length; i++) {
+      var w = wps[i];
+      var wLon = (typeof w.lon === 'number') ? w.lon : w.lng;
+      if (typeof w.lat !== 'number' || typeof wLon !== 'number') continue;
+      if (wLon < 0) wLon += 360;
+      var d = approxDistNM(lat, cellLon, w.lat, wLon);
+      if (d < minD) minD = d;
+    }
+    return minD;
+  }
+
   function findSlice(fhr, levMb) {
     var s = window.GFS && window.GFS.slices;
     if (!s) return null;
@@ -280,10 +306,21 @@
     // For popup we need to know FL too
     var fl = (opts.fl !== undefined && opts.fl !== null) ? opts.fl : null;
 
+    var corridorNM = (typeof opts.corridorNM === 'number') ? opts.corridorNM : 200;
+    var routeWps = opts.routeWps || (typeof window.WP !== 'undefined' ? window.WP : null);
+    var useFilter = !!(routeWps && routeWps.length && corridorNM > 0 && isFinite(corridorNM));
+    var nFiltered = 0;
+
     for (var iy = 0; iy < g.ny; iy++) {
       var lat = g.la1 + iy * dlat;
       for (var ix = 0; ix < g.nx; ix++) {
         var lon = g.lo1 + ix * dlon;
+        if (useFilter) {
+          if (minDistToRouteNM(lat, lon, routeWps) > corridorNM) {
+            nFiltered++;
+            continue;
+          }
+        }
         var c = computeAtCell(fhr, levelMb, ix, iy);
         if (!c) { nNull++; continue; }
         var v = methodValue(method, c);
@@ -317,8 +354,9 @@
     }
     if (map) group.addTo(map);
     console.log('[GfsRadar] ' + method + ' lev=' + levelMb +
-                ' fhr=' + fhr + ': ' + nDrawn + ' cells, ' +
-                nNull + ' skipped, in ' + (Date.now() - t0) + 'ms');
+                ' fhr=' + fhr + ': ' + nDrawn + ' cells drawn, ' +
+                nNull + ' nodata, ' + nFiltered + ' outside corridor, in ' +
+                (Date.now() - t0) + 'ms');
     return group;
   }
 
