@@ -5,7 +5,7 @@
 // Usage:
 //   var layer = GfsRadar.render(map, { method: 'VWS', fl: 360, validUtc: new Date() });
 //   layer.remove();   // when switching method/altitude
-// ES5 only, no fullwidth quotes.
+// ES5 only, no 全角 quotes.
 
 (function () {
   'use strict';
@@ -47,7 +47,7 @@
     for (var i = 1; i < n; i++) {
       if (fl <= FL_TABLE[i][0]) {
         var f0 = FL_TABLE[i - 1][0], m0 = FL_TABLE[i - 1][1];
-        var f1 = FL_TABLE[i][0], m1 = FL_TABLE[i][1];
+        var f1 = FL_TABLE[i][0],     m1 = FL_TABLE[i][1];
         var t = (fl - f0) / (f1 - f0);
         return m0 + t * (m1 - m0);
       }
@@ -246,7 +246,7 @@
     if (method !== 'VWS' && method !== 'TI1' && method !== 'TI2') method = 'VWS';
 
     var levelMb;
-    if (typeof opts.levelMb === 'number' && !isNaN(opts.levelMb)) {
+    if (opts.levelMb) {
       levelMb = snapLevel(opts.levelMb);
     } else if (opts.fl !== undefined && opts.fl !== null) {
       levelMb = snapLevel(flToMb(opts.fl));
