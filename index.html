@@ -3152,11 +3152,11 @@ function loadSigmets() {
           var firLabel = props.firName || props.firId || props.icaoId || '';
           var title = hazard + (firLabel ? ' - ' + firLabel : '');
           var raw = props.rawAirSigmet || props.rawSigmet || '(本文なし)';
-          var html = '<div style="font-family:monospace;font-size:11px;min-width:800px;max-width:800px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">'
+          var html = '<div style="font-family:monospace;font-size:11px;min-width:400px;max-width:400px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">'
             + '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;">' + sigPopupEsc(title) + '</div>'
             + '<pre style="white-space:pre-wrap;margin:0;color:#263238;">' + sigPopupEsc(raw) + '</pre>'
             + '</div>';
-          l.bindPopup(html, {maxWidth: 900, minWidth: 820});
+          l.bindPopup(html, {maxWidth: 500, minWidth: 420});
         }
       }).addTo(map);
       bringTop();
