@@ -3,7 +3,8 @@
 //
 // Public: window.GfsRadar.render(map, opts) -> L.ImageOverlay | null
 //   opts.method  'VWS' | 'TI1' | 'TI2'
-//   opts.fl      flight level (e.g. 35 for FL350)
+//   opts.fl      flight level (e.g. 35 for FL350); ignored if opts.levelMb set
+//   opts.levelMb optional pressure (hPa) — bypasses FL→pressure (debug / console tests)
 //   opts.validUtc Date (UTC) for gfsValueAt slice pick
 // Preconditions: Flight Plan Apply completed gfsLoad; window.GFS.status === 'ready'.
 //
@@ -69,6 +70,19 @@ var GfsRadar = (function() {
     var dv = (wHi.v - wLo.v) * MS_TO_KT;
     var mag = Math.sqrt(du * du + dv * dv);
     return mag;
+  }
+
+  /** VWS between cruiseMb (upper air) and cruiseMb + DELTA (≈1000 ft lower). */
+  function scalarVwsKtFromMb(lat, lon, cruiseMb, validUtc) {
+    var DELTA_MB = 42;
+    var pUpper = cruiseMb;
+    var pLower = cruiseMb + DELTA_MB;
+    var wHi = windUvAtP(lat, lon, pUpper, validUtc);
+    var wLo = windUvAtP(lat, lon, pLower, validUtc);
+    if (!wHi || !wLo) return null;
+    var du = (wHi.u - wLo.u) * MS_TO_KT;
+    var dv = (wHi.v - wLo.v) * MS_TO_KT;
+    return Math.sqrt(du * du + dv * dv);
   }
 
   function metersPerDegLon(lat) {
@@ -164,21 +178,27 @@ var GfsRadar = (function() {
     return [r, g, b, 200];
   }
 
-  function sampleScalar(methodKey, lat, lon, fl, validUtc, dDeg, levMb) {
-    if (methodKey === 'VWS') return scalarVwsKt(lat, lon, fl, validUtc);
+  function sampleScalar(methodKey, lat, lon, fl, validUtc, dDeg, levMb, vwsUseDirectMb) {
+    if (methodKey === 'VWS') {
+      if (vwsUseDirectMb) return scalarVwsKtFromMb(lat, lon, levMb, validUtc);
+      return scalarVwsKt(lat, lon, fl, validUtc);
+    }
     if (methodKey === 'TI1') return ellrodTi1(lat, lon, levMb, validUtc, dDeg);
     if (methodKey === 'TI2') return ellrodTi2(lat, lon, levMb, validUtc, dDeg);
     return null;
   }
 
-  function paintCanvas(bbox, nx, ny, methodKey, fl, validUtc) {
+  function paintCanvas(bbox, nx, ny, methodKey, fl, validUtc, levelMbOpt) {
     var south = bbox.south;
     var north = bbox.north;
     var west = bbox.west;
     var east = bbox.east;
     var dLat = (north - south) / Math.max(1, ny - 1);
     var dLon = (east - west) / Math.max(1, nx - 1);
-    var levMb = cruiseLevMb(fl);
+    var levMb = (typeof levelMbOpt === 'number' && !isNaN(levelMbOpt))
+      ? levelMbOpt
+      : cruiseLevMb(fl);
+    var vwsUseDirectMb = typeof levelMbOpt === 'number' && !isNaN(levelMbOpt);
     var dDeg = 0.12;
     var c = document.createElement('canvas');
     c.width = nx;
@@ -191,7 +211,7 @@ var GfsRadar = (function() {
       lat = north - iy * dLat;
       for (ix = 0; ix < nx; ix++) {
         lon = west + ix * dLon;
-        sc = sampleScalar(methodKey, lat, lon, fl, validUtc, dDeg, levMb);
+        sc = sampleScalar(methodKey, lat, lon, fl, validUtc, dDeg, levMb, vwsUseDirectMb);
         if (methodKey === 'VWS') rgba = rgbaVws(sc);
         else {
           logn = sc === null || sc <= 0 ? null : Math.log(sc + 1e-18) + 18;
@@ -220,12 +240,14 @@ var GfsRadar = (function() {
     var methodKey = opts.method;
     if (methodKey !== 'VWS' && methodKey !== 'TI1' && methodKey !== 'TI2') return null;
     var fl = typeof opts.fl === 'number' && !isNaN(opts.fl) ? opts.fl : 35;
+    var levelMbOpt = null;
+    if (typeof opts.levelMb === 'number' && !isNaN(opts.levelMb)) levelMbOpt = opts.levelMb;
     var validUtc = opts.validUtc instanceof Date ? opts.validUtc : new Date();
     var bbox = G.bbox;
     var nx = 88;
     var ny = Math.max(48, Math.round(88 * (bbox.north - bbox.south) / Math.max(0.5, bbox.east - bbox.west)));
     if (ny > 120) ny = 120;
-    var canvas = paintCanvas(bbox, nx, ny, methodKey, fl, validUtc);
+    var canvas = paintCanvas(bbox, nx, ny, methodKey, fl, validUtc, levelMbOpt);
     var url = canvas.toDataURL('image/png');
     var bounds = L.latLngBounds(
       [bbox.south, bbox.west],
