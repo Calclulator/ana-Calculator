@@ -33,7 +33,7 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
   }
 
   function bboxFromWaypoints(wps, pad) {
-    pad = typeof pad === 'number' ? pad : 1.5;
+    pad = typeof pad === 'number' ? pad : 3.3;
     var i, w, la, lo, s, n, e, wst, any = false;
     s = 90;
     n = -90;
