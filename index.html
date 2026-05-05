@@ -2127,9 +2127,27 @@ function renderAtmTable() {
     else mb = 226.32 * Math.exp(-(altFt - 36089) / 20805);
     if(mb > 320) return null;
     if(typeof gfsValueAt !== 'function') return null;
-    var u = gfsValueAt(wp.lat, wp.lng, mb, 'UGRD', validUtc);
-    var v = gfsValueAt(wp.lat, wp.lng, mb, 'VGRD', validUtc);
-    var t = gfsValueAt(wp.lat, wp.lng, mb, 'TMP', validUtc);
+    var GFS_LV = [300, 250, 200, 150];
+    function interpVar(varName) {
+      var lo = null, hi = null;
+      for(var i=0;i<GFS_LV.length-1;i++) {
+        if(mb <= GFS_LV[i] && mb >= GFS_LV[i+1]) { lo = GFS_LV[i]; hi = GFS_LV[i+1]; break; }
+      }
+      if(lo === null) {
+        if(mb > 300) { lo = hi = 300; }
+        else if(mb < 150) { lo = hi = 150; }
+        else return null;
+      }
+      if(lo === hi) return gfsValueAt(wp.lat, wp.lng, lo, varName, validUtc);
+      var vLo = gfsValueAt(wp.lat, wp.lng, lo, varName, validUtc);
+      var vHi = gfsValueAt(wp.lat, wp.lng, hi, varName, validUtc);
+      if(vLo === null || vHi === null) return null;
+      var f = (Math.log(mb) - Math.log(lo)) / (Math.log(hi) - Math.log(lo));
+      return vLo + (vHi - vLo) * f;
+    }
+    var u = interpVar('UGRD');
+    var v = interpVar('VGRD');
+    var t = interpVar('TMP');
     if(u === null || v === null || t === null) return null;
     var spd = Math.sqrt(u*u + v*v) * 1.943844;
     var dir = (Math.atan2(-u, -v) * 180/Math.PI + 360) % 360;
