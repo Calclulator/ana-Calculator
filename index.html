@@ -1549,7 +1549,10 @@ function setAtmDisp(mode) {
           renderAtmTable();
         } else if(window.GFS && window.GFS.status === 'error') {
           clearInterval(pollId);
-          if(wrap) wrap.innerHTML = '<div style="color:#ef5350;padding:24px;text-align:center;font-size:1em;">GFS ロードエラー: ' + (window.GFS.error || 'unknown') + '</div>';
+          if(wrap) wrap.innerHTML = '<div style="color:#ef5350;padding:24px;text-align:center;font-size:1em;">' +
+            'GFS ロードエラー: ' + (window.GFS.error || 'unknown') +
+            '<br><button class="btn" onclick="setAtmDisp(\'gfs\')" style="margin-top:12px;">再試行</button>' +
+            '</div>';
         } else if(pollCount > 100) {
           clearInterval(pollId);
           if(wrap) wrap.innerHTML = '<div style="color:#ef5350;padding:24px;text-align:center;font-size:1em;">GFS ロードがタイムアウトしました</div>';
@@ -2188,7 +2191,7 @@ function renderAtmTable() {
   html += '<thead><tr>';
   html += '<th style="position:sticky;top:0;left:0;z-index:4;background:#0d1620;color:#90a4ae;padding:4px 6px;text-align:right;border-right:1px solid #1e2a38;min-width:70px;width:70px;">Altitude</th>';
   wpIds.forEach(function(wp){
-    html += '<th style="position:sticky;top:0;z-index:3;background:#0d1620;color:#cfd8dc;padding:4px 5px;font-weight:600;border-bottom:1px solid #1e2a38;border-right:1px solid #1e2a38;white-space:nowrap;min-width:104px;width:104px;">'+wp+'</th>';
+    html += '<th style="position:sticky;top:0;z-index:3;background:#0d1620;color:#cfd8dc;padding:4px 5px;font-weight:600;border-bottom:1px solid #1e2a38;border-right:1px solid #1e2a38;white-space:nowrap;min-width:9em;width:9em;">'+wp+'</th>';
   });
   html += '</tr></thead><tbody>';
   var prevFl = null;
@@ -2204,7 +2207,7 @@ function renderAtmTable() {
     html += '<td style="position:sticky;left:0;z-index:2;background:#0d1620;color:#90a4ae;padding:3px 6px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;min-width:70px;width:70px;'+topBorder+'">'+(altFt.toLocaleString())+' ft</td>';
     wpIds.forEach(function(wp){
       if(atmCruiseLowFlHide(wpPhaseMap, wp, alt)) {
-        html += '<td style="min-width:104px;width:104px;padding:3px 5px;background:transparent;color:transparent;white-space:nowrap;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'"></td>';
+        html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:transparent;color:transparent;white-space:nowrap;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'"></td>';
         return;
       }
       var c = (ATM_DISP === 'gfs') ? gfsAtWp(wp, alt) : interpAt(wp, alt);
@@ -2223,7 +2226,7 @@ function renderAtmTable() {
           else if(ATM_HEAT === 'temp') bg = tempColor(c.tmp);
         }
       }
-      html += '<td style="min-width:104px;width:104px;padding:3px 5px;background:'+bg+';color:#cfd8dc;white-space:nowrap;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'">'+txt2+'</td>';
+      html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:'+bg+';color:#cfd8dc;white-space:nowrap;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'">'+txt2+'</td>';
     });
     html += '</tr>';
     prevFl = alt;
