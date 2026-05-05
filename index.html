@@ -327,6 +327,16 @@
   <div id="atm-ws-explain" style="color:#546e7a;padding:6px 12px;border-bottom:1px solid #1e2a38;line-height:1.5;"></div>
   <div id="atm-ws-wrap" style="flex:1;min-height:0;overflow:auto;padding:6px;"></div>
 </div><!-- atm-panel -->
+<!-- ===== ATMOSPHERE ANALYSIS (GFS) ===== -->
+<div id="atm-gfs-panel" class="panel">
+  <div class="bar">
+    <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.06em;font-size:1em;">ATMOSPHERE ANALYSIS (GFS)</span>
+    <span style="font-size:1em;color:#90a4ae;margin-left:14px;">GFS データに基づく大気解析</span>
+  </div>
+  <div style="padding:24px;color:#90a4ae;text-align:center;font-size:1em;">
+    Step 3B / 3C で実装予定（テーブル描画 + GFS 値取得 + WIND SHEAR Method 切替）
+  </div>
+</div><!-- atm-gfs-panel -->
 </div><!-- #panels -->
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -707,7 +717,7 @@ var lightningReconnectTimer = null;
 // TABS
 // =====================================================================
 function showTab(name) {
-  ['wx','fp','atm'].forEach(function(n) {
+  ['wx','fp','atm','atm-gfs'].forEach(function(n) {
     document.getElementById(n+'-panel').classList.remove('active');
     var ni=document.getElementById('nav-'+n);
     if(ni) ni.classList.toggle('nav-act', n===name);
@@ -3758,6 +3768,7 @@ updateWxFlPanel();
       <div class="nav-sec-lbl">Weather</div>
       <button class="nav-item nav-act" id="nav-wx" onclick="navTo('wx')">⛅ Weather Radar</button>
       <button class="nav-item" id="nav-atm" onclick="navTo('atm')">🌡 Atmosphere Analysis</button>
+      <button class="nav-item" id="nav-atm-gfs" onclick="navTo('atm-gfs')">🌡 Atmosphere Analysis (GFS)</button>
       <button class="nav-item nav-dis">🛰 SAT View<span class="nav-tag">WIP</span></button>
     </div>
     <div class="nav-sec">
