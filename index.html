@@ -1048,7 +1048,10 @@ function runParse() {
       spd = s + 100;
     } else {
       dir = d1*100 + d2*10;
-      spd = s;
+      // ANA(JetPlan)独自フォーマット: 風速末尾 00 (= 0kt) は 100kt を意味する
+      // 例: 2900M34 = 290°/100kt/-34°C
+      // calm wind は別途 9900xxx で表記されるので 0kt との衝突は無い
+      spd = (s === 0) ? 100 : s;
     }
     if(dir === 0) dir = 360; // 360を0と表記しないため
     return {dir:dir, spd:spd, tmp:(tSign2==='M'?-t:t), variable:false};
