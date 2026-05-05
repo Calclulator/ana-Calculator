@@ -12,7 +12,11 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
   }
 
   function pickGfsCycle(refUtc) {
-    var t = refUtc.getTime() - 8 * 3600000;
+    // GFS cycles become available on NOMADS ~4-5h after cycle hour.
+    // Always pick based on CURRENT time (not ATO which may be in the future)
+    // to avoid requesting cycles that do not exist yet.
+    var now = new Date();
+    var t = now.getTime() - 5 * 3600000;
     var u = new Date(t);
     var y = u.getUTCFullYear();
     var mo = u.getUTCMonth() + 1;
@@ -67,11 +71,26 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
     return last;
   }
 
-  function estimateFhrFromCtme(maxMin) {
-    var hrs = Math.round(maxMin / 60);
-    if (hrs < 0) hrs = 0;
-    if (hrs > 120) hrs = 120;
-    return hrs;
+  function estimateFhrFromCtme(maxMin, ato, cycleStr) {
+    // Calculate fhr as absolute hours from cycle reference time to last WP arrival.
+    // ato is the departure UTC Date, cycleStr is "YYYYMMDDHH".
+    if (ato instanceof Date && cycleStr && cycleStr.length === 10) {
+      var y = parseInt(cycleStr.slice(0, 4), 10);
+      var m = parseInt(cycleStr.slice(4, 6), 10) - 1;
+      var d = parseInt(cycleStr.slice(6, 8), 10);
+      var h = parseInt(cycleStr.slice(8, 10), 10);
+      var cycleMs = Date.UTC(y, m, d, h, 0, 0);
+      var lastMs = ato.getTime() + maxMin * 60000;
+      var hrs = Math.round((lastMs - cycleMs) / 3600000);
+      if (hrs < 0) hrs = 0;
+      if (hrs > 384) hrs = 384;
+      return hrs;
+    }
+    // Fallback for backward compatibility
+    var hrs2 = Math.round(maxMin / 60);
+    if (hrs2 < 0) hrs2 = 0;
+    if (hrs2 > 120) hrs2 = 120;
+    return hrs2;
   }
 
   function uniqFhList(primary) {
@@ -180,7 +199,7 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
     if (!box) return;
 
     var cycle = pickGfsCycle(ato);
-    var fhPrimary = estimateFhrFromCtme(maxCtmeMin(waypoints));
+    var fhPrimary = estimateFhrFromCtme(maxCtmeMin(waypoints), ato, cycle);
     var fhrs = uniqFhList(fhPrimary);
     var t0 = Date.now();
 
