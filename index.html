@@ -67,6 +67,9 @@
   #atm-panel #atm-route-lbl{font-size:1em;}
   #atm-panel #atm-ws-legend,
   #atm-panel #atm-ws-explain{font-size:1em;}
+  #atm-gfs-panel .btn{font-size:1em;}
+  #atm-gfs-panel table th:first-child,
+  #atm-gfs-panel table td:first-child{color:#90a4ae;}
   .fp-in:focus{outline:none;border-bottom-color:#4fc3f7;background:#060a14;}
   .fp-in::placeholder{color:#2a3a4e;}
   .fp-note{width:90px;}
@@ -2213,9 +2216,9 @@ function renderGfsAtmTable() {
   // テーブル組み立て
   var html = '<table style="table-layout:fixed;border-collapse:collapse;font-size:1em;width:100%;">';
   html += '<thead><tr>';
-  html += '<th style="position:sticky;top:0;left:0;z-index:4;background:#0d1620;color:#90a4ae;padding:4px 6px;text-align:right;border-right:1px solid #1e2a38;min-width:70px;width:70px;">Altitude</th>';
+  html += '<th style="position:sticky;top:0;left:0;z-index:4;background:#0d1620;padding:4px 6px;text-align:right;border-right:1px solid #1e2a38;min-width:70px;width:70px;">Altitude</th>';
   wpIds.forEach(function(wp){
-    html += '<th style="position:sticky;top:0;z-index:3;background:#0d1620;color:#cfd8dc;padding:4px 5px;font-weight:600;border-bottom:1px solid #1e2a38;border-right:1px solid #1e2a38;white-space:nowrap;min-width:9em;width:9em;">'+wp+'</th>';
+    html += '<th style="position:sticky;top:0;z-index:3;background:#0d1620;padding:4px 5px;font-weight:600;border-bottom:1px solid #1e2a38;border-right:1px solid #1e2a38;white-space:nowrap;min-width:9em;width:9em;">'+wp+'</th>';
   });
   html += '</tr></thead><tbody>';
   var prevFl = null;
@@ -2228,7 +2231,7 @@ function renderGfsAtmTable() {
       }
     }
     html += '<tr>';
-    html += '<td style="position:sticky;left:0;z-index:2;background:#0d1620;color:#90a4ae;padding:3px 6px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;min-width:70px;width:70px;'+topBorder+'">'+(altFt.toLocaleString())+' ft</td>';
+    html += '<td style="position:sticky;left:0;z-index:2;background:#0d1620;padding:3px 6px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;min-width:70px;width:70px;'+topBorder+'">'+(altFt.toLocaleString())+' ft</td>';
     wpIds.forEach(function(wp){
       if(typeof atmCruiseLowFlHide === 'function' && atmCruiseLowFlHide(wpPhaseMap, wp, alt)) {
         html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:transparent;color:transparent;white-space:nowrap;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'"></td>';
@@ -2250,7 +2253,7 @@ function renderGfsAtmTable() {
           else if(ATM_GFS_HEAT === 'temp') bg = tempColor(c.tmp);
         }
       }
-      html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:'+bg+';color:#cfd8dc;white-space:nowrap;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'">'+txt2+'</td>';
+      html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:'+bg+';white-space:nowrap;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'">'+txt2+'</td>';
     });
     html += '</tr>';
     prevFl = alt;
@@ -2405,9 +2408,9 @@ function renderGfsWsTable() {
 
   var html = '<table style="table-layout:fixed;border-collapse:collapse;font-size:1em;width:100%;">';
   html += '<thead><tr>';
-  html += '<th style="position:sticky;top:0;left:0;z-index:4;background:#0d1620;color:#90a4ae;padding:4px 6px;text-align:right;border-right:1px solid #1e2a38;min-width:70px;width:70px;">Altitude</th>';
+  html += '<th style="position:sticky;top:0;left:0;z-index:4;background:#0d1620;padding:4px 6px;text-align:right;border-right:1px solid #1e2a38;min-width:70px;width:70px;">Altitude</th>';
   wpIds.forEach(function(wp){
-    html += '<th style="position:sticky;top:0;z-index:3;background:#0d1620;color:#cfd8dc;padding:4px 5px;font-weight:600;border-bottom:1px solid #1e2a38;border-right:1px solid #1e2a38;white-space:nowrap;min-width:9em;width:9em;">'+wp+'</th>';
+    html += '<th style="position:sticky;top:0;z-index:3;background:#0d1620;padding:4px 5px;font-weight:600;border-bottom:1px solid #1e2a38;border-right:1px solid #1e2a38;white-space:nowrap;min-width:9em;width:9em;">'+wp+'</th>';
   });
   html += '</tr></thead><tbody>';
   var prevFl = null;
@@ -2420,7 +2423,7 @@ function renderGfsWsTable() {
       }
     }
     html += '<tr>';
-    html += '<td style="position:sticky;left:0;z-index:2;background:#0d1620;color:#90a4ae;padding:3px 6px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;min-width:70px;width:70px;'+topBorder+'">'+(altFt.toLocaleString())+' ft</td>';
+    html += '<td style="position:sticky;left:0;z-index:2;background:#0d1620;padding:3px 6px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;min-width:70px;width:70px;'+topBorder+'">'+(altFt.toLocaleString())+' ft</td>';
     wpIds.forEach(function(wp){
       if(typeof atmCruiseLowFlHide === 'function' && atmCruiseLowFlHide(wpPhaseMap, wp, alt)) {
         html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:transparent;color:transparent;text-align:center;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;white-space:nowrap;'+topBorder+'"></td>';
@@ -2437,7 +2440,7 @@ function renderGfsWsTable() {
         }
         bg = gfsWsCellBg(dispMode, val);
       }
-      html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:'+bg+';color:#cfd8dc;text-align:center;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;white-space:nowrap;'+topBorder+'">'+txt+'</td>';
+      html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:'+bg+';text-align:center;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;white-space:nowrap;'+topBorder+'">'+txt+'</td>';
     });
     html += '</tr>';
     prevFl = alt;
@@ -3345,6 +3348,12 @@ function toggleMode() {
     #atm-panel th{background:#f0f4f8!important;color:#546e7a!important;border-bottom-color:#d0d8e4!important;}
     #atm-panel td{color:#1a2a3a!important;border-bottom-color:#e8ecf0!important;}
     #atm-panel td:first-child{background:#f0f4f8!important;color:#546e7a!important;}
+    #atm-gfs-panel{background:#f5f5f5!important;}
+    #atm-gfs-panel .bar{background:#f0f4f8!important;border-bottom-color:#dde3ea!important;}
+    #atm-gfs-panel table{background:#ffffff!important;}
+    #atm-gfs-panel th{background:#f0f4f8!important;color:#546e7a!important;border-bottom-color:#d0d8e4!important;}
+    #atm-gfs-panel td{color:#1a2a3a!important;border-bottom-color:#e8ecf0!important;}
+    #atm-gfs-panel td:first-child{background:#f0f4f8!important;color:#546e7a!important;}
     #atm-ws-explain{color:#546e7a!important;}
     #atm-ws-legend{color:#546e7a!important;border-bottom-color:#d0d8e4!important;}
     #atm-ws-legend .atm-ws-leg-swatch{border-color:rgba(84,110,122,.45)!important;}
