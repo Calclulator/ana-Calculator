@@ -2492,6 +2492,230 @@ function renderGfsWsTable() {
   wrap.innerHTML = html;
 }
 
+function exportCalibrationData() {
+  if(typeof WP === 'undefined' || !WP || !WP.length) {
+    console.warn('[calibration] WP が空です（NAV LOG を Apply してください）');
+    return;
+  }
+  if(typeof WFM_DATA === 'undefined' || !WFM_DATA || Object.keys(WFM_DATA).length === 0) {
+    console.warn('[calibration] WFM_DATA がありません（NAV LOG を Apply してください）');
+    return;
+  }
+  if(!window.GFS || window.GFS.status !== 'ready') {
+    console.warn('[calibration] GFS が ready ではありません');
+    return;
+  }
+  if(typeof GfsRadar === 'undefined' || !GfsRadar.computeAtCell || !GfsRadar.methodValue ||
+      !GfsRadar.nearestFhr || !GfsRadar.flToMb || !GfsRadar.snapLevel || !GfsRadar.getThresholds) {
+    console.warn('[calibration] GfsRadar API が不足しています');
+    return;
+  }
+
+  function findSliceFhrLev(fhr, levMb) {
+    var s = window.GFS && window.GFS.slices;
+    if(!s) return null;
+    var j;
+    for(j = 0; j < s.length; j++) {
+      if(s[j].meta.fhr === fhr && s[j].meta.lev === levMb) return s[j];
+    }
+    return null;
+  }
+
+  function latLonToCellIxIy(lat, lon, g) {
+    var nx = g.nx;
+    var ny = g.ny;
+    var la1 = g.la1;
+    var lo1 = g.lo1;
+    var la2 = g.la2;
+    var lo2 = g.lo2;
+    var dlat = ny > 1 ? (la1 - la2) / (ny - 1) : (la1 - la2 || 1e-6);
+    var dlon = nx > 1 ? (lo2 - lo1) / (nx - 1) : (lo2 - lo1 || 1e-6);
+    var cellLon = lon;
+    if(cellLon < 0) cellLon += 360;
+    var iy = (la1 - lat) / dlat;
+    var ix = (cellLon - lo1) / dlon;
+    if(ix < 0 || ix > nx - 1 || iy < 0 || iy > ny - 1) return null;
+    return { ix: Math.floor(ix), iy: Math.floor(iy) };
+  }
+
+  function validUtcForWp(wp) {
+    var ato;
+    if(typeof DEP_ATO_MIN === 'number' && DEP_ATO_MIN !== null) {
+      var now = new Date();
+      ato = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
+        Math.floor(DEP_ATO_MIN/60), DEP_ATO_MIN%60, 0));
+    } else if(typeof DEP_STD_MIN === 'number' && DEP_STD_MIN !== null) {
+      var now2 = new Date();
+      ato = new Date(Date.UTC(now2.getUTCFullYear(), now2.getUTCMonth(), now2.getUTCDate(),
+        Math.floor(DEP_STD_MIN/60), DEP_STD_MIN%60, 0));
+    } else {
+      ato = new Date();
+    }
+    return new Date(ato.getTime() + (wp.ctme || 0) * 60000);
+  }
+
+  function gfsMetricsAtWpFl(wp, altFl) {
+    var lat = wp.lat;
+    var lon = typeof wp.lon === 'number' ? wp.lon : wp.lng;
+    if(typeof lat !== 'number' || typeof lon !== 'number') return null;
+    var vu = validUtcForWp(wp);
+    var fhr = GfsRadar.nearestFhr(vu);
+    if(fhr === null) return null;
+    var centerMb = GfsRadar.snapLevel(GfsRadar.flToMb(altFl));
+    var sCenter = findSliceFhrLev(fhr, centerMb);
+    if(!sCenter || !sCenter.grid) return null;
+    var ij = latLonToCellIxIy(lat, lon, sCenter.grid);
+    if(!ij) return null;
+    var c = GfsRadar.computeAtCell(fhr, centerMb, ij.ix, ij.iy);
+    if(!c) return null;
+    return {
+      vws: GfsRadar.methodValue('VWS', c),
+      ti1: GfsRadar.methodValue('TI1', c),
+      ti2: GfsRadar.methodValue('TI2', c)
+    };
+  }
+
+  function navlogVwsBandLabel(val) {
+    if(val === null || isNaN(val)) return '';
+    if(val <= 4) return 'Smooth (0-4)';
+    if(val <= 6) return 'Light- (5-6)';
+    if(val <= 9) return 'Light (7-9)';
+    if(val <= 12) return 'Light+ (10-12)';
+    if(val <= 17) return 'Moderate (13-17)';
+    return 'Severe (18+)';
+  }
+
+  function gfsBandLabel(methodKey, rawVal) {
+    if(rawVal === null || isNaN(rawVal)) return '';
+    var thr = GfsRadar.getThresholds(methodKey);
+    var v = rawVal;
+    if(methodKey === 'TI1' || methodKey === 'TI2') v = rawVal * 1e7;
+    var idx = -1;
+    var i;
+    for(i = 0; i < thr.length; i++) {
+      if(v >= thr[i]) {
+        idx = i;
+        break;
+      }
+    }
+    if(idx < 0) idx = thr.length;
+    idx = Math.min(idx, 5);
+    var palNames = ['Severe', 'Heavy', 'Moderate', 'Light', 'Minimal', 'Smooth'];
+    return palNames[idx];
+  }
+
+  function csvEscape(cell) {
+    if(cell === null || cell === undefined) return '';
+    var t = String(cell);
+    if(t.indexOf(',') >= 0 || t.indexOf('"') >= 0 || t.indexOf('\r') >= 0 || t.indexOf('\n') >= 0) {
+      return '"' + t.replace(/"/g, '""') + '"';
+    }
+    return t;
+  }
+
+  var wpIds = [];
+  if(typeof FP_ROWS !== 'undefined' && FP_ROWS && FP_ROWS.length) {
+    FP_ROWS.forEach(function(r){
+      if(typeof r.id !== 'string') return;
+      if(r.id.charAt(0) === '-') return;
+      var hasWp = false;
+      var wi;
+      for(wi = 0; wi < WP.length; wi++) {
+        if(WP[wi].id === r.id) { hasWp = true; break; }
+      }
+      if(hasWp) wpIds.push(r.id);
+    });
+  }
+  if(wpIds.length === 0) {
+    var k;
+    var keys = Object.keys(WFM_DATA);
+    for(k = 0; k < keys.length; k++) {
+      wpIds.push(keys[k]);
+    }
+  }
+
+  var rows = [];
+  var fl;
+  var wi;
+  var wpi;
+  for(wpi = 0; wpi < wpIds.length; wpi++) {
+    var wpId = wpIds[wpi];
+    var wp = null;
+    for(wi = 0; wi < WP.length; wi++) {
+      if(WP[wi].id === wpId) { wp = WP[wi]; break; }
+    }
+    if(!wp) continue;
+    var lat = wp.lat;
+    var lon = typeof wp.lon === 'number' ? wp.lon : wp.lng;
+    var vu = validUtcForWp(wp);
+    var vuIso = vu.toISOString();
+    for(fl = 280; fl <= 450; fl += 10) {
+      var flTen = fl;
+      var cHi = getWfmInterpolatedCell(wpId, flTen);
+      var cLo = getWfmInterpolatedCell(wpId, flTen - 10);
+      var navVws = vwsValue(cLo, cHi, 1000);
+      var navBand = navlogVwsBandLabel(navVws);
+      var gfs = gfsMetricsAtWpFl(wp, flTen);
+      var gfsVws = gfs ? gfs.vws : null;
+      var gfsTi1 = gfs ? gfs.ti1 : null;
+      var gfsTi2 = gfs ? gfs.ti2 : null;
+      var row = {
+        wp: wpId,
+        fl: flTen,
+        lat: lat,
+        lon: lon,
+        validUtcISO: vuIso,
+        navlogVws_kt_per_1000ft: navVws === null || isNaN(navVws) ? '' : navVws,
+        navlogVws_band: navBand,
+        gfsVws_s_inv: gfsVws === null || isNaN(gfsVws) ? '' : gfsVws,
+        gfsVws_x1000: gfsVws === null || isNaN(gfsVws) ? '' : gfsVws * 1000,
+        gfsVws_band: gfsBandLabel('VWS', gfsVws),
+        gfsTi1: gfsTi1 === null || isNaN(gfsTi1) ? '' : gfsTi1,
+        gfsTi1_band: gfsBandLabel('TI1', gfsTi1),
+        gfsTi2: gfsTi2 === null || isNaN(gfsTi2) ? '' : gfsTi2,
+        gfsTi2_band: gfsBandLabel('TI2', gfsTi2)
+      };
+      rows.push(row);
+    }
+  }
+
+  console.table(rows);
+
+  var hdr = [
+    'wp', 'fl', 'lat', 'lon', 'validUtcISO',
+    'navlogVws_kt_per_1000ft', 'navlogVws_band',
+    'gfsVws_s_inv', 'gfsVws_x1000', 'gfsVws_band',
+    'gfsTi1', 'gfsTi1_band', 'gfsTi2', 'gfsTi2_band'
+  ];
+  var lines = [];
+  lines.push(hdr.join(','));
+  var ri;
+  for(ri = 0; ri < rows.length; ri++) {
+    var r = rows[ri];
+    lines.push([
+      csvEscape(r.wp), r.fl, r.lat, r.lon, csvEscape(r.validUtcISO),
+      r.navlogVws_kt_per_1000ft, csvEscape(r.navlogVws_band),
+      r.gfsVws_s_inv, r.gfsVws_x1000, csvEscape(r.gfsVws_band),
+      r.gfsTi1, csvEscape(r.gfsTi1_band), r.gfsTi2, csvEscape(r.gfsTi2_band)
+    ].join(','));
+  }
+  var csv = '\ufeff' + lines.join('\r\n');
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var d = new Date();
+  var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+  var fname = 'calibration_' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '_' +
+    pad(d.getHours()) + pad(d.getMinutes()) + '.csv';
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = fname;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  console.log('[calibration] wrote ' + rows.length + ' rows -> ' + fname);
+}
+
 function renderAtmTable() {
   var wrap = document.getElementById('atm-tbody-wrap');
   if(!wrap) return;
