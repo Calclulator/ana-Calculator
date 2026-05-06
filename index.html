@@ -3224,6 +3224,83 @@ function bearing(lat1,lng1,lat2,lng2) {
     Math.cos(r1)*Math.sin(r2)-Math.sin(r1)*Math.cos(r2)*Math.cos(dL));
 }
 
+// 経度配列を隣接点との差が±180度を超えないよう±360で連続化 (元配列は不変)
+function unwrapLatLngs(arr) {
+  if(!arr || !arr.length) return [];
+  var out = [];
+  var i, p, lat, lng, lngU, prevLngU, d;
+  for(i = 0; i < arr.length; i++) {
+    p = arr[i];
+    lat = p[0];
+    lng = p[1];
+    if(i === 0) {
+      lngU = lng;
+      prevLngU = lngU;
+      out.push([lat, lngU]);
+    } else {
+      lngU = lng;
+      d = lngU - prevLngU;
+      while(d > 180) { lngU -= 360; d = lngU - prevLngU; }
+      while(d < -180) { lngU += 360; d = lngU - prevLngU; }
+      prevLngU = lngU;
+      out.push([lat, lngU]);
+    }
+  }
+  return out;
+}
+
+// WP に連続化済み経度 lngU を付与 (lng は変更しない)
+function unwrapWPs(wps) {
+  if(!wps || !wps.length) return;
+  if(wps.length === 1) {
+    wps[0].lngU = wps[0].lng;
+    return;
+  }
+  var i, w, prev, lngU, d;
+  wps[0].lngU = wps[0].lng;
+  prev = wps[0].lngU;
+  for(i = 1; i < wps.length; i++) {
+    w = wps[i];
+    lngU = w.lng;
+    d = lngU - prev;
+    while(d > 180) { lngU -= 360; d = lngU - prev; }
+    while(d < -180) { lngU += 360; d = lngU - prev; }
+    w.lngU = lngU;
+    prev = lngU;
+  }
+}
+
+// ETP 座標を最寄り航路セグメントの lngU 系に合わせる (ETPS 要素に lngU を付与)
+function assignEtpLngU(etps) {
+  if(!etps || !etps.length || WP.length < 2) return;
+  if(WP[0].lngU === undefined) unwrapWPs(WP);
+  etps.forEach(function(e) {
+    var bestI = 0;
+    var bestD = Infinity;
+    var i, a, b, latM, lngM, d, ref, lngU, dd;
+    for(i = 0; i < WP.length - 1; i++) {
+      a = WP[i];
+      b = WP[i + 1];
+      if(isNaN(a.lat) || isNaN(a.lngU) || isNaN(b.lat) || isNaN(b.lngU)) continue;
+      latM = (a.lat + b.lat) * 0.5;
+      lngM = (a.lngU + b.lngU) * 0.5;
+      d = L.latLng(e.lat, e.lng).distanceTo(L.latLng(latM, lngM));
+      if(d < bestD) {
+        bestD = d;
+        bestI = i;
+      }
+    }
+    a = WP[bestI];
+    b = WP[bestI + 1];
+    ref = (a.lngU + b.lngU) * 0.5;
+    lngU = e.lng;
+    dd = lngU - ref;
+    while(dd > 180) { lngU -= 360; dd = lngU - ref; }
+    while(dd < -180) { lngU += 360; dd = lngU - ref; }
+    e.lngU = lngU;
+  });
+}
+
 var KEY_WP = {
   RJTT:1,OPPAR:1,HANTO:1,TONAR:1,AMAMI:1,IGURU:1,HCN:1,
   KAPLI:1,IKELA:1,UBL:1,RUKSA:1,VTBS:1,YSSY:1,YMML:1,
@@ -3277,6 +3354,9 @@ function drawRoute() {
   LY.route.forEach(function(l){map.removeLayer(l);}); LY.route=[];
   LY.wpts.forEach(function(m){map.removeLayer(m);}); LY.wpts=[];
 
+  unwrapWPs(WP);
+  assignEtpLngU(ETPS);
+
   var turbOn = document.getElementById('oTurb').checked;
   var turbMode = WX_TURB_METHOD;
 
@@ -3285,14 +3365,14 @@ function drawRoute() {
     if(isNaN(a.lat)||isNaN(a.lng)||isNaN(b.lat)||isNaN(b.lng)) continue;
     var segVal = turbOn ? corridorShearValue(a.id) : null;
     var col = turbOn ? wsColor(segVal, turbMode === 'b787' ? 'b787' : turbMode) : 'transparent';
-    var brg = bearing(a.lat,a.lng,b.lat,b.lng);
+    var brg = bearing(a.lat,a.lngU,b.lat,b.lngU);
 
     if(turbOn && col !== 'transparent') {
       // 10NMコリドーポリゴン（片側5NM）
-      var aL = perpPoint(a.lat,a.lng, brg-Math.PI/2, 5);
-      var aR = perpPoint(a.lat,a.lng, brg+Math.PI/2, 5);
-      var bL = perpPoint(b.lat,b.lng, brg-Math.PI/2, 5);
-      var bR = perpPoint(b.lat,b.lng, brg+Math.PI/2, 5);
+      var aL = perpPoint(a.lat,a.lngU, brg-Math.PI/2, 5);
+      var aR = perpPoint(a.lat,a.lngU, brg+Math.PI/2, 5);
+      var bL = perpPoint(b.lat,b.lngU, brg-Math.PI/2, 5);
+      var bR = perpPoint(b.lat,b.lngU, brg+Math.PI/2, 5);
       if(!isNaN(aL[0])&&!isNaN(aL[1])&&!isNaN(aR[0])&&!isNaN(aR[1])&&
          !isNaN(bL[0])&&!isNaN(bL[1])&&!isNaN(bR[0])&&!isNaN(bR[1])) {
         var poly = L.polygon([aL,bL,bR,aR],{
@@ -3304,7 +3384,7 @@ function drawRoute() {
     }
 
     // 航路中心線
-    var cl = L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{
+    var cl = L.polyline([[a.lat,a.lngU],[b.lat,b.lngU]],{
       color:'#4fc3f7', weight:2, opacity:1
     }).addTo(map);
     LY.route.push(cl);
@@ -3319,7 +3399,7 @@ function drawRoute() {
           +'background:'+col+';border:1.5px solid rgba(5,8,20,.9);"></div>',
       className:'', iconSize:[sz,sz], iconAnchor:[sz/2,sz/2]
     });
-    var m = L.marker([w.lat,w.lng],{icon:ic}).addTo(map);
+    var m = L.marker([w.lat,w.lngU],{icon:ic}).addTo(map);
     // 主要WPは常に表示、それ以外はzoom>=7で表示
     if(w.t || KEY_WP[w.id]) {
       m.bindTooltip('<span style="font-size:'+WP_FONT_SIZE+'px">'+w.id+'</span>',{permanent:true, direction:'top', className:'wxt', offset:[0,-4]});
@@ -3331,13 +3411,14 @@ function drawRoute() {
 
   // ETPマーカー
   ETPS.forEach(function(e) {
+    var eLon = (typeof e.lngU === 'number' && !isNaN(e.lngU)) ? e.lngU : e.lng;
     var ic = L.divIcon({
       html:'<div style="font-size:9px;color:#ff8a65;font-family:monospace;'
           +'background:rgba(8,10,18,.88);padding:1px 3px;'
           +'border:.5px solid rgba(255,138,101,.45);border-radius:2px;">'+e.id+'</div>',
       className:'', iconSize:[34,14], iconAnchor:[17,7]
     });
-    LY.wpts.push(L.marker([e.lat,e.lng],{icon:ic}).addTo(map));
+    LY.wpts.push(L.marker([e.lat,eLon],{icon:ic}).addTo(map));
   });
 
   drawAlt();
@@ -3993,29 +4074,30 @@ function showMetarPanel(m,taf){
 // =====================================================================
 function calcRoutePos() {
   if(WP.length < 2 || DEP_ATO_MIN === null) return null;
+  if(WP[0].lngU === undefined) unwrapWPs(WP);
   var vwp = WP.filter(function(w){ return w.ctme !== null; });
   if(vwp.length < 2) return null;
   var now = new Date();
   var elapsed = now.getUTCHours()*60 + now.getUTCMinutes() - DEP_ATO_MIN;
   if(elapsed < 0) elapsed += 1440;
   if(elapsed <= vwp[0].ctme) {
-    var brg0 = bearing(vwp[0].lat,vwp[0].lng,vwp[1].lat,vwp[1].lng);
-    return {lat:vwp[0].lat, lng:vwp[0].lng, hdg:(brg0*180/Math.PI+360)%360};
+    var brg0 = bearing(vwp[0].lat,vwp[0].lngU,vwp[1].lat,vwp[1].lngU);
+    return {lat:vwp[0].lat, lng:vwp[0].lngU, hdg:(brg0*180/Math.PI+360)%360};
   }
   var last = vwp[vwp.length-1];
   if(elapsed >= last.ctme) {
     var prev = vwp[vwp.length-2];
-    var brgL = bearing(prev.lat,prev.lng,last.lat,last.lng);
-    return {lat:last.lat, lng:last.lng, hdg:(brgL*180/Math.PI+360)%360};
+    var brgL = bearing(prev.lat,prev.lngU,last.lat,last.lngU);
+    return {lat:last.lat, lng:last.lngU, hdg:(brgL*180/Math.PI+360)%360};
   }
   for(var i=0;i<vwp.length-1;i++) {
     var a=vwp[i], b=vwp[i+1];
     if(elapsed >= a.ctme && elapsed < b.ctme) {
       var t = (elapsed-a.ctme)/(b.ctme-a.ctme);
-      var brg = bearing(a.lat,a.lng,b.lat,b.lng);
+      var brg = bearing(a.lat,a.lngU,b.lat,b.lngU);
       return {
         lat: a.lat + t*(b.lat-a.lat),
-        lng: a.lng + t*(b.lng-a.lng),
+        lng: a.lngU + t*(b.lngU-a.lngU),
         hdg: (brg*180/Math.PI+360)%360
       };
     }
@@ -4392,8 +4474,9 @@ function bringTop() {
 
 function frameRoute() {
   if(!WP.length) return;
+  unwrapWPs(WP);
   map.fitBounds(
-    L.latLngBounds(WP.map(function(w){return[w.lat,w.lng];})),
+    L.latLngBounds(WP.map(function(w){return[w.lat,w.lngU];})),
     {padding:[28,70]}
   );
 }
