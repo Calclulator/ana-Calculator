@@ -2568,10 +2568,15 @@ function exportCalibrationData() {
     if(!ij) return null;
     var c = GfsRadar.computeAtCell(fhr, centerMb, ij.ix, ij.iy);
     if(!c) return null;
+    var rawCvg = c.cvg;
+    var cvgClip = (rawCvg !== null && rawCvg !== undefined && !isNaN(rawCvg)) ? Math.max(0, rawCvg) : null;
     return {
       vws: GfsRadar.methodValue('VWS', c),
       ti1: GfsRadar.methodValue('TI1', c),
-      ti2: GfsRadar.methodValue('TI2', c)
+      ti2: GfsRadar.methodValue('TI2', c),
+      defm: c.defm,
+      cvg: rawCvg,
+      cvg_clipped: cvgClip
     };
   }
 
@@ -2659,6 +2664,9 @@ function exportCalibrationData() {
       var gfsVws = gfs ? gfs.vws : null;
       var gfsTi1 = gfs ? gfs.ti1 : null;
       var gfsTi2 = gfs ? gfs.ti2 : null;
+      var gfsDefm = gfs ? gfs.defm : null;
+      var gfsCvg = gfs ? gfs.cvg : null;
+      var gfsCvgClipped = gfs ? gfs.cvg_clipped : null;
       var row = {
         wp: wpId,
         fl: flTen,
@@ -2673,7 +2681,10 @@ function exportCalibrationData() {
         gfsTi1: gfsTi1 === null || isNaN(gfsTi1) ? '' : gfsTi1,
         gfsTi1_band: gfsBandLabel('TI1', gfsTi1),
         gfsTi2: gfsTi2 === null || isNaN(gfsTi2) ? '' : gfsTi2,
-        gfsTi2_band: gfsBandLabel('TI2', gfsTi2)
+        gfsTi2_band: gfsBandLabel('TI2', gfsTi2),
+        defm: gfsDefm === null || isNaN(gfsDefm) ? '' : gfsDefm,
+        cvg: gfsCvg === null || isNaN(gfsCvg) ? '' : gfsCvg,
+        cvg_clipped: gfsCvgClipped === null || isNaN(gfsCvgClipped) ? '' : gfsCvgClipped
       };
       rows.push(row);
     }
@@ -2685,7 +2696,8 @@ function exportCalibrationData() {
     'wp', 'fl', 'lat', 'lon', 'validUtcISO',
     'navlogVws_kt_per_1000ft', 'navlogVws_band',
     'gfsVws_s_inv', 'gfsVws_x1000', 'gfsVws_band',
-    'gfsTi1', 'gfsTi1_band', 'gfsTi2', 'gfsTi2_band'
+    'gfsTi1', 'gfsTi1_band', 'gfsTi2', 'gfsTi2_band',
+    'defm', 'cvg', 'cvg_clipped'
   ];
   var lines = [];
   lines.push(hdr.join(','));
@@ -2696,7 +2708,8 @@ function exportCalibrationData() {
       csvEscape(r.wp), r.fl, r.lat, r.lon, csvEscape(r.validUtcISO),
       r.navlogVws_kt_per_1000ft, csvEscape(r.navlogVws_band),
       r.gfsVws_s_inv, r.gfsVws_x1000, csvEscape(r.gfsVws_band),
-      r.gfsTi1, csvEscape(r.gfsTi1_band), r.gfsTi2, csvEscape(r.gfsTi2_band)
+      r.gfsTi1, csvEscape(r.gfsTi1_band), r.gfsTi2, csvEscape(r.gfsTi2_band),
+      r.defm, r.cvg, r.cvg_clipped
     ].join(','));
   }
   var csv = '\ufeff' + lines.join('\r\n');
@@ -3249,6 +3262,18 @@ function unwrapLatLngs(arr) {
   return out;
 }
 
+// [[lat,lng],...] の lng に deltaLng を加えた新配列 (元は不変)
+function shiftLatLngs(arr, deltaLng) {
+  if(!arr || !arr.length) return [];
+  var out = [];
+  var i, p;
+  for(i = 0; i < arr.length; i++) {
+    p = arr[i];
+    out.push([p[0], p[1] + deltaLng]);
+  }
+  return out;
+}
+
 // WP に連続化済み経度 lngU を付与 (lng は変更しない)
 function unwrapWPs(wps) {
   if(!wps || !wps.length) return;
@@ -3359,6 +3384,8 @@ function drawRoute() {
 
   var turbOn = document.getElementById('oTurb').checked;
   var turbMode = WX_TURB_METHOD;
+  var worldLngOffsets = [-360, 0, 360];
+  var iw, dLng;
 
   for(var i=0;i<WP.length-1;i++) {
     var a=WP[i], b=WP[i+1];
@@ -3375,19 +3402,27 @@ function drawRoute() {
       var bR = perpPoint(b.lat,b.lngU, brg+Math.PI/2, 5);
       if(!isNaN(aL[0])&&!isNaN(aL[1])&&!isNaN(aR[0])&&!isNaN(aR[1])&&
          !isNaN(bL[0])&&!isNaN(bL[1])&&!isNaN(bR[0])&&!isNaN(bR[1])) {
-        var poly = L.polygon([aL,bL,bR,aR],{
-          fillColor:col, fillOpacity:0.55,
-          stroke:true, color:col, weight:2, opacity:0.85
-        }).addTo(map);
-        LY.corridor.push(poly);
+        var ring0 = [aL,bL,bR,aR];
+        for(iw = 0; iw < worldLngOffsets.length; iw++) {
+          dLng = worldLngOffsets[iw];
+          var poly = L.polygon(shiftLatLngs(ring0, dLng),{
+            fillColor:col, fillOpacity:0.55,
+            stroke:true, color:col, weight:2, opacity:0.85
+          }).addTo(map);
+          LY.corridor.push(poly);
+        }
       }
     }
 
-    // 航路中心線
-    var cl = L.polyline([[a.lat,a.lngU],[b.lat,b.lngU]],{
-      color:'#4fc3f7', weight:2, opacity:1
-    }).addTo(map);
-    LY.route.push(cl);
+    // 航路中心線（世界コピー3枚）
+    var seg0 = [[a.lat,a.lngU],[b.lat,b.lngU]];
+    for(iw = 0; iw < worldLngOffsets.length; iw++) {
+      dLng = worldLngOffsets[iw];
+      var cl = L.polyline(shiftLatLngs(seg0, dLng),{
+        color:'#4fc3f7', weight:2, opacity:1
+      }).addTo(map);
+      LY.route.push(cl);
+    }
   }
 
   // ウェイポイントマーカー
@@ -4170,6 +4205,7 @@ function drawAvoidLine() {
   if(LY.avoidR){ map.removeLayer(LY.avoidR); LY.avoidR=null; }
   var nmVal = parseFloat(document.getElementById('avoidNm').value);
   if(isNaN(nmVal) || nmVal<=0 || WP.length<2) return;
+  if(WP.length && WP[0].lngU === undefined) unwrapWPs(WP);
   var lOn = document.getElementById('avoidL').classList.contains('on');
   var rOn = document.getElementById('avoidR').classList.contains('on');
   function makePts(sign) {
@@ -4177,17 +4213,34 @@ function drawAvoidLine() {
     for(var i=0;i<WP.length;i++) {
       var a = WP[i];
       var brg = i<WP.length-1
-        ? bearing(a.lat,a.lng,WP[i+1].lat,WP[i+1].lng)
-        : bearing(WP[i-1].lat,WP[i-1].lng,a.lat,a.lng);
-      pts.push(perpPoint(a.lat,a.lng, brg+sign*Math.PI/2, nmVal));
+        ? bearing(a.lat,a.lngU,WP[i+1].lat,WP[i+1].lngU)
+        : bearing(WP[i-1].lat,WP[i-1].lngU,a.lat,a.lngU);
+      pts.push(perpPoint(a.lat,a.lngU, brg+sign*Math.PI/2, nmVal));
     }
     return pts;
   }
+  var worldLngOffsets = [-360, 0, 360];
+  var avoidOpts = {color:'#ff9800',weight:2,opacity:0.9,dashArray:'8 5'};
+  var di, dLng, g;
   if(lOn) {
-    LY.avoidL = L.polyline(makePts(-1),{color:'#ff9800',weight:2,opacity:0.9,dashArray:'8 5'}).addTo(map);
+    var baseL = makePts(-1);
+    g = L.layerGroup();
+    for(di = 0; di < worldLngOffsets.length; di++) {
+      dLng = worldLngOffsets[di];
+      g.addLayer(L.polyline(shiftLatLngs(baseL, dLng), avoidOpts));
+    }
+    g.addTo(map);
+    LY.avoidL = g;
   }
   if(rOn) {
-    LY.avoidR = L.polyline(makePts(1),{color:'#ff9800',weight:2,opacity:0.9,dashArray:'8 5'}).addTo(map);
+    var baseR = makePts(1);
+    g = L.layerGroup();
+    for(di = 0; di < worldLngOffsets.length; di++) {
+      dLng = worldLngOffsets[di];
+      g.addLayer(L.polyline(shiftLatLngs(baseR, dLng), avoidOpts));
+    }
+    g.addTo(map);
+    LY.avoidR = g;
   }
   bringTop();
 }
