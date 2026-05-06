@@ -1152,7 +1152,7 @@ function runParse() {
     var lineB = lines[i+1];
     if(!lineB||lineB.indexOf('---')>=0) continue;
     var seg = lineB.slice(Math.max(0,cpos-4)).trim();
-    var nameM = seg.match(/^(-[A-Z]{3,6}|[A-Z][A-Z0-9\-]{1,7})/) || lineB.match(/(?:^|\s)(-[A-Z]{3,6}|[A-Z][A-Z0-9\-]{2,7})(?=\s|$)/);
+    var nameM = seg.match(/^(-[A-Z]{3,6}|[A-Z][A-Z0-9\-]{1,7}|\d{2}[ENW]\d{2})/) || lineB.match(/(?:^|\s)(-[A-Z]{3,6}|[A-Z][A-Z0-9\-]{2,7}|\d{2}[ENW]\d{2})(?=\s|$)/);
     if(!nameM) continue;
     var wid = nameM[1];
     var isFirWp = wid.charAt(0) === '-';
