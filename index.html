@@ -3434,7 +3434,7 @@ function drawRoute() {
           +'background:'+col+';border:1.5px solid rgba(5,8,20,.9);"></div>',
       className:'', iconSize:[sz,sz], iconAnchor:[sz/2,sz/2]
     });
-    var m = L.marker([w.lat,w.lngU],{icon:ic}).addTo(map);
+    var m = L.marker([w.lat,w.lng],{icon:ic}).addTo(map);
     // 主要WPは常に表示、それ以外はzoom>=7で表示
     if(w.t || KEY_WP[w.id]) {
       m.bindTooltip('<span style="font-size:'+WP_FONT_SIZE+'px">'+w.id+'</span>',{permanent:true, direction:'top', className:'wxt', offset:[0,-4]});
@@ -3446,7 +3446,7 @@ function drawRoute() {
 
   // ETPマーカー
   ETPS.forEach(function(e) {
-    var eLon = (typeof e.lngU === 'number' && !isNaN(e.lngU)) ? e.lngU : e.lng;
+    var eLon = e.lng;
     var ic = L.divIcon({
       html:'<div style="font-size:9px;color:#ff8a65;font-family:monospace;'
           +'background:rgba(8,10,18,.88);padding:1px 3px;'
@@ -4152,7 +4152,8 @@ function fetchAc() {
     html:'<div style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;transform:rotate('+(rpos.hdg)+'deg);font-size:40px;filter:drop-shadow(0 0 3px #4fc3f7);">⬆</div>',
     className:'',iconSize:[24,24],iconAnchor:[12,12]
   });
-  LY.ac = L.marker([rpos.lat,rpos.lng],{icon:ic,zIndexOffset:1000}).addTo(map);
+  var rposWrapped = L.latLng(rpos.lat, rpos.lng).wrap();
+  LY.ac = L.marker([rposWrapped.lat,rposWrapped.lng],{icon:ic,zIndexOffset:1000}).addTo(map);
   LY.ac.bindTooltip(acReg+'\nHDG '+Math.round(rpos.hdg)+'°',{className:'wxt',permanent:true,direction:'right',offset:[14,0]});
   document.getElementById('ac-lbl').textContent = acReg+' 航路上位置表示中';
   updateGlide();
