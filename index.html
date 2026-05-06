@@ -1603,12 +1603,6 @@ function vwsValue(c1, c2, dAlt) {
   return diff / (dAlt / 1000);
 }
 
-// Company 方式: 上下WSCP(NAVLOG)= |風速差|/1000ft (近い実装)
-function companyValue(c1, c2, dAlt) {
-  if(!c1 || !c2) return null;
-  return Math.abs(c2.spd - c1.spd) / (dAlt / 1000);
-}
-
 // B787 Richardson Number 簡易版
 // Ri = (g/T)(dθ/dz) / ((du/dz)² + (dv/dz)²)
 // θ ≈ T+0.0098*alt(K)、g=9.81m/s²
@@ -1642,10 +1636,13 @@ function b787RiValue(c1, c2, alt1Ft, alt2Ft) {
 function wsColor(val, mode) {
   if(val === null || isNaN(val)) return 'transparent';
   if(mode === 'company') {
-    // Smooth 0-3, Moderate 4-6, Severe >6
-    if(val <= 3) return 'rgba(100,181,246,.30)';   // 青
-    if(val <= 6) return 'rgba(255,213,79,.32)';    // 黄
-    return 'rgba(239,83,80,.35)';                  // 赤
+    // Company VWS (ANA WSCP 相当): Smooth 0-4, Light- 5-6, Light 7-9, Light+ 10-12, Moderate 13-17, Severe 18+
+    if(val <= 4) return 'rgba(100,181,246,.30)';
+    if(val <= 6) return 'rgba(102,187,106,.32)';
+    if(val <= 9) return 'rgba(174,213,129,.32)';
+    if(val <= 12) return 'rgba(255,238,88,.32)';
+    if(val <= 17) return 'rgba(255,167,38,.35)';
+    return 'rgba(239,83,80,.40)';
   }
   if(mode === 'vws') {
     // Smooth 0-4, Light- 5-6, Light 7-9, Light+ 10-12, Moderate 13-17, Severe 18+
@@ -1695,16 +1692,24 @@ function getWfmInterpolatedCell(wpId, fl) {
   };
 }
 
+function companyVwsAtWpFl(wpId, flTen) {
+  if(flTen <= 280 || flTen >= 450) return null;
+  var cLo = getWfmInterpolatedCell(wpId, flTen - 20);
+  var cHi = getWfmInterpolatedCell(wpId, flTen + 20);
+  if(!cLo || !cHi) return null;
+  return vwsValue(cLo, cHi, 4000);
+}
+
 function corridorShearValue(wpId) {
   var flTen = Math.round(CURRENT_FL * 10);
+  var mode = WX_TURB_METHOD;
+  if(typeof mode === 'string' && mode.indexOf('GFS-') === 0) return null;
   var flLo = flTen - 10;
   var cHi = getWfmInterpolatedCell(wpId, flTen);
   var cLo = getWfmInterpolatedCell(wpId, flLo);
   var altLowFt = flLo * 100;
   var altFt = flTen * 100;
-  var mode = WX_TURB_METHOD;
-  if(typeof mode === 'string' && mode.indexOf('GFS-') === 0) return null;
-  if(mode === 'company') return companyValue(cLo, cHi, 1000);
+  if(mode === 'company') return companyVwsAtWpFl(wpId, flTen);
   if(mode === 'vws') return vwsValue(cLo, cHi, 1000);
   if(mode === 'b787') return b787RiValue(cLo, cHi, altLowFt, altFt);
   return null;
@@ -1744,12 +1749,14 @@ function renderWxCorridorLegend() {
   }
   if(mode === 'company') {
     grad.style.background = 'linear-gradient(to bottom,'+
-      'rgba(239,83,80,.88) 0%, rgba(239,83,80,.88) 34%,'+
-      'rgba(255,213,79,.85) 34%, rgba(255,213,79,.85) 67%,'+
-      'rgba(100,181,246,.82) 67%, rgba(100,181,246,.82) 100%)';
-    labs.innerHTML = '<div style="color:#e57373;">Severe (&gt;6)</div>'+
-      '<div style="color:#fdd835;">Moderate (4-6)</div>'+
-      '<div style="color:#64b5f6;">Smooth (0-3)</div>';
+      'rgba(239,83,80,.9) 0%, rgba(255,167,38,.9) 16.66%, rgba(255,238,88,.9) 33.33%,'+
+      'rgba(174,213,129,.9) 50%, rgba(102,187,106,.9) 66.66%, rgba(100,181,246,.9) 100%)';
+    labs.innerHTML = '<div style="color:#e57373;">Severe (18+)</div>'+
+      '<div style="color:#ffb74d;">Moderate (13-17)</div>'+
+      '<div style="color:#fff59d;">Light+ (10-12)</div>'+
+      '<div style="color:#c5e1a5;">Light (7-9)</div>'+
+      '<div style="color:#aed581;">Light- (5-6)</div>'+
+      '<div style="color:#64b5f6;">Smooth (0-4)</div>';
     labs.style.justifyContent = 'space-between';
   } else if(mode === 'vws') {
     grad.style.background = 'linear-gradient(to bottom,'+
@@ -1865,9 +1872,12 @@ function renderAtmWsLegend() {
   var html = '';
   if(ATM_WS === 'company') {
     html = row([
-      badge('rgba(100,181,246,.30)','Smooth (0-3 kt/1,000 ft)'),
-      badge('rgba(255,213,79,.32)','Moderate (4-6)'),
-      badge('rgba(239,83,80,.35)','Severe (&gt;6)')
+      badge('rgba(100,181,246,.30)','Smooth (0-4 kt/1,000 ft)'),
+      badge('rgba(102,187,106,.32)','Light- (5-6)'),
+      badge('rgba(174,213,129,.32)','Light (7-9)'),
+      badge('rgba(255,238,88,.32)','Light+ (10-12)'),
+      badge('rgba(255,167,38,.35)','Moderate (13-17)'),
+      badge('rgba(239,83,80,.40)','Severe (18+)')
     ]);
   } else if(ATM_WS === 'vws') {
     html = row([
@@ -1997,7 +2007,7 @@ function renderWsTable() {
       var cHi = getCell(wp, alt);
       var cLo = getCell(wp, alt - 10);
       var val = null, txt = '—', sub = '';
-      if(ATM_WS === 'company') val = companyValue(cLo, cHi, 1000);
+      if(ATM_WS === 'company') val = companyVwsAtWpFl(wp, alt);
       else if(ATM_WS === 'vws') val = vwsValue(cLo, cHi, 1000);
       else if(ATM_WS === 'b787') val = b787RiValue(cLo, cHi, altLowFt, altFt);
       if(val !== null && !isNaN(val)) {
@@ -2020,8 +2030,8 @@ function renderWsTable() {
   // 根拠説明
   if(explain) {
     if(ATM_WS === 'company') {
-      explain.innerHTML = 'Company 方式: 上下層の風速差の絶対値を高度差(1000ft)で割った値(kt/1000ft)です。' +
-        '閾値は Smooth 0-3、Moderate 4-6、Severe >6。NAVLOG の WSCP に最も近い計算方式です。' +
+      explain.innerHTML = 'Company 方式: VWS = √((u2-u1)²+(v2-v1)²)/(Δz/1000ft)。巡航FLの上下2000ft(計4000ft)で計算し、ANA NAVLOG WSCP と同一です。' +
+        '閾値は Smooth 0-4、Light- 5-6、Light 7-9、Light+ 10-12、Moderate 13-17、Severe 18+。' +
         '<br>※ これは予測値です。実際の揺れ (EDR) は気象状況により変動します。';
     } else if(ATM_WS === 'vws') {
       explain.innerHTML = 'VWS (Vector Wind Shear): 上下層の風ベクトル差(東西成分・南北成分の差)のノルムを高度差で割った値です。' +
@@ -2591,11 +2601,7 @@ function exportCalibrationData() {
   }
 
   function navlogVwsAtWpFl(wp, wpId, flTen) {
-    if(wp && typeof wp.vws === 'number' && !isNaN(wp.vws)) return wp.vws;
-    var flKey = Math.round(flTen / 10);
-    var byFl = VWS_BY_FL && VWS_BY_FL[flKey];
-    if(byFl && typeof byFl[wpId] === 'number' && !isNaN(byFl[wpId])) return byFl[wpId];
-    return null;
+    return companyVwsAtWpFl(wpId, flTen);
   }
 
   function gfsBandLabel(methodKey, rawVal) {
