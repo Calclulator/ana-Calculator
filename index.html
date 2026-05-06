@@ -198,9 +198,12 @@
       <option value="company">Company (3段階)</option>
       <option value="vws" selected>VWS (6段階)</option>
       <option value="b787">Ri (B787 Richardson, 6段階)</option>
-      <option value="GFS-VWS">GFS-VWS</option>
-      <option value="GFS-Ellrod TI1">GFS-Ellrod TI1</option>
-      <option value="GFS-Ellrod TI2">GFS-Ellrod TI2</option>
+    </select>
+    <label class="ck"><input type="checkbox" id="oGfsCorr" onchange="onWxGfsCorrToggle()"> GFS overlay</label>
+    <select id="gfsCorrMethodSel" class="btn" onchange="onWxGfsCorrMethodChange()" style="max-width:160px;">
+      <option value="VWS" selected>GFS-VWS</option>
+      <option value="TI1">Ellrod TI1</option>
+      <option value="TI2">Ellrod TI2</option>
     </select>
     <label class="ck"><input type="checkbox" id="oMetar" onchange="drawAlt()"> A/P</label>
     <span class="lbl" style="margin-left:8px;">回避</span>
@@ -222,6 +225,13 @@
         <div style="display:flex;flex-direction:row;align-items:stretch;gap:8px;">
           <div id="wx-turb-leg-gradient" style="width:21px;height:120px;border-radius:3px;border:1px solid rgba(129,147,168,.35);flex-shrink:0;"></div>
           <div id="wx-turb-leg-labels" style="font-size:12px;color:#90a4ae;line-height:1.2;white-space:nowrap;display:flex;flex-direction:column;justify-content:space-between;min-height:120px;padding:2px 0;"></div>
+        </div>
+        <div id="wx-gfs-leg-wrap" style="display:none;margin-top:10px;width:100%;">
+          <div id="wx-gfs-leg-title" style="font-size:12px;color:#78909c;margin-bottom:4px;text-align:center;">GFS-VWS</div>
+          <div style="display:flex;flex-direction:row;align-items:stretch;gap:8px;justify-content:center;">
+            <div id="wx-gfs-leg-gradient" style="width:21px;height:120px;border-radius:3px;border:1px solid rgba(129,147,168,.35);flex-shrink:0;"></div>
+            <div id="wx-gfs-leg-labels" style="font-size:12px;color:#90a4ae;line-height:1.2;white-space:nowrap;display:flex;flex-direction:column;justify-content:space-between;min-height:120px;padding:2px 0;"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -472,6 +482,8 @@ var BASES = {
 var WP = [];
 var CURRENT_FL = 35;
 var WX_TURB_METHOD = 'vws';
+var WX_GFS_CORR_ON = false;
+var WX_GFS_CORR_METHOD = 'VWS';
 var gfsRadarLayer = null;
 var ACTIVE_ETOPS_KEY = 'NH9D';
 var VWS = {};
@@ -1720,19 +1732,15 @@ function renderWxCorridorLegend() {
   var grad = document.getElementById('wx-turb-leg-gradient');
   var labs = document.getElementById('wx-turb-leg-labels');
   var ttl = document.getElementById('wx-turb-leg-title');
+  var wrapGfs = document.getElementById('wx-gfs-leg-wrap');
+  var gradG = document.getElementById('wx-gfs-leg-gradient');
+  var labsG = document.getElementById('wx-gfs-leg-labels');
+  var ttlG = document.getElementById('wx-gfs-leg-title');
   if(!grad || !labs) return;
   var mode = WX_TURB_METHOD;
+  if(typeof mode === 'string' && mode.indexOf('GFS-') === 0) mode = 'vws';
   if(ttl) {
-    if(typeof mode === 'string' && mode.indexOf('GFS-') === 0) ttl.textContent = mode;
-    else ttl.textContent = mode === 'company' ? 'Company' : (mode === 'b787' ? 'Ri' : 'VWS');
-  }
-  if(typeof mode === 'string' && mode.indexOf('GFS-') === 0) {
-    grad.style.background = 'linear-gradient(to bottom,'+
-      'rgba(100,181,246,.92) 0%, rgba(174,213,129,.88) 35%, rgba(255,167,38,.88) 70%, rgba(239,83,80,.92) 100%)';
-    labs.innerHTML = '<div style="color:#e3f2fd;">GFS proxy field</div>'+
-      '<div style="color:#90a4ae;font-size:11px;">Method切替時に自動取得</div>';
-    labs.style.justifyContent = 'center';
-    return;
+    ttl.textContent = mode === 'company' ? 'Company' : (mode === 'b787' ? 'Ri' : 'VWS');
   }
   if(mode === 'company') {
     grad.style.background = 'linear-gradient(to bottom,'+
@@ -1743,9 +1751,7 @@ function renderWxCorridorLegend() {
       '<div style="color:#fdd835;">Moderate (4-6)</div>'+
       '<div style="color:#64b5f6;">Smooth (0-3)</div>';
     labs.style.justifyContent = 'space-between';
-    return;
-  }
-  if(mode === 'vws') {
+  } else if(mode === 'vws') {
     grad.style.background = 'linear-gradient(to bottom,'+
       'rgba(239,83,80,.9) 0%, rgba(255,167,38,.9) 16.66%, rgba(255,238,88,.9) 33.33%,'+
       'rgba(174,213,129,.9) 50%, rgba(102,187,106,.9) 66.66%, rgba(100,181,246,.9) 100%)';
@@ -1756,18 +1762,35 @@ function renderWxCorridorLegend() {
       '<div style="color:#aed581;">Light- (5-6)</div>'+
       '<div style="color:#64b5f6;">Smooth (0-4)</div>';
     labs.style.justifyContent = 'space-between';
+  } else {
+    grad.style.background = 'linear-gradient(to bottom,'+
+      'rgba(239,83,80,.9) 0%, rgba(255,167,38,.9) 16.66%, rgba(255,238,88,.9) 33.33%,'+
+      'rgba(174,213,129,.9) 50%, rgba(102,187,106,.9) 66.66%, rgba(100,181,246,.9) 100%)';
+    labs.innerHTML = '<div style="color:#e57373;">Severe Ri≤0.2</div>'+
+      '<div style="color:#ffb74d;">Moderate &gt;0.2</div>'+
+      '<div style="color:#fff59d;">Light+ &gt;0.25</div>'+
+      '<div style="color:#c5e1a5;">Light &gt;0.3</div>'+
+      '<div style="color:#aed581;">Light- &gt;0.5</div>'+
+      '<div style="color:#64b5f6;">Smooth Ri&gt;1</div>';
+    labs.style.justifyContent = 'space-between';
+  }
+
+  if(!wrapGfs || !gradG || !labsG) return;
+  if(!WX_GFS_CORR_ON) {
+    wrapGfs.style.display = 'none';
     return;
   }
-  grad.style.background = 'linear-gradient(to bottom,'+
-    'rgba(239,83,80,.9) 0%, rgba(255,167,38,.9) 16.66%, rgba(255,238,88,.9) 33.33%,'+
-    'rgba(174,213,129,.9) 50%, rgba(102,187,106,.9) 66.66%, rgba(100,181,246,.9) 100%)';
-  labs.innerHTML = '<div style="color:#e57373;">Severe Ri≤0.2</div>'+
-    '<div style="color:#ffb74d;">Moderate &gt;0.2</div>'+
-    '<div style="color:#fff59d;">Light+ &gt;0.25</div>'+
-    '<div style="color:#c5e1a5;">Light &gt;0.3</div>'+
-    '<div style="color:#aed581;">Light- &gt;0.5</div>'+
-    '<div style="color:#64b5f6;">Smooth Ri&gt;1</div>';
-  labs.style.justifyContent = 'space-between';
+  wrapGfs.style.display = 'block';
+  if(ttlG) {
+    if(WX_GFS_CORR_METHOD === 'TI1') ttlG.textContent = 'Ellrod TI1';
+    else if(WX_GFS_CORR_METHOD === 'TI2') ttlG.textContent = 'Ellrod TI2';
+    else ttlG.textContent = 'GFS-VWS';
+  }
+  gradG.style.background = 'linear-gradient(to bottom,'+
+    'rgba(100,181,246,.92) 0%, rgba(174,213,129,.88) 35%, rgba(255,167,38,.88) 70%, rgba(239,83,80,.92) 100%)';
+  labsG.innerHTML = '<div style="color:#e3f2fd;">GFS proxy field</div>'+
+    '<div style="color:#90a4ae;font-size:11px;">Method切替時に自動取得</div>';
+  labsG.style.justifyContent = 'center';
 }
 
 function onWxTurbMethodChange() {
@@ -1776,7 +1799,21 @@ function onWxTurbMethodChange() {
   WX_TURB_METHOD = sel.value;
   renderWxCorridorLegend();
   drawRoute();
+}
+
+function onWxGfsCorrToggle() {
+  var cb = document.getElementById('oGfsCorr');
+  WX_GFS_CORR_ON = cb && cb.checked;
   applyGfsRadarForCurrentMethod();
+  renderWxCorridorLegend();
+}
+
+function onWxGfsCorrMethodChange() {
+  var sel = document.getElementById('gfsCorrMethodSel');
+  if(!sel) return;
+  WX_GFS_CORR_METHOD = sel.value;
+  if(WX_GFS_CORR_ON) applyGfsRadarForCurrentMethod();
+  renderWxCorridorLegend();
 }
 
 function toggleEtopsOpts() {
@@ -3090,11 +3127,8 @@ function applyGfsRadarForCurrentMethod() {
     try { map.removeLayer(gfsRadarLayer); } catch(e) {}
     gfsRadarLayer = null;
   }
-  var method = WX_TURB_METHOD;
-  if(method.indexOf('GFS-') !== 0) return;
-  var methodKey = method === 'GFS-VWS' ? 'VWS'
-    : method === 'GFS-Ellrod TI1' ? 'TI1'
-    : method === 'GFS-Ellrod TI2' ? 'TI2' : null;
+  if(!WX_GFS_CORR_ON) return;
+  var methodKey = WX_GFS_CORR_METHOD;
   if(methodKey && (!window.GFS || window.GFS.status !== 'ready')) {
     if(typeof gfsLoad === 'function' && typeof gfsWaypointsFromWP === 'function') {
       console.log('[GfsRadar] auto-loading GFS on demand');
@@ -4168,9 +4202,14 @@ renderAtmWsLegend();
 (function(){
   var s = document.getElementById('turbMethodSel');
   if(s) WX_TURB_METHOD = s.value;
+  var gs = document.getElementById('gfsCorrMethodSel');
+  if(gs) WX_GFS_CORR_METHOD = gs.value;
+  var og = document.getElementById('oGfsCorr');
+  if(og) WX_GFS_CORR_ON = og.checked;
 })();
 renderWxCorridorLegend();
 updateWxFlPanel();
+applyGfsRadarForCurrentMethod();
 
 </script>
 
