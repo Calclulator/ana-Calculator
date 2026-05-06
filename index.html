@@ -2580,7 +2580,7 @@ function exportCalibrationData() {
     };
   }
 
-  function navlogVwsBandLabel(val) {
+  function vwsBandLabelUi(val) {
     if(val === null || isNaN(val)) return '';
     if(val <= 4) return 'Smooth (0-4)';
     if(val <= 6) return 'Light- (5-6)';
@@ -2588,6 +2588,14 @@ function exportCalibrationData() {
     if(val <= 12) return 'Light+ (10-12)';
     if(val <= 17) return 'Moderate (13-17)';
     return 'Severe (18+)';
+  }
+
+  function navlogVwsAtWpFl(wp, wpId, flTen) {
+    if(wp && typeof wp.vws === 'number' && !isNaN(wp.vws)) return wp.vws;
+    var flKey = Math.round(flTen / 10);
+    var byFl = VWS_BY_FL && VWS_BY_FL[flKey];
+    if(byFl && typeof byFl[wpId] === 'number' && !isNaN(byFl[wpId])) return byFl[wpId];
+    return null;
   }
 
   function gfsBandLabel(methodKey, rawVal) {
@@ -2656,12 +2664,11 @@ function exportCalibrationData() {
     var vuIso = vu.toISOString();
     for(fl = 280; fl <= 450; fl += 10) {
       var flTen = fl;
-      var cHi = getWfmInterpolatedCell(wpId, flTen);
-      var cLo = getWfmInterpolatedCell(wpId, flTen - 10);
-      var navVws = vwsValue(cLo, cHi, 1000);
-      var navBand = navlogVwsBandLabel(navVws);
+      var navVws = navlogVwsAtWpFl(wp, wpId, flTen);
+      var navBand = vwsBandLabelUi(navVws);
       var gfs = gfsMetricsAtWpFl(wp, flTen);
       var gfsVws = gfs ? gfs.vws : null;
+      var gfsVwsX1000 = gfsVws === null || isNaN(gfsVws) ? null : gfsVws * 1000;
       var gfsTi1 = gfs ? gfs.ti1 : null;
       var gfsTi2 = gfs ? gfs.ti2 : null;
       var gfsDefm = gfs ? gfs.defm : null;
@@ -2676,8 +2683,8 @@ function exportCalibrationData() {
         navlogVws_kt_per_1000ft: navVws === null || isNaN(navVws) ? '' : navVws,
         navlogVws_band: navBand,
         gfsVws_s_inv: gfsVws === null || isNaN(gfsVws) ? '' : gfsVws,
-        gfsVws_x1000: gfsVws === null || isNaN(gfsVws) ? '' : gfsVws * 1000,
-        gfsVws_band: gfsBandLabel('VWS', gfsVws),
+        gfsVws_x1000: gfsVwsX1000 === null || isNaN(gfsVwsX1000) ? '' : gfsVwsX1000,
+        gfsVws_band: vwsBandLabelUi(gfsVwsX1000),
         gfsTi1: gfsTi1 === null || isNaN(gfsTi1) ? '' : gfsTi1,
         gfsTi1_band: gfsBandLabel('TI1', gfsTi1),
         gfsTi2: gfsTi2 === null || isNaN(gfsTi2) ? '' : gfsTi2,
