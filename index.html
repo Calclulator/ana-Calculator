@@ -2296,8 +2296,8 @@ function renderGfsWsTable() {
     }
     return thr.length;
   }
-  function gfsWsCellBg(mode, value) {
-    if(value === null || value === undefined || isNaN(value)) return 'transparent';
+  function gfsWsPaletteCell(mode, value) {
+    if(value === null || value === undefined || isNaN(value)) return { bg: 'transparent', fg: null };
     var b;
     if(mode === 'ti1') {
       b = bucketWs(value * 1e7, TI1_THRESH);
@@ -2306,8 +2306,13 @@ function renderGfsWsTable() {
     } else {
       b = bucketWs(value, VWS_THRESH);
     }
-    if(b < 0) return 'transparent';
-    return PALETTE[Math.min(b, PALETTE.length - 1)];
+    if(b < 0) return { bg: 'transparent', fg: null };
+    var idx = Math.min(b, PALETTE.length - 1);
+    var bg = PALETTE[idx];
+    var fg;
+    if(idx === 0 || idx === 1 || idx === 5) fg = '#fff';
+    else fg = '#1a1a1a';
+    return { bg: bg, fg: fg };
   }
 
   function findSliceFhrLev(fhr, levMb) {
@@ -2431,16 +2436,17 @@ function renderGfsWsTable() {
       }
       var val = wsValueAtWpAlt(wp, alt);
       var txt = '—';
-      var bg = 'transparent';
       if(val !== null && !isNaN(val)) {
         if(dispMode === 'vws') {
           txt = (val * 1000).toFixed(2);
         } else {
           txt = (val * 1e7).toFixed(2);
         }
-        bg = gfsWsCellBg(dispMode, val);
       }
-      html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:'+bg+';color:#cfd8dc;white-space:nowrap;text-align:center;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'">'+txt+'</td>';
+      var pal = gfsWsPaletteCell(dispMode, val);
+      var colorAttr = '';
+      if(pal.fg !== null) colorAttr = 'color:'+pal.fg+' !important;';
+      html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:'+pal.bg+';'+colorAttr+'white-space:nowrap;text-align:center;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'">'+txt+'</td>';
     });
     html += '</tr>';
     prevFl = alt;
