@@ -2157,7 +2157,7 @@ function gfsAtWp(wpId, alt) {
   else mb = 226.32 * Math.exp(-(altFt - 36089) / 20805);
   if(mb > 320) return null;
   if(typeof gfsValueAt !== 'function') return null;
-  var GFS_LV = [300, 250, 200, 150];
+  var GFS_LV = [300, 275, 250, 225, 200, 175, 150];
   function interpVar(varName) {
     var lo = null, hi = null;
     for(var i=0;i<GFS_LV.length-1;i++) {

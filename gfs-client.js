@@ -1,10 +1,10 @@
-// gfs-client.js — GFS proxy: 4 levels + gfsValueAt (ES5)
+// gfs-client.js — GFS proxy: 7 levels + gfsValueAt (ES5)
 var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
 
 (function(global) {
   if (!global) global = window;
 
-  var LEVELS_MB = [300, 250, 200, 150];
+  var LEVELS_MB = [300, 275, 250, 225, 200, 175, 150];
   var VARS_DEFAULT = 'UGRD,VGRD,TMP,HGT';
 
   function pad2(n) {
