@@ -112,7 +112,25 @@
   .mp-taf-period{border-top:.5px solid #1e2a38;padding:4px 0;font-size:11px;line-height:1.5;}
   .mp-rwy-inp{width:70px;background:#0d1117;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;padding:2px 5px;}
   .mp-calc-btn{background:#0d2a3e;border:1px solid #1565c0;border-radius:3px;color:#4fc3f7;font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;padding:2px 8px;cursor:pointer;}
+  /* WIND SHEAR Method help modal */
+  #ws-method-help-overlay{position:fixed;inset:0;z-index:3100;background:rgba(0,0,0,.55);display:none;}
+  #ws-method-help-panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:3101;background:#080a14;border:1px solid #2a3a4e;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.88);width:min(520px,94vw);max-height:88vh;display:none;flex-direction:column;font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;}
+  #ws-method-help-panel .wsm-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #1e2a38;background:#0d1117;border-radius:8px 8px 0 0;flex-shrink:0;}
+  #ws-method-help-panel .wsm-hdr span{color:#4fc3f7;font-size:15px;font-weight:bold;letter-spacing:.04em;}
+  .ws-method-help-close{background:transparent;border:none;color:#78909c;cursor:pointer;font-size:22px;line-height:1;padding:4px 8px;border-radius:4px;}
+  .ws-method-help-close:hover{color:#cfd8dc;background:#1e2a38;}
+  .wsm-tabs{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;border-bottom:1px solid #1e2a38;background:#0a1018;flex-shrink:0;}
+  .wsm-tab{padding:10px 14px;font-size:14px;border:1px solid #2a3a4e;border-radius:4px;background:transparent;color:#90a4ae;cursor:pointer;font-family:inherit;min-height:44px;box-sizing:border-box;}
+  .wsm-tab:hover{color:#cfd8dc;border-color:#37474f;}
+  .wsm-tab.on{border-color:#1565c0;color:#4fc3f7;background:#0d2a3e;}
+  .wsm-body{padding:14px 16px 18px;overflow-y:auto;flex:1;min-height:0;line-height:1.65;}
+  .wsm-body .wsm-h3{font-size:15px;color:#4fc3f7;margin:0 0 10px;font-weight:bold;}
+  .wsm-body .wsm-p{font-size:13px;color:#cfd8dc;margin:0 0 12px;}
+  .wsm-body .wsm-note{font-size:13px;color:#ffb74d;margin:0 0 10px;}
+  .ws-method-help-btn{min-width:44px;min-height:36px;padding:6px 12px!important;display:inline-flex;align-items:center;justify-content:center;}
+  .ws-method-help-ico{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;border:1.5px solid #4fc3f7;color:#4fc3f7;font-size:15px;font-weight:bold;font-style:italic;font-family:Georgia,'Times New Roman',serif;line-height:1;}
   @media print{
+    #ws-method-help-overlay,#ws-method-help-panel{display:none!important;}
     #tab-bar,.bar,#fp-navlog,#statusbar{display:none!important;}
     #wx-panel{display:none!important;}
     #fp-panel{display:flex!important;}
@@ -210,6 +228,7 @@
       <option value="TI1">Ellrod TI1</option>
       <option value="TI2">Ellrod TI2</option>
     </select>
+    <button type="button" class="btn ws-method-help-btn" onclick="openWsMethodHelpFromWx()" aria-label="WIND SHEAR Method の解説"><span class="ws-method-help-ico">i</span></button>
     <label class="ck"><input type="checkbox" id="oMetar" onchange="drawAlt()"> A/P</label>
     <span class="lbl" style="margin-left:8px;">回避</span>
     <button class="btn" id="avoidL" onclick="setAvoidSide('L')" style="padding:2px 6px;">L</button>
@@ -367,10 +386,11 @@
     <button class="btn on" id="atm-gfs-ws-vws" onclick="setAtmGfsWs('vws')">GFS-VWS</button>
     <button class="btn" id="atm-gfs-ws-ti1" onclick="setAtmGfsWs('ti1')">Ellrod TI1</button>
     <button class="btn" id="atm-gfs-ws-ti2" onclick="setAtmGfsWs('ti2')">Ellrod TI2</button>
+    <button type="button" class="btn ws-method-help-btn" onclick="openWsMethodHelpFromAtmGfs()" aria-label="WIND SHEAR Method の解説"><span class="ws-method-help-ico">i</span></button>
   </div>
   <div id="atm-gfs-ws-wrap" style="flex:1;min-height:0;overflow:auto;padding:6px;"></div>
   <div id="atm-gfs-ws-caveat" style="font-size:0.92em;color:#90a4ae;padding:0 12px 10px;line-height:1.5;">
-    ※ GFS-VWS 閾値は 1 便分のデータで暫定 calibration 済 (2026-05-07)。今後の data 蓄積で再調整予定。Light+/Moderate/Severe 閾値は外挿のため信頼度低。
+    ※ GFS-VWS は暫定 calibration（2026-05-07）、再調整予定。手法の詳細・閾値の注意・共通補足は横の Method 解説（ⓘ）を参照。
   </div>
 </div><!-- atm-gfs-panel -->
 </div><!-- #panels -->
@@ -1757,20 +1777,15 @@ function gfsMethodKey(method) {
 
 function getGfsRadarSharedConfig(method) {
   var key = gfsMethodKey(method);
-  var fallbackPalette = ['#7e0023','#cf2027','#ed6f23','#f7c84a','#9bd06f','#3a78f0'];
-  var fallbackThr = key === 'TI1' ? [50, 30, 15, 8, 3] : key === 'TI2' ? [70, 40, 20, 10, 5] : [0.013, 0.010, 0.008, 0.006, 0.004];
-  var fallbackLabels = key === 'TI1'
-    ? ['Severe (50+)','Heavy (30-49)','Moderate (15-29)','Light (8-14)','Minimal (3-7)','Smooth (0-2)']
-    : key === 'TI2'
-      ? ['Severe (70+)','Heavy (40-69)','Moderate (20-39)','Light (10-19)','Minimal (5-9)','Smooth (0-4)']
-      : ['Severe (13+)','Moderate (10-12)','Light+ (8-9)','Light (6-7)','Light- (4-5)','Smooth (0-3)'];
-  if(typeof GfsRadar === 'undefined') {
-    return { key: key, palette: fallbackPalette, thresholds: fallbackThr, labels: fallbackLabels };
+  if(typeof GfsRadar === 'undefined' || !GfsRadar.getPalette || !GfsRadar.getThresholds || !GfsRadar.getLabels) {
+    return { key: key, palette: [], thresholds: [], labels: [] };
   }
-  var palette = (typeof GfsRadar.getPalette === 'function') ? GfsRadar.getPalette(key) : fallbackPalette;
-  var thresholds = (typeof GfsRadar.getThresholds === 'function') ? GfsRadar.getThresholds(key) : fallbackThr;
-  var labels = (typeof GfsRadar.getLabels === 'function') ? GfsRadar.getLabels(key) : fallbackLabels;
-  return { key: key, palette: palette, thresholds: thresholds, labels: labels };
+  return {
+    key: key,
+    palette: GfsRadar.getPalette(key),
+    thresholds: GfsRadar.getThresholds(key),
+    labels: GfsRadar.getLabels(key)
+  };
 }
 
 function renderWxCorridorLegend() {
@@ -1829,6 +1844,10 @@ function renderWxCorridorLegend() {
   }
   wrapGfs.style.display = 'block';
   var gfsCfg = getGfsRadarSharedConfig(WX_GFS_CORR_METHOD);
+  if(!gfsCfg.labels || gfsCfg.labels.length < 6) {
+    wrapGfs.style.display = 'none';
+    return;
+  }
   if(ttlG) {
     if(gfsCfg.key === 'TI1') ttlG.textContent = 'Ellrod TI1';
     else if(gfsCfg.key === 'TI2') ttlG.textContent = 'Ellrod TI2';
@@ -2392,28 +2411,18 @@ function renderGfsWsTable() {
     }
     return;
   }
-  if(typeof GfsRadar === 'undefined' || !GfsRadar.nearestFhr || !GfsRadar.computeAtCell || !GfsRadar.methodValue || !GfsRadar.flToMb || !GfsRadar.snapLevel) {
+  if(typeof GfsRadar === 'undefined' || !GfsRadar.nearestFhr || !GfsRadar.computeAtCell || !GfsRadar.methodValue || !GfsRadar.flToMb || !GfsRadar.snapLevel ||
+      !GfsRadar.getColor || !GfsRadar.bucketCategoryIndex) {
     wrap.innerHTML = '<div style="color:#ef5350;padding:24px;text-align:center;font-size:1em;">GfsRadar が利用できません（gfs-radar-layer.js を確認してください）</div>';
     return;
   }
 
-  function bucketWs(value, thr) {
-    if(value === null || value === undefined || isNaN(value)) return -1;
-    var i;
-    for(i = 0; i < thr.length; i++) {
-      if(value >= thr[i]) return i;
-    }
-    return thr.length;
-  }
   function gfsWsPaletteCell(mode, value) {
     if(value === null || value === undefined || isNaN(value)) return { bg: 'transparent', fg: null };
-    var cfg = getGfsRadarSharedConfig(mode);
-    var b;
-    if(cfg.key === 'TI1' || cfg.key === 'TI2') b = bucketWs(value * 1e7, cfg.thresholds);
-    else b = bucketWs(value, cfg.thresholds);
-    if(b < 0) return { bg: 'transparent', fg: null };
-    var idx = Math.min(b, cfg.palette.length - 1);
-    var bg = cfg.palette[idx];
+    var bg = GfsRadar.getColor(mode, value);
+    if(!bg) return { bg: 'transparent', fg: null };
+    var idx = GfsRadar.bucketCategoryIndex(mode, value);
+    if(idx < 0) return { bg: 'transparent', fg: null };
     var fg;
     if(idx === 0 || idx === 1 || idx === 5) fg = '#fff';
     else fg = '#1a1a1a';
@@ -2574,7 +2583,8 @@ function exportCalibrationData() {
     return;
   }
   if(typeof GfsRadar === 'undefined' || !GfsRadar.computeAtCell || !GfsRadar.methodValue ||
-      !GfsRadar.nearestFhr || !GfsRadar.flToMb || !GfsRadar.snapLevel || !GfsRadar.getThresholds) {
+      !GfsRadar.nearestFhr || !GfsRadar.flToMb || !GfsRadar.snapLevel || !GfsRadar.getThresholds ||
+      !GfsRadar.bandCategoryShort) {
     console.warn('[calibration] GfsRadar API が不足しています');
     return;
   }
@@ -2651,6 +2661,7 @@ function exportCalibrationData() {
   function vwsBandLabelUi(val) {
     if(val === null || isNaN(val)) return '';
     var labels = getGfsRadarSharedConfig('VWS').labels;
+    if(!labels || labels.length < 6) return '';
     if(val <= 3) return labels[5];
     if(val <= 5) return labels[4];
     if(val <= 7) return labels[3];
@@ -2664,22 +2675,7 @@ function exportCalibrationData() {
   }
 
   function gfsBandLabel(methodKey, rawVal) {
-    if(rawVal === null || isNaN(rawVal)) return '';
-    var cfg = getGfsRadarSharedConfig(methodKey);
-    var thr = cfg.thresholds;
-    var v = rawVal;
-    if(cfg.key === 'TI1' || cfg.key === 'TI2') v = rawVal * 1e7;
-    var idx = -1;
-    var i;
-    for(i = 0; i < thr.length; i++) {
-      if(v >= thr[i]) {
-        idx = i;
-        break;
-      }
-    }
-    if(idx < 0) idx = thr.length;
-    idx = Math.min(idx, 5);
-    return cfg.labels[idx].split(' (')[0];
+    return GfsRadar.bandCategoryShort(methodKey, rawVal);
   }
 
   function csvEscape(cell) {
@@ -3839,6 +3835,20 @@ function toggleMode() {
     #atm-ws-explain{color:#546e7a!important;}
     #atm-ws-legend{color:#546e7a!important;border-bottom-color:#d0d8e4!important;}
     #atm-ws-legend .atm-ws-leg-swatch{border-color:rgba(84,110,122,.45)!important;}
+    #ws-method-help-overlay{background:rgba(0,0,0,.35)!important;}
+    #ws-method-help-panel{background:#ffffff!important;border-color:#c8d0da!important;box-shadow:0 8px 32px rgba(0,0,0,.12)!important;}
+    #ws-method-help-panel .wsm-hdr{background:#f0f4f8!important;border-bottom-color:#d0d8e4!important;}
+    #ws-method-help-panel .wsm-hdr span{color:#1565c0!important;}
+    #ws-method-help-panel .ws-method-help-close{color:#546e7a!important;}
+    #ws-method-help-panel .ws-method-help-close:hover{color:#1565c0!important;background:#eef1f5!important;}
+    #ws-method-help-panel .wsm-tabs{background:#f5f7fa!important;border-bottom-color:#d0d8e4!important;}
+    #ws-method-help-panel .wsm-tab{border-color:#b0bec5!important;color:#546e7a!important;background:#ffffff!important;}
+    #ws-method-help-panel .wsm-tab:hover{border-color:#90a4ae!important;color:#37474f!important;}
+    #ws-method-help-panel .wsm-tab.on{border-color:#1565c0!important;color:#1565c0!important;background:#e3f2fd!important;}
+    #ws-method-help-panel .wsm-body .wsm-h3{color:#0d47a1!important;}
+    #ws-method-help-panel .wsm-body .wsm-p{color:#37474f!important;}
+    #ws-method-help-panel .wsm-body .wsm-note{color:#e65100!important;}
+    body.day-mode .ws-method-help-ico{border-color:#1565c0!important;color:#1565c0!important;}
   ` : '';
   applyMapTheme();
   if(LY.sat) LY.sat.bringToFront();
@@ -4048,6 +4058,54 @@ function loadMetars() {
 function closeMetarPanel(){
   document.getElementById('metar-panel').style.display='none';
   document.getElementById('metar-overlay').style.display='none';
+}
+
+function normalizeWsMethodHelpTab(key) {
+  var k = String(key || 'VWS').toUpperCase();
+  if(k === 'TI1') return 'ti1';
+  if(k === 'TI2') return 'ti2';
+  return 'vws';
+}
+
+function showWsMethodHelpTab(tab) {
+  var ids = ['vws', 'ti1', 'ti2', 'common'];
+  var i;
+  for(i = 0; i < ids.length; i++) {
+    var id = ids[i];
+    var btn = document.getElementById('wsm-tab-' + id);
+    var pane = document.getElementById('wsm-pane-' + id);
+    var on = (id === tab);
+    if(btn) btn.className = 'wsm-tab' + (on ? ' on' : '');
+    if(pane) pane.style.display = on ? 'block' : 'none';
+  }
+}
+
+function openWsMethodHelp(initialTab) {
+  var tab = normalizeWsMethodHelpTab(initialTab);
+  var ov = document.getElementById('ws-method-help-overlay');
+  var pan = document.getElementById('ws-method-help-panel');
+  if(!ov || !pan) return;
+  ov.style.display = 'block';
+  pan.style.display = 'flex';
+  showWsMethodHelpTab(tab);
+}
+
+function openWsMethodHelpFromWx() {
+  var sel = document.getElementById('gfsCorrMethodSel');
+  var v = sel ? sel.value : 'VWS';
+  openWsMethodHelp(v);
+}
+
+function openWsMethodHelpFromAtmGfs() {
+  var m = (typeof ATM_GFS_WS === 'string') ? ATM_GFS_WS : 'vws';
+  openWsMethodHelp(m);
+}
+
+function closeWsMethodHelp() {
+  var ov = document.getElementById('ws-method-help-overlay');
+  var pan = document.getElementById('ws-method-help-panel');
+  if(ov) ov.style.display = 'none';
+  if(pan) pan.style.display = 'none';
 }
 
 function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -4730,6 +4788,44 @@ applyGfsRadarForCurrentMethod();
       <div class="nav-sec-lbl">Briefings &amp; Tools</div>
       <button class="nav-item nav-dis">📄 Cabin Crew BRFG<span class="nav-tag">WIP</span></button>
     </div>
+  </div>
+</div>
+<div id="ws-method-help-overlay" onclick="closeWsMethodHelp()"></div>
+<div id="ws-method-help-panel" role="dialog" aria-modal="true" aria-labelledby="wsm-dialog-title">
+  <div class="wsm-hdr">
+    <span id="wsm-dialog-title">WIND SHEAR Method</span>
+    <button type="button" class="ws-method-help-close" onclick="closeWsMethodHelp()" aria-label="閉じる">×</button>
+  </div>
+  <div class="wsm-tabs">
+    <button type="button" class="wsm-tab on" id="wsm-tab-vws" onclick="showWsMethodHelpTab('vws')">GFS-VWS</button>
+    <button type="button" class="wsm-tab" id="wsm-tab-ti1" onclick="showWsMethodHelpTab('ti1')">Ellrod TI1</button>
+    <button type="button" class="wsm-tab" id="wsm-tab-ti2" onclick="showWsMethodHelpTab('ti2')">Ellrod TI2</button>
+    <button type="button" class="wsm-tab" id="wsm-tab-common" onclick="showWsMethodHelpTab('common')">共通の注意</button>
+  </div>
+  <div id="wsm-pane-vws" class="wsm-body">
+    <div class="wsm-h3">GFS-VWS (Vertical Wind Shear)</div>
+    <p class="wsm-p">GFS の風データ (u, v) から巡航 FL ± 2000ft の風ベクトル差を計算し、1000ft あたりの風シアー強度を kt/1000ft で表示。</p>
+    <p class="wsm-p">ANA WSCP の VWS 公式 (NAV LOG Appendix 4) と整合するよう 1 便分の実測値で calibration 済 (回帰: gfs ≈ 0.56 × navlog + 3.08)。</p>
+    <p class="wsm-p">カテゴリ: Smooth (0-3) / Light- (4-5) / Light (6-7) / Light+ (8-9) / Moderate (10-12) / Severe (13+) kt/1000ft</p>
+    <p class="wsm-note">注意: Light+ 以上の閾値は外挿で信頼度低、参考値として利用。</p>
+    <p class="wsm-p" style="font-size:12px;color:#78909c;">※ 閾値の暫定調整日: 2026-05-07。今後のデータ蓄積で再調整予定。</p>
+  </div>
+  <div id="wsm-pane-ti1" class="wsm-body" style="display:none;">
+    <div class="wsm-h3">Ellrod TI1 (Turbulence Index 1)</div>
+    <p class="wsm-p">Ellrod &amp; Knapp (1992) による晴天乱気流指標。</p>
+    <p class="wsm-p">TI1 = VWS × |DEF| (DEF = total deformation = √(stretching² + shearing²))</p>
+    <p class="wsm-p">ジェット気流近傍の CAT 検出に使われる。値が大きいほど CAT 確率高。</p>
+    <p class="wsm-p">GFS データから直接計算 (calibration 不要)。</p>
+  </div>
+  <div id="wsm-pane-ti2" class="wsm-body" style="display:none;">
+    <div class="wsm-h3">Ellrod TI2 (Turbulence Index 2)</div>
+    <p class="wsm-p">TI1 を拡張し、収束 (convergence) の効果を加算した指標。</p>
+    <p class="wsm-p">TI2 = VWS × (|DEF| + CVG)</p>
+    <p class="wsm-p">ana-Calc では CVG ≤ 0 (発散側) のとき clip するため、発散卓越領域では TI1 = TI2 となる仕様。</p>
+  </div>
+  <div id="wsm-pane-common" class="wsm-body" style="display:none;">
+    <div class="wsm-h3">共通の注意</div>
+    <p class="wsm-p">GFS は 0.25° 解像度で、局所的な対流乱気流や山岳波は表現できない。SIGMET / PIREP / 機内レーダーと併用して総合判断すること。</p>
   </div>
 </div>
 <div id="metar-overlay" onclick="closeMetarPanel()"></div>

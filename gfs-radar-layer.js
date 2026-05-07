@@ -110,6 +110,36 @@
     }
   }
 
+  function colorForMethod(method, value) {
+    return colorFor(normalizeMethod(method), value);
+  }
+
+  // CSV / UI 用: Severe / Heavy / … の短いカテゴリ名 (ラベル文字列の括弧前を返す)
+  function bandCategoryShort(method, rawVal) {
+    if (rawVal === null || rawVal === undefined || isNaN(rawVal)) return '';
+    var m = normalizeMethod(method);
+    var thr = thresholdsForMethod(m);
+    var labels = labelsForMethod(m);
+    var v = rawVal;
+    if (m === 'TI1' || m === 'TI2') v = rawVal * 1e7;
+    var idx = bucket(v, thr);
+    idx = Math.min(idx, labels.length - 1);
+    var lab = labels[idx];
+    var p = lab.indexOf(' (');
+    return p >= 0 ? lab.slice(0, p) : lab;
+  }
+
+  // 凡例・セル着色用 0..5 (PALETTE インデックスと一致)
+  function bucketCategoryIndex(method, rawVal) {
+    if (rawVal === null || rawVal === undefined || isNaN(rawVal)) return -1;
+    var m = normalizeMethod(method);
+    var thr = thresholdsForMethod(m);
+    var v = rawVal;
+    if (m === 'TI1' || m === 'TI2') v = rawVal * 1e7;
+    var idx = bucket(v, thr);
+    return Math.min(idx, PALETTE.length - 1);
+  }
+
   function approxDistNM(lat1, lon1, lat2, lon2) {
     var avgLat = (lat1 + lat2) * 0.5;
     var dLat = (lat2 - lat1) * 60.0;
@@ -407,8 +437,13 @@
       else if (mm === 'TI1') TI1_THRESH = arr;
       else if (mm === 'TI2') TI2_THRESH = arr;
     },
-    getPalette: function () { return PALETTE.slice(); },
+    getPalette: function (method) {
+      return PALETTE.slice();
+    },
     getThresholds: function (m) { return thresholdsForMethod(m); },
-    getLabels: function (m) { return labelsForMethod(m); }
+    getLabels: function (m) { return labelsForMethod(m); },
+    getColor: function (m, value) { return colorForMethod(m, value); },
+    bandCategoryShort: bandCategoryShort,
+    bucketCategoryIndex: bucketCategoryIndex
   };
 })();
