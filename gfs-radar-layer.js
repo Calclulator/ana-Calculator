@@ -34,8 +34,9 @@
   ];
 
   // Thresholds: bucket 0 if v >= thr[0], 1 if >= thr[1], ..., 5 if v < thr[4].
-  // VWS in s^-1 (typical jet stream values: 0.005..0.025).
-  var VWS_THRESH = [0.020, 0.015, 0.010, 0.007, 0.004];
+  // GFS-VWS calibrated thresholds in s^-1:
+  // Smooth <0.004, Light- <0.006, Light <0.008, Light+ <0.010, Moderate <0.013, Severe >=0.013
+  var VWS_THRESH = [0.013, 0.010, 0.008, 0.006, 0.004];
   // Ellrod values: raw multiplied by 1e7 for human-readable thresholding.
   var TI1_THRESH = [50, 30, 15, 8, 3];
   var TI2_THRESH = [70, 40, 20, 10, 5];

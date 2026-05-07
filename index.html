@@ -364,6 +364,9 @@
     <button class="btn" id="atm-gfs-ws-ti2" onclick="setAtmGfsWs('ti2')">Ellrod TI2</button>
   </div>
   <div id="atm-gfs-ws-wrap" style="flex:1;min-height:0;overflow:auto;padding:6px;"></div>
+  <div id="atm-gfs-ws-caveat" style="font-size:0.92em;color:#90a4ae;padding:0 12px 10px;line-height:1.5;">
+    ※ GFS-VWS 閾値は 1 便分のデータで暫定 calibration 済 (2026-05-07)。今後の data 蓄積で再調整予定。Light+/Moderate/Severe 閾値は外挿のため信頼度低。
+  </div>
 </div><!-- atm-gfs-panel -->
 </div><!-- #panels -->
 
@@ -1794,10 +1797,21 @@ function renderWxCorridorLegend() {
     else ttlG.textContent = 'GFS-VWS';
   }
   gradG.style.background = 'linear-gradient(to bottom,'+
-    'rgba(100,181,246,.92) 0%, rgba(174,213,129,.88) 35%, rgba(255,167,38,.88) 70%, rgba(239,83,80,.92) 100%)';
-  labsG.innerHTML = '<div style="color:#e3f2fd;">GFS proxy field</div>'+
-    '<div style="color:#90a4ae;font-size:11px;">Method切替時に自動取得</div>';
-  labsG.style.justifyContent = 'center';
+    'rgba(239,83,80,.9) 0%, rgba(255,167,38,.9) 16.66%, rgba(255,238,88,.9) 33.33%,'+
+    'rgba(174,213,129,.9) 50%, rgba(102,187,106,.9) 66.66%, rgba(100,181,246,.9) 100%)';
+  if(WX_GFS_CORR_METHOD === 'VWS') {
+    labsG.innerHTML = '<div style="color:#e57373;">Severe (13+)</div>'+
+      '<div style="color:#ffb74d;">Moderate (10-12)</div>'+
+      '<div style="color:#fff59d;">Light+ (8-9)</div>'+
+      '<div style="color:#c5e1a5;">Light (6-7)</div>'+
+      '<div style="color:#aed581;">Light- (4-5)</div>'+
+      '<div style="color:#64b5f6;">Smooth (0-3)</div>';
+    labsG.style.justifyContent = 'space-between';
+  } else {
+    labsG.innerHTML = '<div style="color:#e3f2fd;">GFS proxy field</div>'+
+      '<div style="color:#90a4ae;font-size:11px;">Method切替時に自動取得</div>';
+    labsG.style.justifyContent = 'center';
+  }
 }
 
 function onWxTurbMethodChange() {
@@ -2331,7 +2345,7 @@ function renderGfsWsTable() {
   }
 
   var PALETTE = ['#7e0023','#cf2027','#ed6f23','#f7c84a','#9bd06f','#3a78f0'];
-  var VWS_THRESH = [0.020, 0.015, 0.010, 0.007, 0.004];
+  var VWS_THRESH = [0.013, 0.010, 0.008, 0.006, 0.004];
   var TI1_THRESH = [50, 30, 15, 8, 3];
   var TI2_THRESH = [70, 40, 20, 10, 5];
 
@@ -2592,12 +2606,12 @@ function exportCalibrationData() {
 
   function vwsBandLabelUi(val) {
     if(val === null || isNaN(val)) return '';
-    if(val <= 4) return 'Smooth (0-4)';
-    if(val <= 6) return 'Light- (5-6)';
-    if(val <= 9) return 'Light (7-9)';
-    if(val <= 12) return 'Light+ (10-12)';
-    if(val <= 17) return 'Moderate (13-17)';
-    return 'Severe (18+)';
+    if(val <= 3) return 'Smooth (0-3)';
+    if(val <= 5) return 'Light- (4-5)';
+    if(val <= 7) return 'Light (6-7)';
+    if(val <= 9) return 'Light+ (8-9)';
+    if(val <= 12) return 'Moderate (10-12)';
+    return 'Severe (13+)';
   }
 
   function navlogVwsAtWpFl(wp, wpId, flTen) {
