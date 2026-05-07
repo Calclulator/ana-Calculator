@@ -194,6 +194,11 @@
     <label class="ck" style="display:none;"><input type="checkbox" id="oLightning" onchange="toggleLightning()"> Lightning</label>
     <span class="wx-ovl-break"></span>
     <label class="ck"><input type="checkbox" id="oTurb" checked onchange="drawRoute()"> Turbulence corridor</label>
+    <span class="lbl">Corridor width:</span>
+    <input type="number" id="corridor-nm-input" min="50" max="500" step="10" value="200"
+           style="width:58px;background:transparent;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:inherit;font-size:11px;padding:2px 4px;"
+           onchange="onCorridorNmChange()" oninput="onCorridorNmChange()">
+    <span class="lbl">NM</span>
     <select id="turbMethodSel" class="btn" onchange="onWxTurbMethodChange()" style="max-width:220px;">
       <option value="company">Company (3段階)</option>
       <option value="vws" selected>VWS (6段階)</option>
@@ -488,6 +493,7 @@ var CURRENT_FL = 350;
 var WX_TURB_METHOD = 'vws';
 var WX_GFS_CORR_ON = false;
 var WX_GFS_CORR_METHOD = 'VWS';
+var WX_CORRIDOR_NM = 200;
 var gfsRadarLayer = null;
 var ACTIVE_ETOPS_KEY = 'NH9D';
 var VWS = {};
@@ -1842,6 +1848,27 @@ function onWxGfsCorrMethodChange() {
   WX_GFS_CORR_METHOD = sel.value;
   if(WX_GFS_CORR_ON) applyGfsRadarForCurrentMethod();
   renderWxCorridorLegend();
+}
+
+function normalizeCorridorNm(v) {
+  var n = parseInt(v, 10);
+  if(isNaN(n)) n = 200;
+  if(n < 50) n = 50;
+  if(n > 500) n = 500;
+  n = Math.round(n / 10) * 10;
+  return n;
+}
+
+function onCorridorNmChange() {
+  var input = document.getElementById('corridor-nm-input');
+  if(!input) return;
+  var n = normalizeCorridorNm(input.value);
+  input.value = String(n);
+  if(WX_CORRIDOR_NM === n) return;
+  WX_CORRIDOR_NM = n;
+  try { localStorage.setItem('wxCorridorNm', String(n)); } catch(e) {}
+  drawRoute();
+  if(WX_GFS_CORR_ON) applyGfsRadarForCurrentMethod();
 }
 
 function toggleEtopsOpts() {
@@ -3546,6 +3573,7 @@ function applyGfsRadarForCurrentMethod() {
       gfsRadarLayer = GfsRadar.render(map, {
         method: methodKey,
         fl: CURRENT_FL,
+        corridorNM: WX_CORRIDOR_NM,
         validUtc: new Date()
       });
     }
@@ -4634,6 +4662,11 @@ renderAtmWsLegend();
   if(gs) WX_GFS_CORR_METHOD = gs.value;
   var og = document.getElementById('oGfsCorr');
   if(og) WX_GFS_CORR_ON = og.checked;
+  var cn = document.getElementById('corridor-nm-input');
+  var storedCorridorNm = null;
+  try { storedCorridorNm = localStorage.getItem('wxCorridorNm'); } catch(e) {}
+  WX_CORRIDOR_NM = normalizeCorridorNm(storedCorridorNm != null ? storedCorridorNm : 200);
+  if(cn) cn.value = String(WX_CORRIDOR_NM);
 })();
 renderWxCorridorLegend();
 updateWxFlPanel();
