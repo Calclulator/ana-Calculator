@@ -187,7 +187,48 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
     return gfsSampleSlice(sl, lat, lon, key);
   }
 
-  function gfsLoad(waypoints, ato) {
+  function isRetryableStatus(status) {
+    return status === 502 || status === 503 || status === 504;
+  }
+
+  function isNetworkError(err) {
+    if (!err) return false;
+    if (err.name === 'TypeError') return true;
+    var msg = String(err.message || err);
+    return /network|fetch|timeout|failed/i.test(msg);
+  }
+
+  function fetchJsonWithRetry(url, info, maxRetries) {
+    function run(attempt) {
+      return fetch(url, { method: 'GET', cache: 'default' }).then(function(r) {
+        if (!r.ok) {
+          var e = new Error('HTTP ' + r.status);
+          e.status = r.status;
+          throw e;
+        }
+        return r.json();
+      }).catch(function(err) {
+        var status = (err && typeof err.status === 'number') ? err.status : null;
+        var canRetry = (attempt < maxRetries) && (isRetryableStatus(status) || isNetworkError(err));
+        if (!canRetry) throw err;
+        var waitMs = Math.pow(2, attempt) * 500; // 500, 1000, 2000...
+        var statusLabel = status ? status : 'network';
+        console.warn('[GFS] retry ' + (attempt + 1) + '/' + maxRetries +
+          ' after ' + statusLabel + ' for level=' + info.lev + ' fhr=' + info.fhr);
+        return new Promise(function(resolve) {
+          setTimeout(resolve, waitMs);
+        }).then(function() {
+          return run(attempt + 1);
+        });
+      }).then(function(json) {
+        if (!json || !json.grid || !json.vars) return null;
+        return { meta: json.meta, grid: json.grid, vars: json.vars };
+      });
+    }
+    return run(0);
+  }
+
+  function gfsLoad(waypoints, ato, done) {
     if (!waypoints || waypoints.length < 2) return;
     if (!ato || !(ato instanceof Date) || isNaN(ato.getTime())) return;
     var box = bboxFromWaypoints(waypoints);
@@ -209,27 +250,24 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
       startedMs: t0
     };
 
-    var urls = [];
+    var reqs = [];
     var tasks = [];
     var fi, li, fhr, lev;
     for (fi = 0; fi < fhrs.length; fi++) {
       fhr = fhrs[fi];
       for (li = 0; li < LEVELS_MB.length; li++) {
         lev = LEVELS_MB[li];
-        urls.push(gfsUrl(cycle, fhr, lev, box));
+        reqs.push({ url: gfsUrl(cycle, fhr, lev, box), fhr: fhr, lev: lev });
       }
     }
 
-    for (fi = 0; fi < urls.length; fi++) {
+    var maxRetries = 3;
+    for (fi = 0; fi < reqs.length; fi++) {
+      (function(req) {
       tasks.push(
-        fetch(urls[fi], { method: 'GET', cache: 'default' }).then(function(r) {
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          return r.json();
-        }).then(function(json) {
-          if (!json || !json.grid || !json.vars) return null;
-          return { meta: json.meta, grid: json.grid, vars: json.vars };
-        })
+        fetchJsonWithRetry(req.url, req, maxRetries)
       );
+      })(reqs[fi]);
     }
 
     Promise.all(tasks).then(function(parts) {
@@ -241,15 +279,14 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
       global.GFS.slices = out;
       global.GFS.status = 'ready';
       global.GFS.elapsedMs = Date.now() - t0;
-      global.GFS.urls = urls;
-      console.log('[GFS] ready ' + out.length + '/' + urls.length + ' slices, ' + global.GFS.elapsedMs + 'ms cycle=' + cycle);
-      if (typeof applyGfsRadarForCurrentMethod === 'function') {
-        try { applyGfsRadarForCurrentMethod(); } catch (e2) {}
-      }
+      global.GFS.urls = reqs.map(function(r) { return r.url; });
+      console.log('[GFS] ready ' + out.length + '/' + reqs.length + ' slices, ' + global.GFS.elapsedMs + 'ms cycle=' + cycle);
+      if (typeof done === 'function') done(null, global.GFS);
     }).catch(function(err) {
       global.GFS.status = 'error';
       global.GFS.error = String(err && err.message ? err.message : err);
       console.error('[GFS] load failed:', err);
+      if (typeof done === 'function') done(err);
     });
   }
 

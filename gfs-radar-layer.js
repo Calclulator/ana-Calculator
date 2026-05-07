@@ -40,6 +40,7 @@
   // Ellrod values: raw multiplied by 1e7 for human-readable thresholding.
   var TI1_THRESH = [50, 30, 15, 8, 3];
   var TI2_THRESH = [70, 40, 20, 10, 5];
+  var LAST_RENDER_LOG = null;
 
   function flToMb(fl) {
     if (fl <= FL_TABLE[0][0]) return FL_TABLE[0][1];
@@ -354,10 +355,14 @@
       }
     }
     if (map) group.addTo(map);
-    console.log('[GfsRadar] ' + method + ' lev=' + levelMb +
-                ' fhr=' + fhr + ': ' + nDrawn + ' cells drawn, ' +
-                nNull + ' nodata, ' + nFiltered + ' outside corridor, in ' +
-                (Date.now() - t0) + 'ms');
+    var logMsg = '[GfsRadar] ' + method + ' lev=' + levelMb +
+                 ' fhr=' + fhr + ': ' + nDrawn + ' cells drawn, ' +
+                 nNull + ' nodata, ' + nFiltered + ' outside corridor';
+    // Suppress immediate duplicate logs from repeated render triggers.
+    if (LAST_RENDER_LOG !== logMsg) {
+      console.log(logMsg + ', in ' + (Date.now() - t0) + 'ms');
+      LAST_RENDER_LOG = logMsg;
+    }
     return group;
   }
 
