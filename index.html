@@ -727,6 +727,7 @@ var BLANK_TILE=(function(){var c=document.createElement('canvas');c.width=c.heig
 var LY = {
   base:null, sat:null, radar:null,
   corridor:[], route:null, wpts:[], etops:[], alt:[],
+  routeBounds:null,
   fir:null, sig:null, metar:[], glide:null, ac:null, avoidL:null, avoidR:null
 };
 var lowBw = false;
@@ -3422,11 +3423,13 @@ function drawRoute() {
   // 既存レイヤー削除
   LY.corridor.forEach(function(l){map.removeLayer(l);}); LY.corridor=[];
   if(LY.route) { map.removeLayer(LY.route); LY.route = null; }
+  LY.routeBounds = null;
   LY.wpts.forEach(function(m){map.removeLayer(m);}); LY.wpts=[];
 
   unwrapWPs(WP);
   assignEtpLngU(ETPS);
   var routeCoords = getUnwrappedLatLngs(WP);
+  var worldLngOffsets = [-360, 0, 360];
 
   var turbOn = document.getElementById('oTurb').checked;
   var turbMode = WX_TURB_METHOD;
@@ -3449,18 +3452,31 @@ function drawRoute() {
       if(!isNaN(aL[0])&&!isNaN(aL[1])&&!isNaN(aR[0])&&!isNaN(aR[1])&&
          !isNaN(bL[0])&&!isNaN(bL[1])&&!isNaN(bR[0])&&!isNaN(bR[1])) {
         var ring0 = unwrapLatLngs([aL,bL,bR,aR]);
-        var poly = L.polygon(ring0,{
-          fillColor:col, fillOpacity:0.55,
-          stroke:true, color:col, weight:2, opacity:0.85
-        }).addTo(map);
-        LY.corridor.push(poly);
+        for(var ci = 0; ci < worldLngOffsets.length; ci++) {
+          var dLng = worldLngOffsets[ci];
+          var poly = L.polygon(shiftLatLngs(ring0, dLng),{
+            fillColor:col, fillOpacity:0.55,
+            stroke:true, color:col, weight:2, opacity:0.85
+          }).addTo(map);
+          LY.corridor.push(poly);
+        }
       }
     }
   }
   if(routeCoords.length >= 2) {
-    LY.route = L.polyline(routeCoords,{
-      color:'#4fc3f7', weight:2, opacity:1
-    }).addTo(map);
+    LY.routeBounds = L.latLngBounds(routeCoords);
+    var polylines = [];
+    for(var ri = 0; ri < worldLngOffsets.length; ri++) {
+      var off = worldLngOffsets[ri];
+      var shifted = [];
+      for(var rj = 0; rj < routeCoords.length; rj++) {
+        shifted.push(L.latLng(routeCoords[rj].lat, routeCoords[rj].lng + off));
+      }
+      polylines.push(L.polyline(shifted,{
+        color:'#4fc3f7', weight:2, opacity:1
+      }));
+    }
+    LY.route = L.featureGroup(polylines).addTo(map);
   }
 
   // ウェイポイントマーカー
@@ -3497,6 +3513,8 @@ function drawRoute() {
 
   drawAlt();
   bringTop();
+  console.log('[DL-debug] LY.route ctor:', LY.route && LY.route.constructor && LY.route.constructor.name);
+  console.log('[DL-debug] getLatLngs:', LY.route && LY.route.getLatLngs && LY.route.getLatLngs());
   updateWxFlPanel();
 }
 
@@ -4566,6 +4584,10 @@ function bringTop() {
 
 function frameRoute() {
   if(!WP.length) return;
+  if(LY.routeBounds) {
+    map.fitBounds(LY.routeBounds, {padding:[28,70]});
+    return;
+  }
   if(LY.route && LY.route.getBounds) {
     map.fitBounds(LY.route.getBounds(), {padding:[28,70]});
     return;
