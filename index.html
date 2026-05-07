@@ -726,7 +726,7 @@ var APT = {
 var BLANK_TILE=(function(){var c=document.createElement('canvas');c.width=c.height=1;return c.toDataURL();})();
 var LY = {
   base:null, sat:null, radar:null,
-  corridor:[], route:[], wpts:[], etops:[], alt:[],
+  corridor:[], route:null, wpts:[], etops:[], alt:[],
   fir:null, sig:null, metar:[], glide:null, ac:null, avoidL:null, avoidR:null
 };
 var lowBw = false;
@@ -3289,6 +3289,24 @@ function unwrapLatLngs(arr) {
   return out;
 }
 
+function getUnwrappedLatLngs(points) {
+  if(!points || points.length === 0) return [];
+  if(points.length < 2) {
+    return [L.latLng(points[0].lat, points[0].lon != null ? points[0].lon : points[0].lng)];
+  }
+  var first = points[0];
+  var adjusted = [L.latLng(first.lat, first.lon != null ? first.lon : first.lng)];
+  for(var i = 1; i < points.length; i++) {
+    var prev = adjusted[i - 1];
+    var cur = points[i];
+    var lon = cur.lon != null ? cur.lon : cur.lng;
+    while(lon - prev.lng > 180) lon -= 360;
+    while(prev.lng - lon > 180) lon += 360;
+    adjusted.push(L.latLng(cur.lat, lon));
+  }
+  return adjusted;
+}
+
 // [[lat,lng],...] の lng に deltaLng を加えた新配列 (元は不変)
 function shiftLatLngs(arr, deltaLng) {
   if(!arr || !arr.length) return [];
@@ -3395,7 +3413,7 @@ function drawAlt() {
       iconSize: [40, 14],
       iconAnchor: [20, 7]
     });
-    LY.alt.push(L.marker([a.lat, a.lng], {icon: ic, interactive: false}).addTo(map));
+    LY.alt.push(L.marker(L.latLng(a.lat, a.lng).wrap(), {icon: ic, interactive: false}).addTo(map));
   });
   bringTop();
 }
@@ -3403,53 +3421,46 @@ function drawAlt() {
 function drawRoute() {
   // 既存レイヤー削除
   LY.corridor.forEach(function(l){map.removeLayer(l);}); LY.corridor=[];
-  LY.route.forEach(function(l){map.removeLayer(l);}); LY.route=[];
+  if(LY.route) { map.removeLayer(LY.route); LY.route = null; }
   LY.wpts.forEach(function(m){map.removeLayer(m);}); LY.wpts=[];
 
   unwrapWPs(WP);
   assignEtpLngU(ETPS);
+  var routeCoords = getUnwrappedLatLngs(WP);
 
   var turbOn = document.getElementById('oTurb').checked;
   var turbMode = WX_TURB_METHOD;
-  var worldLngOffsets = [-360, 0, 360];
-  var iw, dLng;
 
   for(var i=0;i<WP.length-1;i++) {
     var a=WP[i], b=WP[i+1];
-    if(isNaN(a.lat)||isNaN(a.lng)||isNaN(b.lat)||isNaN(b.lng)) continue;
+    var au = routeCoords[i];
+    var bu = routeCoords[i+1];
+    if(!au || !bu || isNaN(a.lat)||isNaN(a.lng)||isNaN(b.lat)||isNaN(b.lng)) continue;
     var segVal = turbOn ? corridorShearValue(a.id) : null;
     var col = turbOn ? wsColor(segVal, turbMode === 'b787' ? 'b787' : turbMode) : 'transparent';
-    var brg = bearing(a.lat,a.lngU,b.lat,b.lngU);
+    var brg = bearing(au.lat,au.lng,bu.lat,bu.lng);
 
     if(turbOn && col !== 'transparent') {
       // 10NMコリドーポリゴン（片側5NM）
-      var aL = perpPoint(a.lat,a.lngU, brg-Math.PI/2, 5);
-      var aR = perpPoint(a.lat,a.lngU, brg+Math.PI/2, 5);
-      var bL = perpPoint(b.lat,b.lngU, brg-Math.PI/2, 5);
-      var bR = perpPoint(b.lat,b.lngU, brg+Math.PI/2, 5);
+      var aL = perpPoint(au.lat,au.lng, brg-Math.PI/2, 5);
+      var aR = perpPoint(au.lat,au.lng, brg+Math.PI/2, 5);
+      var bL = perpPoint(bu.lat,bu.lng, brg-Math.PI/2, 5);
+      var bR = perpPoint(bu.lat,bu.lng, brg+Math.PI/2, 5);
       if(!isNaN(aL[0])&&!isNaN(aL[1])&&!isNaN(aR[0])&&!isNaN(aR[1])&&
          !isNaN(bL[0])&&!isNaN(bL[1])&&!isNaN(bR[0])&&!isNaN(bR[1])) {
-        var ring0 = [aL,bL,bR,aR];
-        for(iw = 0; iw < worldLngOffsets.length; iw++) {
-          dLng = worldLngOffsets[iw];
-          var poly = L.polygon(shiftLatLngs(ring0, dLng),{
-            fillColor:col, fillOpacity:0.55,
-            stroke:true, color:col, weight:2, opacity:0.85
-          }).addTo(map);
-          LY.corridor.push(poly);
-        }
+        var ring0 = unwrapLatLngs([aL,bL,bR,aR]);
+        var poly = L.polygon(ring0,{
+          fillColor:col, fillOpacity:0.55,
+          stroke:true, color:col, weight:2, opacity:0.85
+        }).addTo(map);
+        LY.corridor.push(poly);
       }
     }
-
-    // 航路中心線（世界コピー3枚）
-    var seg0 = [[a.lat,a.lngU],[b.lat,b.lngU]];
-    for(iw = 0; iw < worldLngOffsets.length; iw++) {
-      dLng = worldLngOffsets[iw];
-      var cl = L.polyline(shiftLatLngs(seg0, dLng),{
-        color:'#4fc3f7', weight:2, opacity:1
-      }).addTo(map);
-      LY.route.push(cl);
-    }
+  }
+  if(routeCoords.length >= 2) {
+    LY.route = L.polyline(routeCoords,{
+      color:'#4fc3f7', weight:2, opacity:1
+    }).addTo(map);
   }
 
   // ウェイポイントマーカー
@@ -3461,7 +3472,8 @@ function drawRoute() {
           +'background:'+col+';border:1.5px solid rgba(5,8,20,.9);"></div>',
       className:'', iconSize:[sz,sz], iconAnchor:[sz/2,sz/2]
     });
-    var m = L.marker([w.lat,w.lngU],{icon:ic}).addTo(map);
+    var wpLon = (w.lon != null ? w.lon : w.lng);
+    var m = L.marker(L.latLng(w.lat,wpLon).wrap(),{icon:ic}).addTo(map);
     // 主要WPは常に表示、それ以外はzoom>=7で表示
     if(w.t || KEY_WP[w.id]) {
       m.bindTooltip('<span style="font-size:'+WP_FONT_SIZE+'px">'+w.id+'</span>',{permanent:true, direction:'top', className:'wxt', offset:[0,-4]});
@@ -3480,7 +3492,7 @@ function drawRoute() {
           +'border:.5px solid rgba(255,138,101,.45);border-radius:2px;">'+e.id+'</div>',
       className:'', iconSize:[34,14], iconAnchor:[17,7]
     });
-    LY.wpts.push(L.marker([e.lat,eLon],{icon:ic}).addTo(map));
+    LY.wpts.push(L.marker(L.latLng(e.lat,eLon).wrap(),{icon:ic}).addTo(map));
   });
 
   drawAlt();
@@ -3826,7 +3838,7 @@ function drawEtops() {
           +'background:rgba(6,10,20,.85);padding:1px 4px;border-radius:2px;">'+a.id+'</span>',
       className:'', iconSize:[36,13], iconAnchor:[18,6]
     });
-    LY.etops.push(L.marker([a.lat,a.lng],{icon:ic}).addTo(map));
+    LY.etops.push(L.marker(L.latLng(a.lat,a.lng).wrap(),{icon:ic}).addTo(map));
   });
   bringTop();
 }
@@ -3953,7 +3965,7 @@ function loadMetars() {
           html:'<div style="width:14px;height:14px;border-radius:50%;background:'+col+';border:2px solid white;box-shadow:0 0 4px '+col+'88;"></div>',
           className:'',iconSize:[14,14],iconAnchor:[7,7]
         });
-        var mk=L.marker([lat,lon],{icon:ic}).addTo(map);
+        var mk=L.marker(L.latLng(lat,lon).wrap(),{icon:ic}).addTo(map);
         mk.bindTooltip(m.icao+'\n'+(m.flight_category||'')+'\n'+(m.raw_text||''),{className:'wxt',sticky:true});
         mk.on('click',(function(metar){return function(){
           fetch('https://api.checkwx.com/v2/taf/'+metar.icao+'/decoded',{headers:{'X-API-Key':'eb52e4c6ca254584842adb8dc574b4f8'}})
@@ -4179,7 +4191,7 @@ function fetchAc() {
     html:'<div style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;transform:rotate('+(rpos.hdg)+'deg);font-size:40px;filter:drop-shadow(0 0 3px #4fc3f7);">⬆</div>',
     className:'',iconSize:[24,24],iconAnchor:[12,12]
   });
-  LY.ac = L.marker([rpos.lat,rpos.lng],{icon:ic,zIndexOffset:1000}).addTo(map);
+  LY.ac = L.marker(L.latLng(rpos.lat,rpos.lng).wrap(),{icon:ic,zIndexOffset:1000}).addTo(map);
   LY.ac.bindTooltip(acReg+'\nHDG '+Math.round(rpos.hdg)+'°',{className:'wxt',permanent:true,direction:'right',offset:[14,0]});
   document.getElementById('ac-lbl').textContent = acReg+' 航路上位置表示中';
   updateGlide();
@@ -4377,7 +4389,7 @@ function addLightningStrike(d) {
   var ageMin = (Date.now() - tms) / 60000;
   if(ageMin > 30) return;
   var sty = lightningStyleForAgeMin(ageMin);
-  var ly = L.circleMarker([lat, lon], {
+  var ly = L.circleMarker(L.latLng(lat, lon).wrap(), {
     radius: sty.r,
     fillColor: sty.fill,
     fillOpacity: sty.op,
@@ -4541,7 +4553,7 @@ function bringTop() {
   if(LY.glide) try{LY.glide.bringToFront();}catch(e){}
   if(gfsRadarLayer) try{gfsRadarLayer.bringToFront();}catch(e){}
   LY.corridor.forEach(function(l){try{l.bringToFront();}catch(e){}});
-  LY.route.forEach(function(l){try{l.bringToFront();}catch(e){}});
+  if(LY.route) try{LY.route.bringToFront();}catch(e){}
   if(LY.avoidL) try{LY.avoidL.bringToFront();}catch(e){}
   if(LY.avoidR) try{LY.avoidR.bringToFront();}catch(e){}
   LY.etops.forEach(function(l){try{l.bringToFront();}catch(e){}});
@@ -4554,11 +4566,13 @@ function bringTop() {
 
 function frameRoute() {
   if(!WP.length) return;
-  unwrapWPs(WP);
-  map.fitBounds(
-    L.latLngBounds(WP.map(function(w){return[w.lat,w.lngU];})),
-    {padding:[28,70]}
-  );
+  if(LY.route && LY.route.getBounds) {
+    map.fitBounds(LY.route.getBounds(), {padding:[28,70]});
+    return;
+  }
+  var coords = getUnwrappedLatLngs(WP);
+  if(!coords.length) return;
+  map.fitBounds(L.latLngBounds(coords), {padding:[28,70]});
 }
 
 function refreshAll() {
