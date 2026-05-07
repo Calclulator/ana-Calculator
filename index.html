@@ -1749,6 +1749,30 @@ function corridorAggMetricForFl(flKey) {
   return agg;
 }
 
+function gfsMethodKey(method) {
+  var m = String(method || 'VWS').toUpperCase();
+  if(m === 'TI1' || m === 'TI2') return m;
+  return 'VWS';
+}
+
+function getGfsRadarSharedConfig(method) {
+  var key = gfsMethodKey(method);
+  var fallbackPalette = ['#7e0023','#cf2027','#ed6f23','#f7c84a','#9bd06f','#3a78f0'];
+  var fallbackThr = key === 'TI1' ? [50, 30, 15, 8, 3] : key === 'TI2' ? [70, 40, 20, 10, 5] : [0.013, 0.010, 0.008, 0.006, 0.004];
+  var fallbackLabels = key === 'TI1'
+    ? ['Severe (50+)','Heavy (30-49)','Moderate (15-29)','Light (8-14)','Minimal (3-7)','Smooth (0-2)']
+    : key === 'TI2'
+      ? ['Severe (70+)','Heavy (40-69)','Moderate (20-39)','Light (10-19)','Minimal (5-9)','Smooth (0-4)']
+      : ['Severe (13+)','Moderate (10-12)','Light+ (8-9)','Light (6-7)','Light- (4-5)','Smooth (0-3)'];
+  if(typeof GfsRadar === 'undefined') {
+    return { key: key, palette: fallbackPalette, thresholds: fallbackThr, labels: fallbackLabels };
+  }
+  var palette = (typeof GfsRadar.getPalette === 'function') ? GfsRadar.getPalette(key) : fallbackPalette;
+  var thresholds = (typeof GfsRadar.getThresholds === 'function') ? GfsRadar.getThresholds(key) : fallbackThr;
+  var labels = (typeof GfsRadar.getLabels === 'function') ? GfsRadar.getLabels(key) : fallbackLabels;
+  return { key: key, palette: palette, thresholds: thresholds, labels: labels };
+}
+
 function renderWxCorridorLegend() {
   var grad = document.getElementById('wx-turb-leg-gradient');
   var labs = document.getElementById('wx-turb-leg-labels');
@@ -1804,27 +1828,22 @@ function renderWxCorridorLegend() {
     return;
   }
   wrapGfs.style.display = 'block';
+  var gfsCfg = getGfsRadarSharedConfig(WX_GFS_CORR_METHOD);
   if(ttlG) {
-    if(WX_GFS_CORR_METHOD === 'TI1') ttlG.textContent = 'Ellrod TI1';
-    else if(WX_GFS_CORR_METHOD === 'TI2') ttlG.textContent = 'Ellrod TI2';
+    if(gfsCfg.key === 'TI1') ttlG.textContent = 'Ellrod TI1';
+    else if(gfsCfg.key === 'TI2') ttlG.textContent = 'Ellrod TI2';
     else ttlG.textContent = 'GFS-VWS';
   }
   gradG.style.background = 'linear-gradient(to bottom,'+
     'rgba(239,83,80,.9) 0%, rgba(255,167,38,.9) 16.66%, rgba(255,238,88,.9) 33.33%,'+
     'rgba(174,213,129,.9) 50%, rgba(102,187,106,.9) 66.66%, rgba(100,181,246,.9) 100%)';
-  if(WX_GFS_CORR_METHOD === 'VWS') {
-    labsG.innerHTML = '<div style="color:#e57373;">Severe (13+)</div>'+
-      '<div style="color:#ffb74d;">Moderate (10-12)</div>'+
-      '<div style="color:#fff59d;">Light+ (8-9)</div>'+
-      '<div style="color:#c5e1a5;">Light (6-7)</div>'+
-      '<div style="color:#aed581;">Light- (4-5)</div>'+
-      '<div style="color:#64b5f6;">Smooth (0-3)</div>';
-    labsG.style.justifyContent = 'space-between';
-  } else {
-    labsG.innerHTML = '<div style="color:#e3f2fd;">GFS proxy field</div>'+
-      '<div style="color:#90a4ae;font-size:11px;">Method切替時に自動取得</div>';
-    labsG.style.justifyContent = 'center';
-  }
+  labsG.innerHTML = '<div style="color:#e57373;">' + gfsCfg.labels[0] + '</div>'+
+    '<div style="color:#ffb74d;">' + gfsCfg.labels[1] + '</div>'+
+    '<div style="color:#fff59d;">' + gfsCfg.labels[2] + '</div>'+
+    '<div style="color:#c5e1a5;">' + gfsCfg.labels[3] + '</div>'+
+    '<div style="color:#aed581;">' + gfsCfg.labels[4] + '</div>'+
+    '<div style="color:#64b5f6;">' + gfsCfg.labels[5] + '</div>';
+  labsG.style.justifyContent = 'space-between';
 }
 
 function onWxTurbMethodChange() {
@@ -2378,11 +2397,6 @@ function renderGfsWsTable() {
     return;
   }
 
-  var PALETTE = ['#7e0023','#cf2027','#ed6f23','#f7c84a','#9bd06f','#3a78f0'];
-  var VWS_THRESH = [0.013, 0.010, 0.008, 0.006, 0.004];
-  var TI1_THRESH = [50, 30, 15, 8, 3];
-  var TI2_THRESH = [70, 40, 20, 10, 5];
-
   function bucketWs(value, thr) {
     if(value === null || value === undefined || isNaN(value)) return -1;
     var i;
@@ -2393,17 +2407,13 @@ function renderGfsWsTable() {
   }
   function gfsWsPaletteCell(mode, value) {
     if(value === null || value === undefined || isNaN(value)) return { bg: 'transparent', fg: null };
+    var cfg = getGfsRadarSharedConfig(mode);
     var b;
-    if(mode === 'ti1') {
-      b = bucketWs(value * 1e7, TI1_THRESH);
-    } else if(mode === 'ti2') {
-      b = bucketWs(value * 1e7, TI2_THRESH);
-    } else {
-      b = bucketWs(value, VWS_THRESH);
-    }
+    if(cfg.key === 'TI1' || cfg.key === 'TI2') b = bucketWs(value * 1e7, cfg.thresholds);
+    else b = bucketWs(value, cfg.thresholds);
     if(b < 0) return { bg: 'transparent', fg: null };
-    var idx = Math.min(b, PALETTE.length - 1);
-    var bg = PALETTE[idx];
+    var idx = Math.min(b, cfg.palette.length - 1);
+    var bg = cfg.palette[idx];
     var fg;
     if(idx === 0 || idx === 1 || idx === 5) fg = '#fff';
     else fg = '#1a1a1a';
@@ -2640,12 +2650,13 @@ function exportCalibrationData() {
 
   function vwsBandLabelUi(val) {
     if(val === null || isNaN(val)) return '';
-    if(val <= 3) return 'Smooth (0-3)';
-    if(val <= 5) return 'Light- (4-5)';
-    if(val <= 7) return 'Light (6-7)';
-    if(val <= 9) return 'Light+ (8-9)';
-    if(val <= 12) return 'Moderate (10-12)';
-    return 'Severe (13+)';
+    var labels = getGfsRadarSharedConfig('VWS').labels;
+    if(val <= 3) return labels[5];
+    if(val <= 5) return labels[4];
+    if(val <= 7) return labels[3];
+    if(val <= 9) return labels[2];
+    if(val <= 12) return labels[1];
+    return labels[0];
   }
 
   function navlogVwsAtWpFl(wp, wpId, flTen) {
@@ -2654,9 +2665,10 @@ function exportCalibrationData() {
 
   function gfsBandLabel(methodKey, rawVal) {
     if(rawVal === null || isNaN(rawVal)) return '';
-    var thr = GfsRadar.getThresholds(methodKey);
+    var cfg = getGfsRadarSharedConfig(methodKey);
+    var thr = cfg.thresholds;
     var v = rawVal;
-    if(methodKey === 'TI1' || methodKey === 'TI2') v = rawVal * 1e7;
+    if(cfg.key === 'TI1' || cfg.key === 'TI2') v = rawVal * 1e7;
     var idx = -1;
     var i;
     for(i = 0; i < thr.length; i++) {
@@ -2667,8 +2679,7 @@ function exportCalibrationData() {
     }
     if(idx < 0) idx = thr.length;
     idx = Math.min(idx, 5);
-    var palNames = ['Severe', 'Heavy', 'Moderate', 'Light', 'Minimal', 'Smooth'];
-    return palNames[idx];
+    return cfg.labels[idx].split(' (')[0];
   }
 
   function csvEscape(cell) {

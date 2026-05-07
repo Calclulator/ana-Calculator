@@ -42,6 +42,30 @@
   var TI2_THRESH = [70, 40, 20, 10, 5];
   var LAST_RENDER_LOG = null;
 
+  function normalizeMethod(method) {
+    var m = String(method || 'VWS').toUpperCase();
+    if (m === 'TI1' || m === 'TI2') return m;
+    return 'VWS';
+  }
+
+  function thresholdsForMethod(method) {
+    var m = normalizeMethod(method);
+    if (m === 'TI1') return TI1_THRESH.slice();
+    if (m === 'TI2') return TI2_THRESH.slice();
+    return VWS_THRESH.slice();
+  }
+
+  function labelsForMethod(method) {
+    var m = normalizeMethod(method);
+    if (m === 'VWS') {
+      return ['Severe (13+)', 'Moderate (10-12)', 'Light+ (8-9)', 'Light (6-7)', 'Light- (4-5)', 'Smooth (0-3)'];
+    }
+    if (m === 'TI1') {
+      return ['Severe (50+)', 'Heavy (30-49)', 'Moderate (15-29)', 'Light (8-14)', 'Minimal (3-7)', 'Smooth (0-2)'];
+    }
+    return ['Severe (70+)', 'Heavy (40-69)', 'Moderate (20-39)', 'Light (10-19)', 'Minimal (5-9)', 'Smooth (0-4)'];
+  }
+
   function flToMb(fl) {
     if (fl <= FL_TABLE[0][0]) return FL_TABLE[0][1];
     var n = FL_TABLE.length;
@@ -378,13 +402,13 @@
     setPalette: function (arr) { if (arr && arr.length === 6) PALETTE = arr; },
     setThresholds: function (m, arr) {
       if (!arr || arr.length !== 5) return;
-      if (m === 'VWS') VWS_THRESH = arr;
-      else if (m === 'TI1') TI1_THRESH = arr;
-      else if (m === 'TI2') TI2_THRESH = arr;
+      var mm = normalizeMethod(m);
+      if (mm === 'VWS') VWS_THRESH = arr;
+      else if (mm === 'TI1') TI1_THRESH = arr;
+      else if (mm === 'TI2') TI2_THRESH = arr;
     },
     getPalette: function () { return PALETTE.slice(); },
-    getThresholds: function (m) {
-      return m === 'TI1' ? TI1_THRESH.slice() : m === 'TI2' ? TI2_THRESH.slice() : VWS_THRESH.slice();
-    }
+    getThresholds: function (m) { return thresholdsForMethod(m); },
+    getLabels: function (m) { return labelsForMethod(m); }
   };
 })();
