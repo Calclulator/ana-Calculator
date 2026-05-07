@@ -483,7 +483,8 @@ var BASES = {
 // STATE
 // =====================================================================
 var WP = [];
-var CURRENT_FL = 35;
+// Current selected cruise level in RVSM FL units (e.g. FL340 => 340).
+var CURRENT_FL = 350;
 var WX_TURB_METHOD = 'vws';
 var WX_GFS_CORR_ON = false;
 var WX_GFS_CORR_METHOD = 'VWS';
@@ -1705,7 +1706,7 @@ function companyVwsAtWpFl(wpId, flTen) {
 }
 
 function corridorShearValue(wpId) {
-  var flTen = Math.round(CURRENT_FL * 10);
+  var flTen = CURRENT_FL;
   var mode = WX_TURB_METHOD;
   if(typeof mode === 'string' && mode.indexOf('GFS-') === 0) return null;
   var flLo = flTen - 10;
@@ -1859,7 +1860,7 @@ function applyDefaultCorridorFl() {
   var brg = bearing(WP[0].lat, WP[0].lng, WP[WP.length-1].lat, WP[WP.length-1].lng);
   var hdg = (brg*180/Math.PI+360)%360;
   var east = hdg < 180;
-  CURRENT_FL = east ? 37 : 36;
+  CURRENT_FL = east ? 370 : 360;
 }
 
 // EDR 推定 (B787)
@@ -3539,7 +3540,7 @@ function applyGfsRadarForCurrentMethod() {
     if(typeof GfsRadar !== 'undefined' && GfsRadar.render) {
       gfsRadarLayer = GfsRadar.render(map, {
         method: methodKey,
-        fl: CURRENT_FL * 10,
+        fl: CURRENT_FL,
         validUtc: new Date()
       });
     }
@@ -4317,7 +4318,7 @@ function hexToRgba(hex, a) {
 }
 
 function setFlFromRvsm(fl) {
-  CURRENT_FL = fl/10;
+  CURRENT_FL = fl;
   drawRoute();
   applyGfsRadarForCurrentMethod();
 }
@@ -4338,10 +4339,9 @@ function updateWxFlPanel() {
   var mode = WX_TURB_METHOD;
   var html = '';
   flList.forEach(function(fl) {
-    var flKey = fl/10;
-    var agg = corridorAggMetricForFl(flKey);
+    var agg = corridorAggMetricForFl(fl);
     var col = wsColor(agg, mode === 'b787' ? 'b787' : mode);
-    var isSel = (flKey === curFL);
+    var isSel = (fl === curFL);
     var borderCol = (agg !== null && !isNaN(agg)) ? col : '#455a64';
     html += '<div class="wx-fl-btn" onclick="setFlFromRvsm('+fl+')" style="'
           + (isSel ? 'outline:2px solid #4fc3f7;outline-offset:-2px;' : '')
