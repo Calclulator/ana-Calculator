@@ -393,7 +393,6 @@
   <div class="bar" style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;">
     <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.06em;font-size:1em;">ATMOSPHERE ANALYSIS (GFS)</span>
     <span style="font-size:1em;color:#90a4ae;margin-left:6px;">GFS データに基づく大気解析</span>
-    <span id="gfsAtmProgress" style="margin-left:auto;font-size:12px;color:#4fc3f7;min-width:160px;text-align:right;white-space:nowrap;"></span>
   </div>
   <div style="padding:8px 12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #1e2a38;">
     <span style="font-size:1em;color:#90a4ae;">Heat map:</span>
@@ -900,13 +899,13 @@ function navTo(tab){
   showTab(tab);
   closeNav();
   if(tab === 'atm-gfs') {
+    renderGfsAtmTable();
+    renderGfsWsTable();
     ensureGfsLoadedForAtm();
     if(window.GFS_POINT && window.GFS_POINT.status === 'loading' &&
         typeof window.GFS_ATM_PRELOAD_TOTAL === 'number' && window.GFS_ATM_PRELOAD_TOTAL > 0) {
       updateGfsAtmProgressLoading(0, window.GFS_ATM_PRELOAD_TOTAL);
     }
-    renderGfsAtmTable();
-    renderGfsWsTable();
     if(window.GFS_POINT && window.GFS_POINT.status === 'loading') {
       startAtmGfsPolling();
     }
@@ -2852,19 +2851,33 @@ function gfsAtmCoordsOk(lat, lon) {
   return typeof lat === 'number' && isFinite(lat) && typeof lon === 'number' && isFinite(lon);
 }
 
+function gfsAtmProgressNodes() {
+  return document.querySelectorAll('.gfs-atm-progress');
+}
+
 function updateGfsAtmProgressLoading(fin, tot) {
-  var el = document.getElementById('gfsAtmProgress');
-  if(!el || fin >= tot) return;
-  el.textContent = 'GFS loading: ' + fin + '/' + tot;
+  var nodes = gfsAtmProgressNodes();
+  var i;
+  if(fin >= tot) return;
+  for(i = 0; i < nodes.length; i++) {
+    nodes[i].textContent = 'GFS loading: ' + fin + '/' + tot;
+  }
 }
 
 function updateGfsAtmProgressDone(total, ng) {
-  var el = document.getElementById('gfsAtmProgress');
-  if(!el) return;
+  var nodes = gfsAtmProgressNodes();
   var s = 'GFS loaded: ' + total + '/' + total;
   if(ng && ng > 0) s += ' (ng=' + ng + ')';
-  el.textContent = s;
-  setTimeout(function () { el.textContent = ''; }, 2000);
+  var i;
+  for(i = 0; i < nodes.length; i++) {
+    nodes[i].textContent = s;
+  }
+  setTimeout(function () {
+    var n2 = gfsAtmProgressNodes();
+    for(i = 0; i < n2.length; i++) {
+      n2[i].textContent = '';
+    }
+  }, 2000);
 }
 
 function gfsRunThrottledJobs(jobs, concurrency, worker, done, onProgress) {
@@ -3030,7 +3043,9 @@ function renderGfsAtmTable() {
     if(window.GFS_POINT && window.GFS_POINT.status === 'error') {
       wrap.innerHTML = '<div style="color:#ef5350;padding:24px;text-align:center;font-size:1em;">GFS Point ロードエラー: ' + (window.GFS_POINT.error || 'unknown') + '</div>';
     } else {
-      wrap.innerHTML = '<div style="color:#90a4ae;padding:24px;text-align:center;font-size:1em;">GFS Point データをロード中...</div>';
+      wrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;color:#90a4ae;padding:24px;text-align:center;font-size:1em;">' +
+        '<span>GFS Point データをロード中...</span>' +
+        '<span class="gfs-atm-progress" style="font-size:12px;color:#4fc3f7;white-space:nowrap;"></span></div>';
     }
     return;
   }
@@ -3125,7 +3140,9 @@ function renderGfsWsTable() {
     if(window.GFS_POINT && window.GFS_POINT.status === 'error') {
       wrap.innerHTML = '<div style="color:#ef5350;padding:24px;text-align:center;font-size:1em;">GFS Point ロードエラー: ' + (window.GFS_POINT.error || 'unknown') + '</div>';
     } else {
-      wrap.innerHTML = '<div style="color:#90a4ae;padding:24px;text-align:center;font-size:1em;">GFS Point データをロード中...</div>';
+      wrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;color:#90a4ae;padding:24px;text-align:center;font-size:1em;">' +
+        '<span>GFS Point データをロード中...</span>' +
+        '<span class="gfs-atm-progress" style="font-size:12px;color:#4fc3f7;white-space:nowrap;"></span></div>';
     }
     return;
   }
@@ -4436,17 +4453,17 @@ function buildGfsRadarRoutePoints() {
   }
   if(base.length < 2) return base;
   var out = [];
-  var maxSegNm = 200;
   var targetStepNm = 125;
   for(i=0;i<base.length-1;i++) {
     var a = base[i], b = base[i+1];
     out.push(a);
     var dNm = gfsRadarApproxDistNm(a, b);
-    if(dNm > maxSegNm) {
-      var nAdd = Math.ceil(dNm / targetStepNm) - 1;
-      if(nAdd < 1) nAdd = 1;
-      for(var k=1;k<=nAdd;k++) {
-        out.push(gfsRadarInterpPoint(a, b, k / (nAdd + 1)));
+    if(dNm > targetStepNm) {
+      var nSeg = Math.ceil(dNm / targetStepNm);
+      if(nSeg < 2) nSeg = 2;
+      var k;
+      for(k = 1; k < nSeg; k++) {
+        out.push(gfsRadarInterpPoint(a, b, k / nSeg));
       }
     }
   }

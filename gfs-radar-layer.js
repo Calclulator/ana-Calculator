@@ -782,15 +782,14 @@
 
     if (pointMode) {
       var pts = opts.routePoints;
+      // GFS overlay: fixed ~40NM total width (+-20NM from route); independent of Turbulence Corridor slider.
+      var GFS_OVERLAY_HALF_NM = 20;
+      var gfsFilterHalfNm = GFS_OVERLAY_HALF_NM;
       var pitchNm = 20;
       var lateralStepNm = 20;
       var halfCellNm = 10;
-      // Keep GFS band visually aligned with company corridor width (narrower than full filter radius).
-      var gfsBandHalfNm = Math.max(20, Math.min(corridorNM, 80));
-      var corridorInnerNm = Math.max(0, gfsBandHalfNm - halfCellNm);
-      var lateralOffsets = [];
-      lateralOffsets.push(0);
-      for (var o = lateralStepNm; o <= corridorInnerNm + 1e-6; o += lateralStepNm) {
+      var lateralOffsets = [0];
+      for (var o = lateralStepNm; o <= GFS_OVERLAY_HALF_NM + 1e-6; o += lateralStepNm) {
         lateralOffsets.push(o);
         lateralOffsets.push(-o);
       }
@@ -820,7 +819,7 @@
           if (!colorMid) { nNull++; continue; }
           for (var lo = 0; lo < lateralOffsets.length; lo++) {
             var latOffPt = offsetPointByNm(center, segHeading, lateralOffsets[lo]);
-            if (useFilter && minDistToRoutePolylineNM(latOffPt.lat, latOffPt.lon, routeWps, corridorInnerNm) > corridorInnerNm) {
+            if (useFilter && minDistToRoutePolylineNM(latOffPt.lat, latOffPt.lon, routeWps, gfsFilterHalfNm) > gfsFilterHalfNm) {
               nFiltered++;
               continue;
             }
