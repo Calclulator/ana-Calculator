@@ -251,7 +251,7 @@
       <option value="TI2">Ellrod TI2</option>
     </select>
     <button type="button" class="btn ws-method-help-btn" onclick="openWsMethodHelpFromWx()" aria-label="WIND SHEAR Method の解説"><span class="ws-method-help-ico">i</span></button>
-    <label class="ck"><input type="checkbox" id="oMetar" onchange="onApOverlayToggle()" oninput="onApOverlayToggle()"> A/P</label>
+    <label class="ck"><input type="checkbox" id="oMetar" onchange="onApOverlayToggle()" oninput="onApOverlayToggle()" onclick="onApOverlayToggle()"> A/P</label>
     <span class="lbl" style="margin-left:8px;">回避</span>
     <button class="btn" id="avoidL" onclick="setAvoidSide('L')" style="padding:2px 6px;">L</button>
     <button class="btn" id="avoidR" onclick="setAvoidSide('R')" style="padding:2px 6px;">R</button>
@@ -2296,6 +2296,8 @@ function onCorridorNmChange() {
 }
 
 function onApOverlayToggle() {
+  var cb = document.getElementById('oMetar');
+  console.log('[A/P] toggle fired. checked=', !!(cb && cb.checked), 'ua=', navigator.userAgent);
   drawAlt();
 }
 
@@ -4396,7 +4398,10 @@ function loadMetars() {
   fetch('https://api.checkwx.com/v2/metar/'+near.join(',')+'/decoded',{headers:{'X-API-Key':'eb52e4c6ca254584842adb8dc574b4f8'}})
     .then(function(r){return r.json();})
     .then(function(d){
-      if(!d.data) return;
+      if(!d.data) {
+        console.warn('[A/P] METAR response has no data');
+        return;
+      }
       d.data.forEach(function(m){
         if(!m.station||!m.station.geometry) return;
         var lat=m.station.geometry.coordinates[1];
@@ -4411,6 +4416,13 @@ function loadMetars() {
           var off = worldLngOffsets[wi];
           var mk=L.marker(L.latLng(lat,lon + off),{icon:ic}).addTo(map);
           mk.bindTooltip(m.icao+'\n'+(m.flight_category||'')+'\n'+(m.raw_text||''),{className:'wxt',sticky:true});
+          // ICAO 4-letter label (always visible)
+          mk.bindTooltip('<span style="font-size:12px;font-weight:bold;">'+escH(m.icao||'')+'</span>',{
+            className:'wxt-wp',
+            permanent:true,
+            direction:'top',
+            offset:[0,-16]
+          });
           mk.on('click',(function(metar){
             return function(e) {
               var ll = e && e.latlng ? e.latlng : (metar.station&&metar.station.geometry
@@ -4460,7 +4472,9 @@ function loadMetars() {
         }
       });
       bringTop();
-    }).catch(function(){});
+    }).catch(function(err){
+      console.error('[A/P] loadMetars failed:', err);
+    });
 }
 
 // =====================================================================
