@@ -4381,6 +4381,37 @@ loadSigmets();
 function loadMetars() {
   LY.metar.forEach(function(m){map.removeLayer(m);}); LY.metar=[];
   if(!document.getElementById('oMetar').checked) return;
+  function apDebugFetchJson(url, opt, tag) {
+    var pfx = '[A/P-fetch] ' + tag + ' ';
+    console.log(pfx + 'url=', url);
+    return fetch(url, opt || {})
+      .then(function(r){
+        var hdrs = {};
+        try {
+          if(r.headers && r.headers.forEach) {
+            r.headers.forEach(function(v, k){ hdrs[k] = v; });
+          }
+        } catch(e) {}
+        console.log(pfx + 'status=', r.status, 'ok=', r.ok, 'content-type=', hdrs['content-type'] || '(none)');
+        console.log(pfx + 'headers=', hdrs);
+        return r.text().then(function(txt){
+          var raw = String(txt || '');
+          var preview = raw.length > 4000 ? raw.slice(0, 4000) + ' ...(truncated)' : raw;
+          console.log(pfx + 'raw=', preview);
+          var parsed = null;
+          try {
+            parsed = raw ? JSON.parse(raw) : null;
+          } catch(pe) {
+            console.error(pfx + 'JSON parse error name=', pe && pe.name, 'message=', pe && pe.message, 'stack=', pe && pe.stack);
+          }
+          return { ok: r.ok, status: r.status, headers: hdrs, text: raw, json: parsed };
+        });
+      })
+      .catch(function(err){
+        console.error(pfx + 'fetch error name=', err && err.name, 'message=', err && err.message, 'stack=', err && err.stack);
+        throw err;
+      });
+  }
   var CAT = {VFR:'#43a047',MVFR:'#1565c0',IFR:'#e53935',LIFR:'#ab47bc'};
   var limitMeters = 400*1852;
   var near = [];
@@ -4395,11 +4426,12 @@ function loadMetars() {
     }
   }
   if(!near.length) return;
-  fetch('https://api.checkwx.com/v2/metar/'+near.join(',')+'/decoded',{headers:{'X-API-Key':'eb52e4c6ca254584842adb8dc574b4f8'}})
-    .then(function(r){return r.json();})
-    .then(function(d){
-      if(!d.data) {
-        console.warn('[A/P] METAR response has no data');
+  var metarUrl = 'https://api.checkwx.com/v2/metar/'+near.join(',')+'/decoded';
+  apDebugFetchJson(metarUrl, {headers:{'X-API-Key':'eb52e4c6ca254584842adb8dc574b4f8'}}, 'METAR-primary')
+    .then(function(res){
+      var d = res && res.json ? res.json : null;
+      if(!d || !d.data) {
+        console.warn('[A/P-fetch] METAR response has no data');
         return;
       }
       d.data.forEach(function(m){
@@ -4436,9 +4468,10 @@ function loadMetars() {
                 '</div>'
               ).openOn(map);
 
-              fetch('https://api.checkwx.com/v2/taf/'+metar.icao+'/decoded',{headers:{'X-API-Key':'eb52e4c6ca254584842adb8dc574b4f8'}})
-                .then(function(r){return r.json();})
-                .then(function(t){
+              var tafUrl = 'https://api.checkwx.com/v2/taf/'+metar.icao+'/decoded';
+              apDebugFetchJson(tafUrl, {headers:{'X-API-Key':'eb52e4c6ca254584842adb8dc574b4f8'}}, 'TAF-click-'+(metar.icao||'----'))
+                .then(function(tafRes){
+                  var t = tafRes && tafRes.json ? tafRes.json : null;
                   var tafObj = t && t.data && t.data[0] ? t.data[0] : null;
                   var tafRaw = tafObj && tafObj.raw_text ? tafObj.raw_text : '';
                   var metObs = metar.observed ? String(metar.observed).replace('T',' ').replace('Z',' Z') : '';
@@ -4473,7 +4506,7 @@ function loadMetars() {
       });
       bringTop();
     }).catch(function(err){
-      console.error('[A/P] loadMetars failed:', err);
+      console.error('[A/P-fetch] loadMetars failed name=', err && err.name, 'message=', err && err.message, 'stack=', err && err.stack);
     });
 }
 
