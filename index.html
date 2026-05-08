@@ -4091,53 +4091,130 @@ function applyGfsRadarForCurrentMethod() {
   }
   if(!WX_GFS_CORR_ON) return;
   var methodKey = WX_GFS_CORR_METHOD;
-  if(methodKey && (!window.GFS_GRID || window.GFS_GRID.status !== 'ready')) {
-    if(typeof gfsGridLoad === 'function' && typeof gfsWaypointsFromWP === 'function') {
-      console.log('[GfsRadar] auto-loading GFS grid on demand');
-      var pad = gfsLoadPadDeg();
-      var box = null;
-      try {
-        // Reuse gfs-client bbox logic indirectly via current WP list.
-        var wps = gfsWaypointsFromWP();
-        if(wps && wps.length >= 2 && typeof gfsLoadPadDeg === 'function') {
-          // bboxFromWaypoints is inside gfs-client; here we approximate using min/max.
-          var s = 90, n = -90, w = 1e9, e = -1e9;
-          for(var i=0;i<wps.length;i++) {
-            if(typeof wps[i].lat !== 'number' || typeof wps[i].lon !== 'number') continue;
-            if(wps[i].lat < s) s = wps[i].lat;
-            if(wps[i].lat > n) n = wps[i].lat;
-            if(wps[i].lon < w) w = wps[i].lon;
-            if(wps[i].lon > e) e = wps[i].lon;
-          }
-          if(s <= n && w <= e) {
-            box = { north: Math.min(85, n + pad), south: Math.max(-85, s - pad), west: w - pad, east: e + pad };
-          }
-        }
-      } catch(ex) {}
-      if(!box) return;
-      gfsGridLoad(box, new Date(), 0.5, 0.5, function(err){
-        if(!err) applyGfsRadarForCurrentMethod();
-      });
-    } else if(typeof gfsLoad === 'function' && typeof gfsWaypointsFromWP === 'function') {
-      // fallback legacy NOMADS
-      console.log('[GfsRadar] auto-loading legacy GFS on demand');
-      gfsLoad(gfsWaypointsFromWP(), gfsDepartureUtcDate(), function(err){
-        if(!err) applyGfsRadarForCurrentMethod();
-      }, { padDeg: gfsLoadPadDeg() });
+  if(!methodKey || typeof GfsRadar === 'undefined' || !GfsRadar.render) return;
+  if(typeof gfsPointAt !== 'function') return;
+  var routePts = buildGfsRadarRoutePoints();
+  if(!routePts || !routePts.length) return;
+  preloadGfsRadarPoints(routePts, function(err){
+    if(err) {
+      console.warn('[GfsRadar] point preload failed', err);
+      return;
     }
-    return;
-  }
-  if(methodKey && ((window.GFS_GRID && window.GFS_GRID.status === 'ready') || (window.GFS && window.GFS.status === 'ready'))) {
-    if(typeof GfsRadar !== 'undefined' && GfsRadar.render) {
-      gfsRadarLayer = GfsRadar.render(map, {
-        method: methodKey,
-        fl: CURRENT_FL,
-        corridorNM: WX_CORRIDOR_NM,
-        validUtc: new Date()
-      });
-    }
-  }
+    gfsRadarLayer = GfsRadar.render(map, {
+      method: methodKey,
+      fl: CURRENT_FL,
+      corridorNM: WX_CORRIDOR_NM,
+      validUtc: new Date(),
+      routePoints: routePts,
+      tiOffsetNm: 200
+    });
+    bringTop();
+  });
   bringTop();
+}
+
+function gfsRadarApproxDistNm(a, b) {
+  var avgLat = (a.lat + b.lat) * 0.5;
+  var dLat = (b.lat - a.lat) * 60.0;
+  var dLon = b.lon - a.lon;
+  while(dLon > 180) dLon -= 360;
+  while(dLon < -180) dLon += 360;
+  var dLonNm = dLon * 60.0 * Math.cos(avgLat * Math.PI / 180);
+  return Math.sqrt(dLat*dLat + dLonNm*dLonNm);
+}
+
+function gfsRadarInterpPoint(a, b, t) {
+  var lonB = b.lon;
+  var d = lonB - a.lon;
+  while(d > 180) { lonB -= 360; d = lonB - a.lon; }
+  while(d < -180) { lonB += 360; d = lonB - a.lon; }
+  return {
+    id: a.id + '_V' + Math.round(t*1000),
+    lat: a.lat + (b.lat - a.lat) * t,
+    lon: a.lon + (lonB - a.lon) * t,
+    ctme: (a.ctme || 0) + ((b.ctme || 0) - (a.ctme || 0)) * t,
+    type: 'virtual'
+  };
+}
+
+function buildGfsRadarRoutePoints() {
+  if(typeof WP === 'undefined' || !WP || WP.length < 2) return [];
+  var base = [];
+  var i, w, lon;
+  for(i=0;i<WP.length;i++) {
+    w = WP[i];
+    lon = (typeof w.lon === 'number') ? w.lon : w.lng;
+    if(typeof w.lat !== 'number' || typeof lon !== 'number') continue;
+    base.push({ id: w.id || ('WP' + i), lat: w.lat, lon: lon, ctme: w.ctme || 0, type: 'real' });
+  }
+  if(base.length < 2) return base;
+  var out = [];
+  var maxSegNm = 200;
+  var targetStepNm = 125;
+  for(i=0;i<base.length-1;i++) {
+    var a = base[i], b = base[i+1];
+    out.push(a);
+    var dNm = gfsRadarApproxDistNm(a, b);
+    if(dNm > maxSegNm) {
+      var nAdd = Math.ceil(dNm / targetStepNm) - 1;
+      if(nAdd < 1) nAdd = 1;
+      for(var k=1;k<=nAdd;k++) {
+        out.push(gfsRadarInterpPoint(a, b, k / (nAdd + 1)));
+      }
+    }
+  }
+  out.push(base[base.length-1]);
+  return out;
+}
+
+function gfsRadarNeighborPt(pt, dir, nm) {
+  var dLat = nm / 60.0;
+  var cosLat = Math.cos(pt.lat * Math.PI / 180);
+  if(Math.abs(cosLat) < 1e-6) cosLat = 1e-6;
+  var dLon = (nm / 60.0) / cosLat;
+  if(dir === 'N') return { lat: pt.lat + dLat, lon: pt.lon };
+  if(dir === 'S') return { lat: pt.lat - dLat, lon: pt.lon };
+  if(dir === 'E') return { lat: pt.lat, lon: pt.lon + dLon };
+  return { lat: pt.lat, lon: pt.lon - dLon };
+}
+
+function preloadGfsRadarPoints(routePts, done) {
+  if(typeof gfsPointAt !== 'function') { done(new Error('gfsPointAt unavailable')); return; }
+  var jobs = [];
+  var seen = {};
+  var i;
+  function pushJob(lat, lon, vu) {
+    var key = lat.toFixed(3) + '|' + lon.toFixed(3) + '|' + vu.getTime();
+    if(seen[key]) return;
+    seen[key] = 1;
+    jobs.push({lat:lat, lon:lon, vu:vu});
+  }
+  for(i=0;i<routePts.length;i++) {
+    var p = routePts[i];
+    var wpTmp = { ctme: p.ctme || 0 };
+    var vu = gfsAtmValidUtcForWp(wpTmp);
+    pushJob(p.lat, p.lon, vu);
+    var n = gfsRadarNeighborPt(p, 'N', 200);
+    var s = gfsRadarNeighborPt(p, 'S', 200);
+    var e = gfsRadarNeighborPt(p, 'E', 200);
+    var w = gfsRadarNeighborPt(p, 'W', 200);
+    pushJob(n.lat, n.lon, vu);
+    pushJob(s.lat, s.lon, vu);
+    pushJob(e.lat, e.lon, vu);
+    pushJob(w.lat, w.lon, vu);
+  }
+  var left = jobs.length;
+  if(left === 0) { done(null); return; }
+  var firstErr = null;
+  for(i=0;i<jobs.length;i++) {
+    (function(j){
+      gfsPointAt(j.lat, j.lon, j.vu, function(err){
+        if(err && !firstErr) firstErr = err;
+        left--;
+        if(left === 0) done(firstErr);
+      });
+    })(jobs[i]);
+  }
 }
 
 drawRoute();

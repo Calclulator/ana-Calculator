@@ -469,6 +469,99 @@
     return c.vws;
   }
 
+  function pointLevelIndex(levels, mb) {
+    for (var i = 0; i < levels.length; i++) if (levels[i] && levels[i].mb === mb) return i;
+    return -1;
+  }
+
+  function pointNeighborOffset(pt, dir, nm) {
+    var dLat = (nm / 60.0);
+    var cosLat = Math.cos(pt.lat * Math.PI / 180);
+    if (Math.abs(cosLat) < 1e-6) cosLat = 1e-6;
+    var dLon = (nm / 60.0) / cosLat;
+    if (dir === 'N') return { lat: pt.lat + dLat, lon: pt.lon };
+    if (dir === 'S') return { lat: pt.lat - dLat, lon: pt.lon };
+    if (dir === 'E') return { lat: pt.lat, lon: pt.lon + dLon };
+    return { lat: pt.lat, lon: pt.lon - dLon };
+  }
+
+  function pointProfileAt(lat, lon, validUtc) {
+    if (typeof window.gfsPointCached !== 'function') return null;
+    return window.gfsPointCached(lat, lon, validUtc);
+  }
+
+  function computeAtPoint(pt, levelMb, validUtc, method, offsetNm) {
+    var p0 = pointProfileAt(pt.lat, pt.lon, validUtc);
+    if (!p0 || !p0.levels || !p0.levels.length) return null;
+    var li = pointLevelIndex(p0.levels, levelMb);
+    if (li < 0) return null;
+    var c0 = p0.levels[li];
+    if (!c0) return null;
+
+    // Vertical shear from adjacent pressure levels
+    var uA, vA, hA, uB, vB, hB;
+    var up = (li > 0) ? p0.levels[li - 1] : null;
+    var dn = (li < p0.levels.length - 1) ? p0.levels[li + 1] : null;
+    if (up && dn) {
+      uA = up.u; vA = up.v; hA = up.hgt;
+      uB = dn.u; vB = dn.v; hB = dn.hgt;
+    } else if (up) {
+      uA = up.u; vA = up.v; hA = up.hgt;
+      uB = c0.u; vB = c0.v; hB = c0.hgt;
+    } else if (dn) {
+      uA = c0.u; vA = c0.v; hA = c0.hgt;
+      uB = dn.u; vB = dn.v; hB = dn.hgt;
+    } else {
+      return null;
+    }
+    var dz = hA - hB;
+    if (Math.abs(dz) < 1) return null;
+    var duv = uA - uB, dvv = vA - vB;
+    var vws = Math.sqrt(duv * duv + dvv * dvv) / Math.abs(dz);
+
+    var defm = 0, cvg = 0;
+    if (method === 'TI1' || method === 'TI2') {
+      var nPt = pointNeighborOffset(pt, 'N', offsetNm);
+      var sPt = pointNeighborOffset(pt, 'S', offsetNm);
+      var ePt = pointNeighborOffset(pt, 'E', offsetNm);
+      var wPt = pointNeighborOffset(pt, 'W', offsetNm);
+      var nPr = pointProfileAt(nPt.lat, nPt.lon, validUtc);
+      var sPr = pointProfileAt(sPt.lat, sPt.lon, validUtc);
+      var ePr = pointProfileAt(ePt.lat, ePt.lon, validUtc);
+      var wPr = pointProfileAt(wPt.lat, wPt.lon, validUtc);
+      if (!nPr || !sPr || !ePr || !wPr) return null;
+      var nL = pointLevelIndex(nPr.levels, levelMb);
+      var sL = pointLevelIndex(sPr.levels, levelMb);
+      var eL = pointLevelIndex(ePr.levels, levelMb);
+      var wL = pointLevelIndex(wPr.levels, levelMb);
+      if (nL < 0 || sL < 0 || eL < 0 || wL < 0) return null;
+      var uN = nPr.levels[nL].u, uS = sPr.levels[sL].u;
+      var uE = ePr.levels[eL].u, uW = wPr.levels[wL].u;
+      var vN = nPr.levels[nL].v, vS = sPr.levels[sL].v;
+      var vE = ePr.levels[eL].v, vW = wPr.levels[wL].v;
+      var dy_m = (2 * offsetNm) * 1852.0;
+      var dx_m = (2 * offsetNm) * 1852.0 * Math.cos(pt.lat * Math.PI / 180);
+      if (Math.abs(dx_m) < 1) dx_m = 1;
+      var dUdx = (uE - uW) / dx_m;
+      var dUdy = (uN - uS) / dy_m;
+      var dVdx = (vE - vW) / dx_m;
+      var dVdy = (vN - vS) / dy_m;
+      var stretch = dUdx - dVdy;
+      var shear = dVdx + dUdy;
+      defm = Math.sqrt(stretch * stretch + shear * shear);
+      cvg = -(dUdx + dVdy);
+    }
+    return {
+      vws: vws,
+      defm: defm,
+      cvg: cvg,
+      u: c0.u,
+      v: c0.v,
+      t: (c0.t !== null && c0.t !== undefined) ? c0.t - 273.15 : null,
+      h: c0.hgt
+    };
+  }
+
   function buildPopupHtml(method, c, levelMb, fl) {
     var spdMs = Math.sqrt(c.u * c.u + c.v * c.v);
     var spdKt = spdMs * 1.943844;
@@ -489,8 +582,8 @@
 
   // Main render. Returns L.LayerGroup (already added to map).
   function render(map, opts) {
-    if (!(hasGrid() || (window.GFS && window.GFS.slices && window.GFS.slices.length))) {
-      console.warn('[GfsRadar] no GFS data loaded; call gfsGridLoad() or gfsLoad() first');
+    if (!opts.routePoints && !(hasGrid() || (window.GFS && window.GFS.slices && window.GFS.slices.length))) {
+      console.warn('[GfsRadar] no GFS data loaded; call gfsPointAt()/gfsGridLoad()/gfsLoad() first');
       return null;
     }
     if (typeof L === 'undefined' || !L.layerGroup) {
@@ -518,7 +611,11 @@
     }
 
     var g, dlat, dlon;
-    if (hasGrid()) {
+    if (opts.routePoints && opts.routePoints.length) {
+      g = null;
+      dlat = -(50 / 60); // 50NM box
+      dlon = (50 / 60);
+    } else if (hasGrid()) {
       var gd = window.GFS_GRID.data;
       g = { nx: gd.nlon, ny: gd.nlat, la1: gd.bbox.N, la2: gd.bbox.S, lo1: gd.bbox.W, lo2: gd.bbox.E };
       dlat = (g.la2 - g.la1) / (g.ny - 1);
@@ -550,28 +647,33 @@
     var nFiltered = 0;
 
     var worldLngOffsets = [-360, 0, 360];
+    var pointMode = !!(opts.routePoints && opts.routePoints.length);
+    var validForPoint = opts.validUtc || new Date();
+    var tiOffsetNm = (typeof opts.tiOffsetNm === 'number') ? opts.tiOffsetNm : 200;
 
-    for (var iy = 0; iy < g.ny; iy++) {
-      var lat = g.la1 + iy * dlat;
-      for (var ix = 0; ix < g.nx; ix++) {
-        var lon = g.lo1 + ix * dlon;
-        if (useFilter) {
-          if (minDistToRoutePolylineNM(lat, lon, routeWps, corridorNM) > corridorNM) {
-            nFiltered++;
-            continue;
-          }
+    if (pointMode) {
+      var pts = opts.routePoints;
+      for (var pi = 0; pi < pts.length; pi++) {
+        var p = pts[pi];
+        var lat = p.lat, lon = p.lon;
+        if (useFilter && minDistToRoutePolylineNM(lat, lon, routeWps, corridorNM) > corridorNM) {
+          nFiltered++;
+          continue;
         }
-        var c = computeAtCell(fhr, levelMb, ix, iy);
+        var c = computeAtPoint(p, levelMb, validForPoint, method, tiOffsetNm);
         if (!c) { nNull++; continue; }
         var v = methodValue(method, c);
         var color = colorFor(method, v);
         if (!color) { nNull++; continue; }
-
+        var halfLat = 50 / 120.0;
+        var cosLat = Math.cos(lat * Math.PI / 180);
+        if (Math.abs(cosLat) < 1e-6) cosLat = 1e-6;
+        var halfLon = (50 / 120.0) / cosLat;
         for (var iCopy = 0; iCopy < worldLngOffsets.length; iCopy++) {
           var off = worldLngOffsets[iCopy];
           var bounds = [
-            [lat - dlat / 2, lon - dlon / 2 + off],
-            [lat + dlat / 2, lon + dlon / 2 + off]
+            [lat - halfLat, lon - halfLon + off],
+            [lat + halfLat, lon + halfLon + off]
           ];
           var rectOpts = {
             color: color,
@@ -582,16 +684,57 @@
           };
           if (renderer) rectOpts.renderer = renderer;
           var rect = L.rectangle(bounds, rectOpts);
-
           (function (cellData) {
             rect.on('click', function (e) {
               var html = buildPopupHtml(method, cellData, levelMb, fl);
               L.popup().setLatLng(e.latlng).setContent(html).openOn(map);
             });
           })(c);
-
           rect.addTo(group);
           nDrawn++;
+        }
+      }
+    } else {
+      for (var iy = 0; iy < g.ny; iy++) {
+        var lat2 = g.la1 + iy * dlat;
+        for (var ix = 0; ix < g.nx; ix++) {
+          var lon2 = g.lo1 + ix * dlon;
+          if (useFilter) {
+            if (minDistToRoutePolylineNM(lat2, lon2, routeWps, corridorNM) > corridorNM) {
+              nFiltered++;
+              continue;
+            }
+          }
+          var c2 = computeAtCell(fhr, levelMb, ix, iy);
+          if (!c2) { nNull++; continue; }
+          var v2 = methodValue(method, c2);
+          var color2 = colorFor(method, v2);
+          if (!color2) { nNull++; continue; }
+
+          for (var iCopy2 = 0; iCopy2 < worldLngOffsets.length; iCopy2++) {
+            var off2 = worldLngOffsets[iCopy2];
+            var bounds2 = [
+              [lat2 - dlat / 2, lon2 - dlon / 2 + off2],
+              [lat2 + dlat / 2, lon2 + dlon / 2 + off2]
+            ];
+            var rectOpts2 = {
+              color: color2,
+              fillColor: color2,
+              fillOpacity: fillOpacity,
+              weight: 0,
+              interactive: true
+            };
+            if (renderer) rectOpts2.renderer = renderer;
+            var rect2 = L.rectangle(bounds2, rectOpts2);
+            (function (cellData2) {
+              rect2.on('click', function (e) {
+                var html2 = buildPopupHtml(method, cellData2, levelMb, fl);
+                L.popup().setLatLng(e.latlng).setContent(html2).openOn(map);
+              });
+            })(c2);
+            rect2.addTo(group);
+            nDrawn++;
+          }
         }
       }
     }
