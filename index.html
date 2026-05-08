@@ -1278,12 +1278,13 @@ function navCoord(s) {
 
 function gfsWaypointsFromWP() {
   var a = [];
-  var i, w;
+  var i, w, lo;
   for (i = 0; i < WP.length; i++) {
     w = WP[i];
+    lo = (typeof w.lon === 'number' && !isNaN(w.lon)) ? w.lon : w.lng;
     a.push({
       lat: w.lat,
-      lon: w.lng,
+      lon: lo,
       ctme: (w.ctme === undefined || w.ctme === null) ? null : w.ctme
     });
   }
@@ -2711,8 +2712,18 @@ function gfsAtmBuildVerticalColumn(wp, dbgCol) {
     tmp = gfsValueAt(lat, lon, lev, 'TMP', validUtc);
     if(dbgCol) {
       sl = (typeof gfsPickSliceForValid === 'function') ? gfsPickSliceForValid(lev, validUtc) : null;
-      console.log('[GFS-debug] lev=' + lev + ' slice fhr=' + (sl && sl.meta ? sl.meta.fhr : null) +
-        ' metaLev=' + (sl && sl.meta ? sl.meta.lev : null) + ' bilin HGT/U/V/TMP(K)=' + hgt + ',' + u + ',' + v + ',' + tmp);
+      var wantFhrLog = null;
+      var rtDbg = sl && sl.meta && sl.meta.refTime;
+      if(rtDbg && typeof rtDbg.year === 'number') {
+        wantFhrLog = (validUtc.getTime() - Date.UTC(rtDbg.year, rtDbg.month - 1, rtDbg.day,
+          rtDbg.hour, rtDbg.minute, rtDbg.second || 0)) / 3600000;
+      }
+      var hgtFt = hgt !== null && !isNaN(hgt) ? (hgt / 0.3048) : null;
+      var flEq = hgtFt !== null ? (hgtFt / 100) : null;
+      console.log('[GFS-debug] lev=' + lev + 'mb wantFhr=' + wantFhrLog + ' pickedFhr=' + (sl && sl.meta ? sl.meta.fhr : null) +
+        ' metaLev=' + (sl && sl.meta ? sl.meta.lev : null) + ' cycle=' + (sl && sl.meta ? sl.meta.cycle : null) +
+        ' bilin HGT(m)=' + hgt + ' HGT_as_FL~=' + (flEq !== null ? flEq.toFixed(1) : null) +
+        ' U/V/TMP(K)=' + u + ',' + v + ',' + tmp);
     }
     if(hgt === null || u === null || v === null || tmp === null) continue;
     col.push({ lev: lev, hgt: hgt, u: u, v: v, t: tmp });

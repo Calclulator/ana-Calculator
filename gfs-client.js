@@ -131,33 +131,36 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
   }
 
   function calcFhrsForRoute(waypoints, ato, cycleStr) {
-    // For each WP, calculate the absolute fhr from cycle ref to its arrival time,
-    // round to nearest 3h, deduplicate, and sort. This ensures the entire flight
-    // is covered with appropriate forecast times.
+    // Load every 3h forecast from cycle ref through the latest WP valid time
+    // (ceil to 3h). Sparse per-WP rounding left large gaps so pickSliceForValid
+    // could pick a far fhr (e.g. only {0,15} loaded while WP at 7h needs ~7h).
     if (!ato || !cycleStr || cycleStr.length !== 10) return [];
     var y = parseInt(cycleStr.slice(0, 4), 10);
     var m = parseInt(cycleStr.slice(4, 6), 10) - 1;
     var d = parseInt(cycleStr.slice(6, 8), 10);
     var h = parseInt(cycleStr.slice(8, 10), 10);
     var cycleMs = Date.UTC(y, m, d, h, 0, 0);
-    var seen = {};
-    for (var i = 0; i < waypoints.length; i++) {
-      var ctme = waypoints[i].ctme;
+    var maxHrsRaw = 0;
+    var anyCtme = false;
+    var i, ctme, validMs, hrs, maxCeil, f;
+    for (i = 0; i < waypoints.length; i++) {
+      ctme = waypoints[i].ctme;
       if (typeof ctme !== 'number' || isNaN(ctme)) continue;
-      var validMs = ato.getTime() + ctme * 60000;
-      var hrs = (validMs - cycleMs) / 3600000;
+      anyCtme = true;
+      validMs = ato.getTime() + ctme * 60000;
+      hrs = (validMs - cycleMs) / 3600000;
       if (hrs < 0) hrs = 0;
       if (hrs > 384) hrs = 384;
-      var rounded = Math.round(hrs / 3) * 3;
-      if (rounded < 0) rounded = 0;
-      if (rounded > 384) rounded = 384;
-      seen[rounded] = true;
+      if (hrs > maxHrsRaw) maxHrsRaw = hrs;
     }
+    if (!anyCtme) return [0];
+    maxCeil = maxHrsRaw <= 0 ? 0 : Math.ceil(maxHrsRaw / 3) * 3;
+    if (maxCeil > 384) maxCeil = 384;
     var arr = [];
-    for (var k in seen) {
-      if (seen.hasOwnProperty(k)) arr.push(parseInt(k, 10));
+    for (f = 0; f <= maxCeil; f += 3) {
+      arr.push(f);
     }
-    arr.sort(function (a, b) { return a - b; });
+    if (arr.length === 0) arr.push(0);
     return arr;
   }
 
@@ -183,17 +186,19 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
     var target = validUtc.getTime();
     var best = null;
     var bestScore = 1e18;
-    var i, s, dlev, rtms, wantFhr, df;
+    var i, s, dlev, rtms, wantFhr, df, wantCyc, metaCyc;
+    wantCyc = G.cycle ? String(G.cycle) : '';
     for (i = 0; i < G.slices.length; i++) {
       s = G.slices[i];
       if (!s || !s.meta) continue;
+      if (wantCyc && s.meta.cycle != null && String(s.meta.cycle) !== wantCyc) continue;
       dlev = Math.abs((s.meta.lev || 0) - levMb);
       if (dlev > 1) continue;
       rtms = refTimeToMs(s.meta.refTime);
       if (isNaN(rtms)) continue;
       wantFhr = (target - rtms) / 3600000;
       df = Math.abs((s.meta.fhr || 0) - wantFhr);
-      if (df < bestScore) {
+      if (df < bestScore || (df === bestScore && best && (s.meta.fhr || 0) < (best.meta.fhr || 0))) {
         bestScore = df;
         best = s;
       }
