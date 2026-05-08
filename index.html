@@ -239,11 +239,6 @@
     <label class="ck" style="display:none;"><input type="checkbox" id="oLightning" onchange="toggleLightning()"> Lightning</label>
     <span class="wx-ovl-break"></span>
     <label class="ck"><input type="checkbox" id="oTurb" checked onchange="drawRoute()"> Turbulence corridor</label>
-    <span class="lbl">Corridor width:</span>
-    <input type="number" id="corridor-nm-input" min="50" max="500" step="10" value="200"
-           style="width:58px;background:transparent;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:inherit;font-size:11px;padding:2px 4px;"
-           onchange="onCorridorNmChange()" oninput="onCorridorNmChange()">
-    <span class="lbl">NM</span>
     <select id="turbMethodSel" class="btn" onchange="onWxTurbMethodChange()" style="max-width:220px;">
       <option value="company">Company (3段階)</option>
       <option value="vws" selected>VWS (6段階)</option>
@@ -256,7 +251,7 @@
       <option value="TI2">Ellrod TI2</option>
     </select>
     <button type="button" class="btn ws-method-help-btn" onclick="openWsMethodHelpFromWx()" aria-label="WIND SHEAR Method の解説"><span class="ws-method-help-ico">i</span></button>
-    <label class="ck"><input type="checkbox" id="oMetar" onchange="drawAlt()"> A/P</label>
+    <label class="ck"><input type="checkbox" id="oMetar" onchange="onApOverlayToggle()" oninput="onApOverlayToggle()"> A/P</label>
     <span class="lbl" style="margin-left:8px;">回避</span>
     <button class="btn" id="avoidL" onclick="setAvoidSide('L')" style="padding:2px 6px;">L</button>
     <button class="btn" id="avoidR" onclick="setAvoidSide('R')" style="padding:2px 6px;">R</button>
@@ -2300,6 +2295,10 @@ function onCorridorNmChange() {
   if(WX_GFS_CORR_ON) applyGfsRadarForCurrentMethod();
 }
 
+function onApOverlayToggle() {
+  drawAlt();
+}
+
 function toggleEtopsOpts() {
   var wrap = document.getElementById('etopsOptsWrap');
   var chk = document.getElementById('oEtops');
@@ -3833,11 +3832,11 @@ function drawRoute() {
     var brg = bearing(au.lat,au.lng,bu.lat,bu.lng);
 
     if(turbOn && col !== 'transparent') {
-      // 10NMコリドーポリゴン（片側5NM）
-      var aL = perpPoint(au.lat,au.lng, brg-Math.PI/2, 5);
-      var aR = perpPoint(au.lat,au.lng, brg+Math.PI/2, 5);
-      var bL = perpPoint(bu.lat,bu.lng, brg-Math.PI/2, 5);
-      var bR = perpPoint(bu.lat,bu.lng, brg+Math.PI/2, 5);
+      // 20NMコリドーポリゴン（片側10NM）
+      var aL = perpPoint(au.lat,au.lng, brg-Math.PI/2, 10);
+      var aR = perpPoint(au.lat,au.lng, brg+Math.PI/2, 10);
+      var bL = perpPoint(bu.lat,bu.lng, brg-Math.PI/2, 10);
+      var bR = perpPoint(bu.lat,bu.lng, brg+Math.PI/2, 10);
       if(!isNaN(aL[0])&&!isNaN(aL[1])&&!isNaN(aR[0])&&!isNaN(aR[1])&&
          !isNaN(bL[0])&&!isNaN(bL[1])&&!isNaN(bR[0])&&!isNaN(bR[1])) {
         var ring0 = unwrapLatLngs([aL,bL,bR,aR]);
@@ -4404,8 +4403,8 @@ function loadMetars() {
         var lon=m.station.geometry.coordinates[0];
         var col=CAT[m.flight_category]||'#546e7a';
         var ic=L.divIcon({
-          html:'<div style="width:14px;height:14px;border-radius:50%;background:'+col+';border:2px solid white;box-shadow:0 0 4px '+col+'88;"></div>',
-          className:'',iconSize:[14,14],iconAnchor:[7,7]
+          html:'<div style="width:28px;height:28px;border-radius:50%;background:'+col+';border:2px solid white;box-shadow:0 0 4px '+col+'88;"></div>',
+          className:'',iconSize:[28,28],iconAnchor:[14,14]
         });
         var worldLngOffsets = [-360, 0, 360];
         for(var wi=0; wi<worldLngOffsets.length; wi++) {
@@ -4417,9 +4416,9 @@ function loadMetars() {
               var ll = e && e.latlng ? e.latlng : (metar.station&&metar.station.geometry
                 ? L.latLng(metar.station.geometry.coordinates[1], metar.station.geometry.coordinates[0])
                 : null);
-              var pop = L.popup({maxWidth:520,minWidth:420});
+              var pop = L.popup({maxWidth:1040,minWidth:840});
               pop.setLatLng(ll).setContent(
-                '<div style="font-family:monospace;font-size:11px;min-width:420px;max-width:520px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
+                '<div style="font-family:monospace;font-size:22px;min-width:840px;max-width:1040px;background:#fff;color:#1a1a1a;padding:12px;border-radius:4px;">' +
                 '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;">' + escH(metar.icao||'') + '</div>' +
                 '<div style="color:#546e7a;">TAF 読込中...</div>' +
                 '</div>'
@@ -4433,7 +4432,7 @@ function loadMetars() {
                   var metObs = metar.observed ? String(metar.observed).replace('T',' ').replace('Z',' Z') : '';
                   var fetchedAt = new Date();
                   var html =
-                    '<div style="font-family:monospace;font-size:11px;min-width:420px;max-width:520px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
+                    '<div style="font-family:monospace;font-size:22px;min-width:840px;max-width:1040px;background:#fff;color:#1a1a1a;padding:12px;border-radius:4px;">' +
                     '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;">' + escH(metar.icao||'') + ' <span style="font-weight:normal;color:#546e7a;">' + escH(metar.flight_category||'') + '</span></div>' +
                     '<div style="color:#546e7a;margin-bottom:6px;">METAR Observed: ' + escH(metObs) + '</div>' +
                     '<div class="mp-lbl" style="color:#546e7a;">RAW METAR</div>' +
@@ -4441,17 +4440,17 @@ function loadMetars() {
                     '<div style="height:8px;"></div>' +
                     '<div class="mp-lbl" style="color:#546e7a;">RAW TAF</div>' +
                     '<pre style="white-space:pre-wrap;margin:0;color:#263238;">' + escH(tafRaw||'N/A') + '</pre>' +
-                    '<div style="color:#90a4ae;margin-top:8px;font-size:10px;">Fetched: ' + escH(fetchedAt.toLocaleString()) + '</div>' +
+                    '<div style="color:#90a4ae;margin-top:8px;font-size:20px;">Fetched: ' + escH(fetchedAt.toLocaleString()) + '</div>' +
                     '</div>';
                   pop.setContent(html);
                 })
                 .catch(function(){
                   var fetchedAt2 = new Date();
                   pop.setContent(
-                    '<div style="font-family:monospace;font-size:11px;min-width:420px;max-width:520px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
+                    '<div style="font-family:monospace;font-size:22px;min-width:840px;max-width:1040px;background:#fff;color:#1a1a1a;padding:12px;border-radius:4px;">' +
                     '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;">' + escH(metar.icao||'') + '</div>' +
                     '<div style="color:#ef5350;margin-bottom:8px;">TAF 取得に失敗しました</div>' +
-                    '<div style="color:#90a4ae;margin-top:8px;font-size:10px;">Fetched: ' + escH(fetchedAt2.toLocaleString()) + '</div>' +
+                    '<div style="color:#90a4ae;margin-top:8px;font-size:20px;">Fetched: ' + escH(fetchedAt2.toLocaleString()) + '</div>' +
                     '</div>'
                   );
                 });
