@@ -4390,14 +4390,16 @@ function buildGfsRadarRoutePoints() {
 }
 
 function gfsRadarNeighborPt(pt, dir, nm) {
+  var lat = pt.lat;
+  var lon = (typeof pt.lon === 'number') ? pt.lon : pt.lng;
   var dLat = nm / 60.0;
-  var cosLat = Math.cos(pt.lat * Math.PI / 180);
+  var cosLat = Math.cos(lat * Math.PI / 180);
   if(Math.abs(cosLat) < 1e-6) cosLat = 1e-6;
   var dLon = (nm / 60.0) / cosLat;
-  if(dir === 'N') return { lat: pt.lat + dLat, lon: pt.lon };
-  if(dir === 'S') return { lat: pt.lat - dLat, lon: pt.lon };
-  if(dir === 'E') return { lat: pt.lat, lon: pt.lon + dLon };
-  return { lat: pt.lat, lon: pt.lon - dLon };
+  if(dir === 'N') return { lat: lat + dLat, lon: lon };
+  if(dir === 'S') return { lat: lat - dLat, lon: lon };
+  if(dir === 'E') return { lat: lat, lon: lon + dLon };
+  return { lat: lat, lon: lon - dLon };
 }
 
 function gfsRadarEstimateCtmeAtIndex(routePts, idx) {
