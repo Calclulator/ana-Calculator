@@ -2803,6 +2803,58 @@ function gfsAtWp(wpId, alt) {
   };
 }
 
+function gfsPointDebugUrl(lat, lon, validUtc) {
+  try {
+    if(typeof GFS_PROXY !== 'string' || typeof gfsPointMetaFromValid !== 'function') return '';
+    var meta = gfsPointMetaFromValid(validUtc);
+    var base = String(GFS_PROXY).replace(/\/$/, '');
+    return base + '/api/point?lat=' + encodeURIComponent(lat) +
+      '&lon=' + encodeURIComponent(lon) +
+      '&cycle=' + encodeURIComponent(meta.cycle) +
+      '&fhr=' + encodeURIComponent(meta.fhr);
+  } catch(_e) {
+    return '';
+  }
+}
+
+function gfsRunThrottledJobs(jobs, concurrency, worker, done) {
+  if(!jobs || jobs.length === 0) { done(null, []); return; }
+  var idx = 0, inFlight = 0, finished = 0;
+  var results = new Array(jobs.length);
+  function pump() {
+    while(inFlight < concurrency && idx < jobs.length) {
+      (function(k) {
+        inFlight++;
+        worker(jobs[k], function(err, result){
+          inFlight--;
+          if(err) { done(err); return; }
+          results[k] = result;
+          finished++;
+          if(finished >= jobs.length && inFlight === 0) {
+            done(null, results);
+            return;
+          }
+          pump();
+        });
+      })(idx);
+      idx++;
+    }
+  }
+  pump();
+}
+
+function gfsPointAtRetry(lat, lon, validUtc, done) {
+  var url = gfsPointDebugUrl(lat, lon, validUtc);
+  gfsPointAt(lat, lon, validUtc, function(err, data){
+    if(!err) { done(null, data, url); return; }
+    setTimeout(function(){
+      gfsPointAt(lat, lon, validUtc, function(err2, data2){
+        done(err2 || null, data2 || null, url);
+      });
+    }, 1000);
+  });
+}
+
 function ensureGfsLoadedForAtm() {
   if(typeof gfsPointAt !== 'function') return;
   if(typeof WP === 'undefined' || !WP || !WP.length) return;
@@ -2818,39 +2870,43 @@ function ensureGfsLoadedForAtm() {
   if(window.GFS_POINT && window.GFS_POINT.status === 'loading' && window.GFS_POINT.key === key) return;
   window.GFS_POINT = { status: 'loading', error: null, key: key };
   GFS_POINT_STATE = window.GFS_POINT;
-  var remain = 0;
-  var firstErr = null;
+  var jobs = [];
+  var okCount = 0, ngCount = 0;
+  var t0 = Date.now();
   for(i = 0; i < WP.length; i++) {
     w = WP[i];
     lo = (typeof w.lon === 'number') ? w.lon : w.lng;
     if(typeof w.lat !== 'number' || typeof lo !== 'number') continue;
-    remain++;
+    jobs.push({ lat: w.lat, lon: lo, vu: gfsAtmValidUtcForWp(w) });
   }
-  if(remain === 0) {
+  if(jobs.length === 0) {
     window.GFS_POINT.status = 'error';
     window.GFS_POINT.error = 'no valid waypoint coordinates';
     return;
   }
-  function doneOne(err) {
-    if(err && !firstErr) firstErr = err;
-    remain--;
-    if(remain > 0) return;
-    if(firstErr) {
-      window.GFS_POINT.status = 'error';
-      window.GFS_POINT.error = String(firstErr && firstErr.message ? firstErr.message : firstErr);
-    } else {
+  gfsRunThrottledJobs(jobs, 3, function(job, next){
+    gfsPointAtRetry(job.lat, job.lon, job.vu, function(err, data, url){
+      if(err) {
+        ngCount++;
+        console.warn('[GFS-ATM] point failed (nodata) url=' + (url || (job.lat + ',' + job.lon)), err);
+      } else if(data) {
+        okCount++;
+      }
+      next(null, { ok: !err });
+    });
+  }, function(_ignoredErr){
+    if(okCount > 0) {
       window.GFS_POINT.status = 'ready';
       window.GFS_POINT.error = null;
+    } else {
+      window.GFS_POINT.status = 'error';
+      window.GFS_POINT.error = 'point load failed all waypoints';
     }
+    console.log('[GFS-ATM] preload done points=' + jobs.length +
+      ' ok=' + okCount + ' ng=' + ngCount + ' elapsedMs=' + (Date.now() - t0));
     renderGfsAtmTable();
     renderGfsWsTable();
-  }
-  for(i = 0; i < WP.length; i++) {
-    w = WP[i];
-    lo = (typeof w.lon === 'number') ? w.lon : w.lng;
-    if(typeof w.lat !== 'number' || typeof lo !== 'number') continue;
-    gfsPointAt(w.lat, lo, gfsAtmValidUtcForWp(w), doneOne);
-  }
+  });
 }
 
 var atmGfsPollId = null;
@@ -4261,29 +4317,28 @@ function preloadGfsRadarPoints(routePts, done) {
     }
   }
   if(jobs.length === 0) { done(null); return; }
-  var promises = [];
+  var t0 = Date.now();
   var okCount = 0, ngCount = 0;
-  for(i=0;i<jobs.length;i++) {
-    (function(j){
-      promises.push(new Promise(function(resolve, reject){
-        gfsPointAt(j.lat, j.lon, j.vu, function(err, data){
-          if(err) { ngCount++; resolve(); return; }
-          if(data && typeof data.cycle === 'string') window.GFS_POINT.cycle = data.cycle;
-          if(data && typeof data.fhr === 'number') window.GFS_POINT.fhr = data.fhr;
-          okCount++;
-          resolve();
-        });
-      }));
-    })(jobs[i]);
-  }
-  Promise.all(promises).then(function(){
+  console.log('[GfsRadar] preload start wp=' + wpTotal + ' skipped=' + wpSkip + ' jobs=' + jobs.length);
+  gfsRunThrottledJobs(jobs, 3, function(j, next){
+    gfsPointAtRetry(j.lat, j.lon, j.vu, function(err, data, url){
+      if(err) {
+        ngCount++;
+        console.warn('[GfsRadar] preload point failed url=' + (url || (j.lat + ',' + j.lon)), err);
+        next(null, { ok: false });
+        return;
+      }
+      if(data && typeof data.cycle === 'string') window.GFS_POINT.cycle = data.cycle;
+      if(data && typeof data.fhr === 'number') window.GFS_POINT.fhr = data.fhr;
+      okCount++;
+      next(null, { ok: true });
+    });
+  }, function(_ignoredErr){
     console.log('[GfsRadar] preload done wp=' + wpTotal + ' skipped=' + wpSkip +
       ' jobs=' + jobs.length + ' ok=' + okCount + ' ng=' + ngCount +
-      ' cache=' + Object.keys(seen).length);
+      ' cache=' + Object.keys(seen).length + ' elapsedMs=' + (Date.now() - t0));
     if(okCount <= 0) done(new Error('preload failed all points'));
     else done(null);
-  }).catch(function(err){
-    done(err);
   });
 }
 
