@@ -3794,56 +3794,18 @@ var KEY_WP = {
 };
 
 function drawAlt() {
+  // WX Radar overlay: A/P (Airports & METAR/TAF)
+  // Rebuild from route coverage via loadMetars() (uses the existing APT list).
   LY.alt.forEach(function(l){ try { map.removeLayer(l); } catch(e) {} });
   LY.alt = [];
+  LY.metar.forEach(function(m){ try { map.removeLayer(m); } catch(e) {} });
+  LY.metar = [];
+  try { if(map && map.closePopup) map.closePopup(); } catch(e) {}
+  try { if(typeof closeMetarPanel === 'function') closeMetarPanel(); } catch(e) {}
+
   if(!document.getElementById('oMetar').checked) return;
-  if(!WP.length || !ALTS.length) return;
-  var limitM = 400 * NM;
-  var worldLngOffsets = [-360, 0, 360];
-  ALTS.forEach(function(a) {
-    var minD = Infinity;
-    var aptLat = a.lat;
-    var aptLng = a.lng;
-    for(var i = 0; i < WP.length; i++) {
-      var w = WP[i];
-      var wLng = (typeof w.lngU === 'number' && !isNaN(w.lngU)) ? w.lngU : w.lng;
-      var cellLon = aptLng;
-      while (cellLon - wLng > 180) cellLon -= 360;
-      while (wLng - cellLon > 180) cellLon += 360;
-      var d = L.latLng(aptLat, cellLon).distanceTo(L.latLng(w.lat, wLng));
-      if(d < minD) minD = d;
-    }
-    if(minD > limitM) return;
-    for(var aci = 0; aci < worldLngOffsets.length; aci++) {
-      var off = worldLngOffsets[aci];
-      var cOut = L.circle([a.lat, a.lng + off], {
-        radius: 400 * NM,
-        color: 'rgba(100,200,100,0.7)',
-        weight: 1.5,
-        fill: false,
-        interactive: false
-      }).addTo(map);
-      var cIn = L.circle([a.lat, a.lng + off], {
-        radius: 200 * NM,
-        color: 'rgba(100,200,100,0.5)',
-        weight: 1,
-        fill: false,
-        interactive: false
-      }).addTo(map);
-      LY.alt.push(cOut, cIn);
-    }
-    var ic = L.divIcon({
-      html: '<span style="font-size:9px;color:rgba(130,230,130,.95);font-family:monospace;'
-          +'background:rgba(6,10,20,.82);padding:1px 4px;border-radius:2px;">'+a.id+'</span>',
-      className: '',
-      iconSize: [40, 14],
-      iconAnchor: [20, 7]
-    });
-    for(var ami = 0; ami < worldLngOffsets.length; ami++) {
-      LY.alt.push(L.marker(L.latLng(a.lat, a.lng + worldLngOffsets[ami]), {icon: ic, interactive: false}).addTo(map));
-    }
-  });
-  bringTop();
+  if(!WP || !WP.length) return;
+  loadMetars();
 }
 
 function drawRoute() {
@@ -4445,15 +4407,58 @@ function loadMetars() {
           html:'<div style="width:14px;height:14px;border-radius:50%;background:'+col+';border:2px solid white;box-shadow:0 0 4px '+col+'88;"></div>',
           className:'',iconSize:[14,14],iconAnchor:[7,7]
         });
-        var mk=L.marker(L.latLng(lat,lon).wrap(),{icon:ic}).addTo(map);
-        mk.bindTooltip(m.icao+'\n'+(m.flight_category||'')+'\n'+(m.raw_text||''),{className:'wxt',sticky:true});
-        mk.on('click',(function(metar){return function(){
-          fetch('https://api.checkwx.com/v2/taf/'+metar.icao+'/decoded',{headers:{'X-API-Key':'eb52e4c6ca254584842adb8dc574b4f8'}})
-            .then(function(r){return r.json();})
-            .then(function(t){showMetarPanel(metar,t.data&&t.data[0]?t.data[0]:null);})
-            .catch(function(){showMetarPanel(metar,null);});
-        };})(m));
-        LY.metar.push(mk);
+        var worldLngOffsets = [-360, 0, 360];
+        for(var wi=0; wi<worldLngOffsets.length; wi++) {
+          var off = worldLngOffsets[wi];
+          var mk=L.marker(L.latLng(lat,lon + off),{icon:ic}).addTo(map);
+          mk.bindTooltip(m.icao+'\n'+(m.flight_category||'')+'\n'+(m.raw_text||''),{className:'wxt',sticky:true});
+          mk.on('click',(function(metar){
+            return function(e) {
+              var ll = e && e.latlng ? e.latlng : (metar.station&&metar.station.geometry
+                ? L.latLng(metar.station.geometry.coordinates[1], metar.station.geometry.coordinates[0])
+                : null);
+              var pop = L.popup({maxWidth:520,minWidth:420});
+              pop.setLatLng(ll).setContent(
+                '<div style="font-family:monospace;font-size:11px;min-width:420px;max-width:520px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
+                '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;">' + escH(metar.icao||'') + '</div>' +
+                '<div style="color:#546e7a;">TAF 読込中...</div>' +
+                '</div>'
+              ).openOn(map);
+
+              fetch('https://api.checkwx.com/v2/taf/'+metar.icao+'/decoded',{headers:{'X-API-Key':'eb52e4c6ca254584842adb8dc574b4f8'}})
+                .then(function(r){return r.json();})
+                .then(function(t){
+                  var tafObj = t && t.data && t.data[0] ? t.data[0] : null;
+                  var tafRaw = tafObj && tafObj.raw_text ? tafObj.raw_text : '';
+                  var metObs = metar.observed ? String(metar.observed).replace('T',' ').replace('Z',' Z') : '';
+                  var fetchedAt = new Date();
+                  var html =
+                    '<div style="font-family:monospace;font-size:11px;min-width:420px;max-width:520px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
+                    '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;">' + escH(metar.icao||'') + ' <span style="font-weight:normal;color:#546e7a;">' + escH(metar.flight_category||'') + '</span></div>' +
+                    '<div style="color:#546e7a;margin-bottom:6px;">METAR Observed: ' + escH(metObs) + '</div>' +
+                    '<div class="mp-lbl" style="color:#546e7a;">RAW METAR</div>' +
+                    '<pre style="white-space:pre-wrap;margin:0;color:#263238;">' + escH(metar.raw_text||'N/A') + '</pre>' +
+                    '<div style="height:8px;"></div>' +
+                    '<div class="mp-lbl" style="color:#546e7a;">RAW TAF</div>' +
+                    '<pre style="white-space:pre-wrap;margin:0;color:#263238;">' + escH(tafRaw||'N/A') + '</pre>' +
+                    '<div style="color:#90a4ae;margin-top:8px;font-size:10px;">Fetched: ' + escH(fetchedAt.toLocaleString()) + '</div>' +
+                    '</div>';
+                  pop.setContent(html);
+                })
+                .catch(function(){
+                  var fetchedAt2 = new Date();
+                  pop.setContent(
+                    '<div style="font-family:monospace;font-size:11px;min-width:420px;max-width:520px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
+                    '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;">' + escH(metar.icao||'') + '</div>' +
+                    '<div style="color:#ef5350;margin-bottom:8px;">TAF 取得に失敗しました</div>' +
+                    '<div style="color:#90a4ae;margin-top:8px;font-size:10px;">Fetched: ' + escH(fetchedAt2.toLocaleString()) + '</div>' +
+                    '</div>'
+                  );
+                });
+            };
+          })(m));
+          LY.metar.push(mk);
+        }
       });
       bringTop();
     }).catch(function(){});
