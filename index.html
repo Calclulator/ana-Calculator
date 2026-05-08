@@ -4241,6 +4241,52 @@ function gfsRadarNeighborPt(pt, dir, nm) {
   return { lat: pt.lat, lon: pt.lon - dLon };
 }
 
+function gfsRadarEstimateCtmeAtIndex(routePts, idx) {
+  function hasNum(v) { return typeof v === 'number' && isFinite(v); }
+  function ptDistNm(a, b) {
+    if(!a || !b || !hasNum(a.lat) || !hasNum(a.lon) || !hasNum(b.lat) || !hasNum(b.lon)) return null;
+    return gfsRadarApproxDistNm(a, b);
+  }
+  if(!routePts || !routePts.length) return 0;
+  var p = routePts[idx];
+  if(p && hasNum(p.ctme)) return p.ctme;
+  var li = idx - 1, ri = idx + 1;
+  while(li >= 0) {
+    if(routePts[li] && hasNum(routePts[li].ctme) && hasNum(routePts[li].lat) && hasNum(routePts[li].lon)) break;
+    li--;
+  }
+  while(ri < routePts.length) {
+    if(routePts[ri] && hasNum(routePts[ri].ctme) && hasNum(routePts[ri].lat) && hasNum(routePts[ri].lon)) break;
+    ri++;
+  }
+  if(li >= 0 && ri < routePts.length && li < idx && idx < ri) {
+    var seg = 0, part = 0, k, d;
+    for(k = li; k < ri; k++) {
+      d = ptDistNm(routePts[k], routePts[k+1]);
+      if(d === null) continue;
+      seg += d;
+    }
+    for(k = li; k < idx; k++) {
+      d = ptDistNm(routePts[k], routePts[k+1]);
+      if(d === null) continue;
+      part += d;
+    }
+    if(seg > 0) {
+      var f = part / seg;
+      return routePts[li].ctme + (routePts[ri].ctme - routePts[li].ctme) * f;
+    }
+    return routePts[li].ctme;
+  }
+  if(li >= 0 && routePts[li] && hasNum(routePts[li].ctme)) return routePts[li].ctme;
+  if(ri < routePts.length && routePts[ri] && hasNum(routePts[ri].ctme)) return routePts[ri].ctme;
+  return 0;
+}
+
+function gfsRadarValidUtcForRoutePoint(routePts, idx) {
+  var ctme = gfsRadarEstimateCtmeAtIndex(routePts, idx);
+  return gfsAtmValidUtcForWp({ ctme: ctme });
+}
+
 function preloadGfsRadarPoints(routePts, done) {
   if(typeof gfsPointAt !== 'function') { done(new Error('gfsPointAt unavailable')); return; }
   var jobs = [];
@@ -4249,44 +4295,6 @@ function preloadGfsRadarPoints(routePts, done) {
   var wpTotal = routePts && routePts.length ? routePts.length : 0;
   var wpSkip = 0;
   function hasNum(v) { return typeof v === 'number' && isFinite(v); }
-  function ptDistNm(a, b) {
-    if(!a || !b || !hasNum(a.lat) || !hasNum(a.lon) || !hasNum(b.lat) || !hasNum(b.lon)) return null;
-    return gfsRadarApproxDistNm(a, b);
-  }
-  function estimateCtmeAtIndex(idx) {
-    var p = routePts[idx];
-    if(p && hasNum(p.ctme)) return p.ctme;
-    var li = idx - 1, ri = idx + 1;
-    while(li >= 0) {
-      if(routePts[li] && hasNum(routePts[li].ctme) && hasNum(routePts[li].lat) && hasNum(routePts[li].lon)) break;
-      li--;
-    }
-    while(ri < routePts.length) {
-      if(routePts[ri] && hasNum(routePts[ri].ctme) && hasNum(routePts[ri].lat) && hasNum(routePts[ri].lon)) break;
-      ri++;
-    }
-    if(li >= 0 && ri < routePts.length && li < idx && idx < ri) {
-      var seg = 0, part = 0, k, d;
-      for(k = li; k < ri; k++) {
-        d = ptDistNm(routePts[k], routePts[k+1]);
-        if(d === null) continue;
-        seg += d;
-      }
-      for(k = li; k < idx; k++) {
-        d = ptDistNm(routePts[k], routePts[k+1]);
-        if(d === null) continue;
-        part += d;
-      }
-      if(seg > 0) {
-        var f = part / seg;
-        return routePts[li].ctme + (routePts[ri].ctme - routePts[li].ctme) * f;
-      }
-      return routePts[li].ctme;
-    }
-    if(li >= 0 && routePts[li] && hasNum(routePts[li].ctme)) return routePts[li].ctme;
-    if(ri < routePts.length && routePts[ri] && hasNum(routePts[ri].ctme)) return routePts[ri].ctme;
-    return 0;
-  }
   function pushJob(lat, lon, vu) {
     if(!hasNum(lat) || !hasNum(lon) || !vu || !(vu instanceof Date) || isNaN(vu.getTime())) return false;
     var key = lat.toFixed(3) + '|' + lon.toFixed(3) + '|' + vu.getTime();
@@ -4299,9 +4307,7 @@ function preloadGfsRadarPoints(routePts, done) {
     try {
       var p = routePts[i];
       if(!p || !hasNum(p.lat) || !hasNum(p.lon)) { wpSkip++; continue; }
-      var estCtme = estimateCtmeAtIndex(i);
-      var wpTmp = { ctme: estCtme };
-      var vu = gfsAtmValidUtcForWp(wpTmp);
+      var vu = gfsRadarValidUtcForRoutePoint(routePts, i);
       pushJob(p.lat, p.lon, vu);
       var n = gfsRadarNeighborPt(p, 'N', 200);
       var s = gfsRadarNeighborPt(p, 'S', 200);

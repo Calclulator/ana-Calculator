@@ -673,7 +673,11 @@
           nFiltered++;
           continue;
         }
-        var c = computeAtPoint(p, levelMb, validForPoint, method, tiOffsetNm);
+        var pointValidUtc = validForPoint;
+        if (typeof window.gfsRadarValidUtcForRoutePoint === 'function') {
+          pointValidUtc = window.gfsRadarValidUtcForRoutePoint(pts, pi);
+        }
+        var c = computeAtPoint(p, levelMb, pointValidUtc, method, tiOffsetNm);
         if (!c) { nNull++; continue; }
         var v = methodValue(method, c);
         var color = colorFor(method, v);
