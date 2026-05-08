@@ -390,12 +390,12 @@
 </div><!-- atm-panel -->
 <!-- ===== ATMOSPHERE ANALYSIS (GFS) ===== -->
 <div id="atm-gfs-panel" class="panel">
-  <div class="bar">
+  <div class="bar" style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;">
     <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.06em;font-size:1em;">ATMOSPHERE ANALYSIS (GFS)</span>
-    <span style="font-size:1em;color:#90a4ae;margin-left:14px;">GFS データに基づく大気解析</span>
+    <span style="font-size:1em;color:#90a4ae;margin-left:6px;">GFS データに基づく大気解析</span>
+    <span id="gfsAtmProgress" style="margin-left:auto;font-size:12px;color:#4fc3f7;min-width:160px;text-align:right;white-space:nowrap;"></span>
   </div>
   <div style="padding:8px 12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #1e2a38;">
-    <span id="gfsAtmProgress" style="font-size:12px;color:#888;min-width:140px;"></span>
     <span style="font-size:1em;color:#90a4ae;">Heat map:</span>
     <button class="btn" id="atm-gfs-heat-temp" onclick="setAtmGfsHeat('temp')">Temp</button>
     <button class="btn on" id="atm-gfs-heat-wind" onclick="setAtmGfsHeat('wind')">Wind</button>
@@ -901,6 +901,10 @@ function navTo(tab){
   closeNav();
   if(tab === 'atm-gfs') {
     ensureGfsLoadedForAtm();
+    if(window.GFS_POINT && window.GFS_POINT.status === 'loading' &&
+        typeof window.GFS_ATM_PRELOAD_TOTAL === 'number' && window.GFS_ATM_PRELOAD_TOTAL > 0) {
+      updateGfsAtmProgressLoading(0, window.GFS_ATM_PRELOAD_TOTAL);
+    }
     renderGfsAtmTable();
     renderGfsWsTable();
     if(window.GFS_POINT && window.GFS_POINT.status === 'loading') {
@@ -2624,6 +2628,8 @@ function isaDevColor(dev) {
 var ATM_GFS_HEAT = 'wind';
 var ATM_GFS_SHOW = 'wt';
 var ATM_GFS_WS = 'vws';
+/* Ellrod TI: display matches literature (Mod ~4-8 x10^-7 s^-2); raw physics unchanged */
+var ELLROD_DISPLAY_SCALE = 1e7;
 // GFS isobaric levels (mb) used for atmosphere / WS vertical interpolation
 var GFS_ATM_LEVELS_MB = [300, 275, 250, 225, 200, 175, 150];
 var GFS_ATM_COLUMN_CACHE = {};
@@ -2846,17 +2852,19 @@ function gfsAtmCoordsOk(lat, lon) {
   return typeof lat === 'number' && isFinite(lat) && typeof lon === 'number' && isFinite(lon);
 }
 
-function updateGfsAtmProgress(done, total, ng) {
+function updateGfsAtmProgressLoading(fin, tot) {
+  var el = document.getElementById('gfsAtmProgress');
+  if(!el || fin >= tot) return;
+  el.textContent = 'GFS loading: ' + fin + '/' + tot;
+}
+
+function updateGfsAtmProgressDone(total, ng) {
   var el = document.getElementById('gfsAtmProgress');
   if(!el) return;
-  if(done < total) {
-    el.textContent = 'GFS loading: ' + done + '/' + total;
-  } else {
-    var s = 'GFS loaded: ' + done + '/' + total;
-    if(ng && ng > 0) s += ' (ng=' + ng + ')';
-    el.textContent = s;
-    setTimeout(function () { el.textContent = ''; }, 2000);
-  }
+  var s = 'GFS loaded: ' + total + '/' + total;
+  if(ng && ng > 0) s += ' (ng=' + ng + ')';
+  el.textContent = s;
+  setTimeout(function () { el.textContent = ''; }, 2000);
 }
 
 function gfsRunThrottledJobs(jobs, concurrency, worker, done, onProgress) {
@@ -2872,7 +2880,7 @@ function gfsRunThrottledJobs(jobs, concurrency, worker, done, onProgress) {
           if(err) { done(err); return; }
           results[k] = result;
           finished++;
-          if(typeof onProgress === 'function' && finished < jobs.length) {
+          if(typeof onProgress === 'function') {
             onProgress(finished, jobs.length);
           }
           if(finished >= jobs.length && inFlight === 0) {
@@ -2961,7 +2969,8 @@ function ensureGfsLoadedForAtm() {
     window.GFS_POINT.error = 'no valid waypoint coordinates';
     return;
   }
-  updateGfsAtmProgress(0, jobs.length, 0);
+  window.GFS_ATM_PRELOAD_TOTAL = jobs.length;
+  updateGfsAtmProgressLoading(0, jobs.length);
   gfsRunThrottledJobs(jobs, 3, function(job, next){
     gfsPointAtRetry(job.lat, job.lon, job.vu, function(err, data, url){
       if(err) {
@@ -2982,11 +2991,11 @@ function ensureGfsLoadedForAtm() {
     }
     console.log('[GFS-ATM] preload done points=' + jobs.length +
       ' ok=' + okCount + ' ng=' + ngCount + ' elapsedMs=' + (Date.now() - t0));
-    updateGfsAtmProgress(jobs.length, jobs.length, ngCount);
+    updateGfsAtmProgressDone(jobs.length, ngCount);
     renderGfsAtmTable();
     renderGfsWsTable();
   }, function(fin, tot) {
-    updateGfsAtmProgress(fin, tot, 0);
+    updateGfsAtmProgressLoading(fin, tot);
   });
 }
 
@@ -3275,12 +3284,16 @@ function renderGfsWsTable() {
           var ti1Obs = outMetrics.ti1;
           var ti2Obs = outMetrics.ti2;
           var ratio = (vwsObs && vwsObs !== 0 && ti1Obs != null) ? (ti1Obs / vwsObs) : null;
+          var ti1Disp = (ti1Obs != null) ? ti1Obs * ELLROD_DISPLAY_SCALE : null;
+          var ti2Disp = (ti2Obs != null) ? ti2Obs * ELLROD_DISPLAY_SCALE : null;
           console.log('[Ellrod] wp=' + wpId + ' alt=' + altFl
             + ' VWS=' + (vwsObs != null ? vwsObs.toFixed(4) : 'null')
             + ' DEF=' + (outMetrics.defm != null ? outMetrics.defm.toExponential(4) : 'null')
-            + ' TI1=' + (ti1Obs != null ? ti1Obs.toFixed(2) : 'null')
-            + ' TI2=' + (ti2Obs != null ? ti2Obs.toFixed(2) : 'null')
-            + ' TI1/VWS=' + (ratio != null ? ratio.toFixed(2) : 'null'));
+            + ' TI1_raw=' + (ti1Obs != null ? ti1Obs.toExponential(3) : 'null')
+            + ' TI1_disp=' + (ti1Disp != null ? ti1Disp.toFixed(2) : 'null')
+            + ' TI2_raw=' + (ti2Obs != null ? ti2Obs.toExponential(3) : 'null')
+            + ' TI2_disp=' + (ti2Disp != null ? ti2Disp.toFixed(2) : 'null')
+            + ' TI1/VWS=' + (ratio != null ? ratio.toExponential(4) : 'null'));
         }
         if(cvgOn) {
           console.log('[CVG] wp=' + wpId + ' alt=' + altFl
@@ -3348,7 +3361,7 @@ function renderGfsWsTable() {
         if(dispMode === 'vws') {
           txt = (val * 1000).toFixed(2);
         } else {
-          txt = (val * 1e7).toFixed(2);
+          txt = (val * ELLROD_DISPLAY_SCALE).toFixed(2);
         }
       }
       var pal = gfsWsPaletteCell(dispMode, val);
@@ -3432,12 +3445,16 @@ function exportCalibrationData() {
     if(GFS_DEBUG_ELLROD) {
       var ratio = (vwsVal && vwsVal !== 0 && ti1Val != null) ? (ti1Val / vwsVal) : null;
       var wpName = wp && wp.id ? wp.id : 'unknown';
+      var ti1DispE = (ti1Val != null) ? ti1Val * ELLROD_DISPLAY_SCALE : null;
+      var ti2DispE = (ti2Val != null) ? ti2Val * ELLROD_DISPLAY_SCALE : null;
       console.log('[Ellrod] wp=' + wpName + ' alt=' + altFl
         + ' VWS=' + (vwsVal != null ? vwsVal.toFixed(4) : 'null')
         + ' DEF=' + (c.defm != null ? c.defm.toExponential(4) : 'null')
-        + ' TI1=' + (ti1Val != null ? ti1Val.toFixed(2) : 'null')
-        + ' TI2=' + (ti2Val != null ? ti2Val.toFixed(2) : 'null')
-        + ' TI1/VWS=' + (ratio != null ? ratio.toFixed(2) : 'null'));
+        + ' TI1_raw=' + (ti1Val != null ? ti1Val.toExponential(3) : 'null')
+        + ' TI1_disp=' + (ti1DispE != null ? ti1DispE.toFixed(2) : 'null')
+        + ' TI2_raw=' + (ti2Val != null ? ti2Val.toExponential(3) : 'null')
+        + ' TI2_disp=' + (ti2DispE != null ? ti2DispE.toFixed(2) : 'null')
+        + ' TI1/VWS=' + (ratio != null ? ratio.toExponential(4) : 'null'));
     }
     if(GFS_DEBUG_CVG) {
       var wpName2 = wp && wp.id ? wp.id : 'unknown';

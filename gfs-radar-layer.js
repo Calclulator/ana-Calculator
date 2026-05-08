@@ -37,9 +37,10 @@
   // GFS-VWS calibrated thresholds in s^-1:
   // Smooth <0.004, Light- <0.006, Light <0.008, Light+ <0.010, Moderate <0.013, Severe >=0.013
   var VWS_THRESH = [0.013, 0.010, 0.008, 0.006, 0.004];
-  // Ellrod values: raw multiplied by 1e7 for human-readable thresholding.
-  var TI1_THRESH = [50, 30, 15, 8, 3];
-  var TI2_THRESH = [70, 40, 20, 10, 5];
+  // Ellrod (TI x10^-7 s^-2): literature bands Severe 8+, Moderate 6-8, Light 4-6, Smooth 0-4
+  var ELLROD_DISPLAY_SCALE = 1e7;
+  var TI1_THRESH = [8, 6, 4, 2, 1];
+  var TI2_THRESH = [10, 8, 6, 4, 2];
   var LAST_RENDER_LOG = null;
   var ELLROD_LOG_SEEN = {};
 
@@ -75,9 +76,9 @@
       return ['Severe (13+)', 'Moderate (10-12)', 'Light+ (8-9)', 'Light (6-7)', 'Light- (4-5)', 'Smooth (0-3)'];
     }
     if (m === 'TI1') {
-      return ['Severe (50+)', 'Heavy (30-49)', 'Moderate (15-29)', 'Light (8-14)', 'Minimal (3-7)', 'Smooth (0-2)'];
+      return ['Severe (8+)', 'Heavy (6-8)', 'Moderate (4-6)', 'Light (2-4)', 'Minimal (1-2)', 'Smooth (<1)'];
     }
-    return ['Severe (70+)', 'Heavy (40-69)', 'Moderate (20-39)', 'Light (10-19)', 'Minimal (5-9)', 'Smooth (0-4)'];
+    return ['Severe (10+)', 'Heavy (8-10)', 'Moderate (6-8)', 'Light (4-6)', 'Minimal (2-4)', 'Smooth (<2)'];
   }
 
   function flToMb(fl) {
@@ -116,9 +117,9 @@
   function colorFor(method, value) {
     if (value === null || value === undefined || isNaN(value)) return null;
     if (method === 'TI1') {
-      return PALETTE[Math.min(bucket(value * 1e7, TI1_THRESH), PALETTE.length - 1)];
+      return PALETTE[Math.min(bucket(value * ELLROD_DISPLAY_SCALE, TI1_THRESH), PALETTE.length - 1)];
     } else if (method === 'TI2') {
-      return PALETTE[Math.min(bucket(value * 1e7, TI2_THRESH), PALETTE.length - 1)];
+      return PALETTE[Math.min(bucket(value * ELLROD_DISPLAY_SCALE, TI2_THRESH), PALETTE.length - 1)];
     } else {
       return PALETTE[Math.min(bucket(value, VWS_THRESH), PALETTE.length - 1)];
     }
@@ -135,7 +136,7 @@
     var thr = thresholdsForMethod(m);
     var labels = labelsForMethod(m);
     var v = rawVal;
-    if (m === 'TI1' || m === 'TI2') v = rawVal * 1e7;
+    if (m === 'TI1' || m === 'TI2') v = rawVal * ELLROD_DISPLAY_SCALE;
     var idx = bucket(v, thr);
     idx = Math.min(idx, labels.length - 1);
     var lab = labels[idx];
@@ -149,7 +150,7 @@
     var m = normalizeMethod(method);
     var thr = thresholdsForMethod(m);
     var v = rawVal;
-    if (m === 'TI1' || m === 'TI2') v = rawVal * 1e7;
+    if (m === 'TI1' || m === 'TI2') v = rawVal * ELLROD_DISPLAY_SCALE;
     var idx = bucket(v, thr);
     return Math.min(idx, PALETTE.length - 1);
   }
@@ -476,9 +477,11 @@
         ' DEF=' + (defm != null ? defm.toExponential(4) : 'null') +
         ' stretching=' + (stretch != null ? stretch.toExponential(4) : 'null') +
         ' shearing=' + (shear != null ? shear.toExponential(4) : 'null') +
-        ' TI1=' + (ti1 != null ? ti1.toFixed(2) : 'null') +
-        ' TI2=' + (ti2 != null ? ti2.toFixed(2) : 'null') +
-        ' TI1/VWS=' + (ratio != null ? ratio.toFixed(2) : 'null'));
+        ' TI1_raw=' + (ti1 != null ? ti1.toExponential(3) : 'null') +
+        ' TI1_disp=' + (ti1 != null ? (ti1 * ELLROD_DISPLAY_SCALE).toFixed(2) : 'null') +
+        ' TI2_raw=' + (ti2 != null ? ti2.toExponential(3) : 'null') +
+        ' TI2_disp=' + (ti2 != null ? (ti2 * ELLROD_DISPLAY_SCALE).toFixed(2) : 'null') +
+        ' TI1/VWS=' + (ratio != null ? ratio.toExponential(4) : 'null'));
       cvgDebugLogOnce('C|' + id,
         '[CVG] wp=' + id + ' alt=' + centerMb +
         ' CVG_raw=' + (cvg != null ? cvg.toExponential(4) : 'null') +
@@ -598,9 +601,11 @@
           ' DEF=' + (defm != null ? defm.toExponential(4) : 'null') +
           ' stretching=' + (stretch != null ? stretch.toExponential(4) : 'null') +
           ' shearing=' + (shear != null ? shear.toExponential(4) : 'null') +
-          ' TI1=' + (ti1p != null ? ti1p.toFixed(2) : 'null') +
-          ' TI2=' + (ti2p != null ? ti2p.toFixed(2) : 'null') +
-          ' TI1/VWS=' + (ratio2 != null ? ratio2.toFixed(2) : 'null'));
+          ' TI1_raw=' + (ti1p != null ? ti1p.toExponential(3) : 'null') +
+          ' TI1_disp=' + (ti1p != null ? (ti1p * ELLROD_DISPLAY_SCALE).toFixed(2) : 'null') +
+          ' TI2_raw=' + (ti2p != null ? ti2p.toExponential(3) : 'null') +
+          ' TI2_disp=' + (ti2p != null ? (ti2p * ELLROD_DISPLAY_SCALE).toFixed(2) : 'null') +
+          ' TI1/VWS=' + (ratio2 != null ? ratio2.toExponential(4) : 'null'));
         cvgDebugLogOnce('C|' + k,
           '[CVG] wp=' + wpName + ' alt=' + alt +
           ' CVG_raw=' + (cvg != null ? cvg.toExponential(4) : 'null') +
@@ -686,7 +691,7 @@
     if (c.vws !== null) lines.push('VWS: ' + (c.vws * 1000).toFixed(2) + ' /ks');
     if (method === 'TI1' || method === 'TI2') {
       var v = methodValue(method, c);
-      if (v !== null) lines.push(method + ': ' + (v * 1e7).toFixed(2) + ' (&times;1e-7)');
+      if (v !== null) lines.push(method + ': ' + (v * ELLROD_DISPLAY_SCALE).toFixed(2) + ' (&times;1e-7)');
     }
     return lines.join('<br>');
   }
