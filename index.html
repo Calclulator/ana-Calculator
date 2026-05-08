@@ -2900,7 +2900,16 @@ function ensureGfsLoadedForAtm() {
     w = WP[i];
     lo = (typeof w.lon === 'number') ? w.lon : w.lng;
     if(typeof w.lat !== 'number' || typeof lo !== 'number') continue;
-    jobs.push({ lat: w.lat, lon: lo, vu: gfsAtmValidUtcForWp(w) });
+    var vu = gfsAtmValidUtcForWp(w);
+    jobs.push({ lat: w.lat, lon: lo, vu: vu });
+    var n = gfsRadarNeighborPt(w, 'N', 200);
+    var s = gfsRadarNeighborPt(w, 'S', 200);
+    var e = gfsRadarNeighborPt(w, 'E', 200);
+    var ww = gfsRadarNeighborPt(w, 'W', 200);
+    jobs.push({ lat: n.lat, lon: n.lon, vu: vu });
+    jobs.push({ lat: s.lat, lon: s.lon, vu: vu });
+    jobs.push({ lat: e.lat, lon: e.lon, vu: vu });
+    jobs.push({ lat: ww.lat, lon: ww.lon, vu: vu });
   }
   if(jobs.length === 0) {
     window.GFS_POINT.status = 'error';
@@ -3099,6 +3108,31 @@ function renderGfsWsTable() {
     return null;
   }
 
+  function wsInterpMetricsByHeight(pts, hTarget) {
+    if(!pts || pts.length === 0) return null;
+    if(pts.length === 1) return pts[0];
+    if(hTarget <= pts[0].h) return pts[0];
+    if(hTarget >= pts[pts.length - 1].h) return pts[pts.length - 1];
+    var i, f, a, b;
+    for(i = 0; i < pts.length - 1; i++) {
+      if(pts[i].h <= hTarget && hTarget <= pts[i + 1].h) {
+        a = pts[i];
+        b = pts[i + 1];
+        f = (hTarget - a.h) / (b.h - a.h);
+        return {
+          h: hTarget,
+          vws: a.vws + f * (b.vws - a.vws),
+          defm: a.defm + f * (b.defm - a.defm),
+          cvgRaw: a.cvgRaw + f * (b.cvgRaw - a.cvgRaw),
+          cvgClipped: a.cvgClipped + f * (b.cvgClipped - a.cvgClipped),
+          ti1: a.ti1 + f * (b.ti1 - a.ti1),
+          ti2: a.ti2 + f * (b.ti2 - a.ti2)
+        };
+      }
+    }
+    return null;
+  }
+
   function wsValueAtWpAlt(wpId, altFl) {
     var wp = null;
     var wi;
@@ -3118,6 +3152,21 @@ function renderGfsWsTable() {
       var col = gfsAtmBuildVerticalColumn(wp, false);
       if(col && col.length >= 2) {
         var i, lo, hi, dz, du, dv, vws;
+        var nPt = gfsRadarNeighborPt(wp, 'N', 200);
+        var sPt = gfsRadarNeighborPt(wp, 'S', 200);
+        var ePt = gfsRadarNeighborPt(wp, 'E', 200);
+        var wPt = gfsRadarNeighborPt(wp, 'W', 200);
+        var pN = (typeof gfsPointCached === 'function') ? gfsPointCached(nPt.lat, nPt.lon, vu) : null;
+        var pS = (typeof gfsPointCached === 'function') ? gfsPointCached(sPt.lat, sPt.lon, vu) : null;
+        var pE = (typeof gfsPointCached === 'function') ? gfsPointCached(ePt.lat, ePt.lon, vu) : null;
+        var pW = (typeof gfsPointCached === 'function') ? gfsPointCached(wPt.lat, wPt.lon, vu) : null;
+        function levAt(profile, mb) {
+          if(!profile || !profile.levels) return null;
+          for(var kk=0; kk<profile.levels.length; kk++) {
+            if(profile.levels[kk] && profile.levels[kk].mb === mb) return profile.levels[kk];
+          }
+          return null;
+        }
         for(i = 0; i < col.length - 1; i++) {
           lo = col[i];
           hi = col[i + 1];
@@ -3126,12 +3175,35 @@ function renderGfsWsTable() {
           du = hi.u - lo.u;
           dv = hi.v - lo.v;
           vws = Math.sqrt(du * du + dv * dv) / Math.abs(dz);
-          if(mode === 'ti1' || mode === 'ti2') {
-            // point query has no horizontal derivatives; use VWS proxy for TI display
-            pts.push({ h: (lo.hgt + hi.hgt) / 2, val: vws });
-          } else {
-            pts.push({ h: (lo.hgt + hi.hgt) / 2, val: vws });
+          var centerMb = lo.lev;
+          var nL = levAt(pN, centerMb), sL = levAt(pS, centerMb), eL = levAt(pE, centerMb), wL = levAt(pW, centerMb);
+          var defm = 0;
+          var cvgRaw = 0;
+          if(nL && sL && eL && wL) {
+            var dy_m = (2 * 200) * 1852.0;
+            var dx_m = (2 * 200) * 1852.0 * Math.cos(wp.lat * Math.PI / 180);
+            if(Math.abs(dx_m) < 1) dx_m = 1;
+            var dUdx = (eL.u - wL.u) / dx_m;
+            var dUdy = (nL.u - sL.u) / dy_m;
+            var dVdx = (eL.v - wL.v) / dx_m;
+            var dVdy = (nL.v - sL.v) / dy_m;
+            var stretching = dUdx - dVdy;
+            var shearing = dVdx + dUdy;
+            defm = Math.sqrt(stretching * stretching + shearing * shearing);
+            cvgRaw = -(dUdx + dVdy);
           }
+          var cvgClipped = Math.max(0, cvgRaw);
+          var ti1 = vws * defm;
+          var ti2 = vws * (defm + cvgClipped);
+          pts.push({
+            h: (lo.hgt + hi.hgt) / 2,
+            vws: vws,
+            defm: defm,
+            cvgRaw: cvgRaw,
+            cvgClipped: cvgClipped,
+            ti1: ti1,
+            ti2: ti2
+          });
         }
       }
       pts.sort(function(a, b) { return a.h - b.h; });
@@ -3139,30 +3211,33 @@ function renderGfsWsTable() {
     }
     if(pts.length < 1) return null;
     var hTarget = altFl * 100 * 0.3048;
-    var outVal = wsInterpScalarByHeight(pts, hTarget);
+    var outMetrics = wsInterpMetricsByHeight(pts, hTarget);
+    if(!outMetrics) return null;
+    var outVal = outMetrics.vws;
+    if(mode === 'ti1') outVal = outMetrics.ti1;
+    else if(mode === 'ti2') outVal = outMetrics.ti2;
     var ellrodOn = (typeof GFS_DEBUG_ELLROD !== 'undefined' && GFS_DEBUG_ELLROD);
     var cvgOn = (typeof GFS_DEBUG_CVG !== 'undefined' && GFS_DEBUG_CVG);
     if((ellrodOn || cvgOn) && outVal !== null && !isNaN(outVal)) {
       var logKey = wpId + '|' + altFl + '|' + mode;
       if(!gfsWsEllrodLogSeen[logKey]) {
         gfsWsEllrodLogSeen[logKey] = 1;
-        // ATM WS 表の point 近似経路では DEF/CVG を保持していないため、観測値は null を明示。
         if(ellrodOn) {
-          var vwsObs = outVal;
-          var ti1Obs = outVal;
-          var ti2Obs = outVal;
+          var vwsObs = outMetrics.vws;
+          var ti1Obs = outMetrics.ti1;
+          var ti2Obs = outMetrics.ti2;
           var ratio = (vwsObs && vwsObs !== 0 && ti1Obs != null) ? (ti1Obs / vwsObs) : null;
           console.log('[Ellrod] wp=' + wpId + ' alt=' + altFl
             + ' VWS=' + (vwsObs != null ? vwsObs.toFixed(4) : 'null')
-            + ' DEF=' + 'null'
+            + ' DEF=' + (outMetrics.defm != null ? outMetrics.defm.toExponential(4) : 'null')
             + ' TI1=' + (ti1Obs != null ? ti1Obs.toFixed(2) : 'null')
             + ' TI2=' + (ti2Obs != null ? ti2Obs.toFixed(2) : 'null')
             + ' TI1/VWS=' + (ratio != null ? ratio.toFixed(2) : 'null'));
         }
         if(cvgOn) {
           console.log('[CVG] wp=' + wpId + ' alt=' + altFl
-            + ' CVG_raw=' + 'null'
-            + ' CVG_clipped=' + 'null');
+            + ' CVG_raw=' + (outMetrics.cvgRaw != null ? outMetrics.cvgRaw.toExponential(4) : 'null')
+            + ' CVG_clipped=' + (outMetrics.cvgClipped != null ? outMetrics.cvgClipped.toExponential(4) : 'null'));
         }
       }
     }
