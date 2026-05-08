@@ -1,2 +1,4 @@
 # Nested Vercel project (separate repo); do not track as submodule
 ana-Calculator-gfs-proxy/
+
+node_modules/

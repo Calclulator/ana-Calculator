@@ -1,0 +1,28 @@
+{
+  "name": "ana-calculator",
+  "version": "1.0.0",
+  "description": "",
+  "main": "gfs-client.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Calclulator/ana-Calculator.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Calclulator/ana-Calculator/issues"
+  },
+  "homepage": "https://github.com/Calclulator/ana-Calculator#readme",
+  "devDependencies": {
+    "vitest": "^4.1.5"
+  }
+}

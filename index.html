@@ -478,6 +478,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="gfs-client.js"></script>
 <script src="gfs-radar-layer.js"></script>
+<script src="geo-helpers.js"></script>
 <script>
 // =====================================================================
 // PDF.js
@@ -4387,19 +4388,6 @@ function buildGfsRadarRoutePoints() {
   }
   out.push(base[base.length-1]);
   return out;
-}
-
-function gfsRadarNeighborPt(pt, dir, nm) {
-  var lat = pt.lat;
-  var lon = (typeof pt.lon === 'number') ? pt.lon : pt.lng;
-  var dLat = nm / 60.0;
-  var cosLat = Math.cos(lat * Math.PI / 180);
-  if(Math.abs(cosLat) < 1e-6) cosLat = 1e-6;
-  var dLon = (nm / 60.0) / cosLat;
-  if(dir === 'N') return { lat: lat + dLat, lon: lon };
-  if(dir === 'S') return { lat: lat - dLat, lon: lon };
-  if(dir === 'E') return { lat: lat, lon: lon + dLon };
-  return { lat: lat, lon: lon - dLon };
 }
 
 function gfsRadarEstimateCtmeAtIndex(routePts, idx) {
