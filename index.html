@@ -81,6 +81,9 @@
   .leaflet-tooltip.wxt-wp::before{display:none!important;}
   .leaflet-tooltip.sgx{background:rgba(18,4,4,.94)!important;border:.5px solid rgba(239,83,80,.4)!important;color:#ffcdd2!important;font-family:monospace!important;font-size:12px!important;padding:2px 6px!important;border-radius:2px!important;box-shadow:none!important;}
   .leaflet-tooltip.sgx::before{display:none!important;}
+  /* METAR/TAF map popup: match SIGMET popup body (13px monospace) */
+  .leaflet-popup-content .wx-radar-popup-metar{font-family:monospace!important;font-size:13px!important;}
+  .leaflet-popup-content .wx-radar-popup-metar pre{font-family:monospace!important;font-size:13px!important;color:#263238!important;}
   .leaflet-control-zoom a{background:#0d1117!important;color:#90a4ae!important;border-color:#2a3a4e!important;}
   /* Nav / Hamburger */
   #menu-btn{background:transparent;border:none;cursor:pointer;padding:5px 12px;display:flex;flex-direction:column;justify-content:center;gap:4px;align-self:stretch;flex-shrink:0;border-right:1px solid #1e2a38;}
@@ -4460,11 +4463,11 @@ function loadMetars() {
               var ll = e && e.latlng ? e.latlng : (metar.station&&metar.station.geometry
                 ? L.latLng(metar.station.geometry.coordinates[1], metar.station.geometry.coordinates[0])
                 : null);
-              var pop = L.popup({maxWidth:1040,minWidth:840});
+              var pop = L.popup({maxWidth:500,minWidth:420});
               pop.setLatLng(ll).setContent(
-                '<div style="font-family:monospace;font-size:22px;min-width:840px;max-width:1040px;background:#fff;color:#1a1a1a;padding:12px;border-radius:4px;">' +
-                '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;">' + escH(metar.icao||'') + '</div>' +
-                '<div style="color:#546e7a;">TAF 読込中...</div>' +
+                '<div class="wx-radar-popup-metar" style="font-family:monospace;font-size:13px;min-width:400px;max-width:400px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
+                '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;font-size:13px;">' + escH(metar.icao||'') + '</div>' +
+                '<div style="color:#546e7a;font-size:13px;">TAF 読込中...</div>' +
                 '</div>'
               ).openOn(map);
 
@@ -4475,27 +4478,23 @@ function loadMetars() {
                   var tafObj = t && t.data && t.data[0] ? t.data[0] : null;
                   var tafRaw = tafObj && tafObj.raw_text ? tafObj.raw_text : '';
                   var metObs = metar.observed ? String(metar.observed).replace('T',' ').replace('Z',' Z') : '';
-                  var fetchedAt = new Date();
                   var html =
-                    '<div style="font-family:monospace;font-size:22px;min-width:840px;max-width:1040px;background:#fff;color:#1a1a1a;padding:12px;border-radius:4px;">' +
-                    '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;">' + escH(metar.icao||'') + ' <span style="font-weight:normal;color:#546e7a;">' + escH(metar.flight_category||'') + '</span></div>' +
-                    '<div style="color:#546e7a;margin-bottom:6px;">METAR Observed: ' + escH(metObs) + '</div>' +
-                    '<div class="mp-lbl" style="color:#546e7a;">RAW METAR</div>' +
-                    '<pre style="white-space:pre-wrap;margin:0;color:#263238;">' + escH(metar.raw_text||'N/A') + '</pre>' +
+                    '<div class="wx-radar-popup-metar" style="font-family:monospace;font-size:13px;min-width:400px;max-width:400px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
+                    '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;font-size:13px;">' + escH(metar.icao||'') + ' <span style="font-weight:normal;color:#546e7a;">' + escH(metar.flight_category||'') + '</span></div>' +
+                    '<div style="color:#546e7a;font-size:13px;margin-bottom:6px;">METAR Observed: ' + escH(metObs) + '</div>' +
+                    '<div style="color:#546e7a;font-size:13px;">RAW METAR</div>' +
+                    '<pre style="white-space:pre-wrap;margin:0;color:#263238;font-size:13px;">' + escH(metar.raw_text||'N/A') + '</pre>' +
                     '<div style="height:8px;"></div>' +
-                    '<div class="mp-lbl" style="color:#546e7a;">RAW TAF</div>' +
-                    '<pre style="white-space:pre-wrap;margin:0;color:#263238;">' + escH(tafRaw||'N/A') + '</pre>' +
-                    '<div style="color:#90a4ae;margin-top:8px;font-size:20px;">Fetched: ' + escH(fetchedAt.toLocaleString()) + '</div>' +
+                    '<div style="color:#546e7a;font-size:13px;">RAW TAF</div>' +
+                    '<pre style="white-space:pre-wrap;margin:0;color:#263238;font-size:13px;">' + escH(tafRaw||'N/A') + '</pre>' +
                     '</div>';
                   pop.setContent(html);
                 })
                 .catch(function(){
-                  var fetchedAt2 = new Date();
                   pop.setContent(
-                    '<div style="font-family:monospace;font-size:22px;min-width:840px;max-width:1040px;background:#fff;color:#1a1a1a;padding:12px;border-radius:4px;">' +
-                    '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;">' + escH(metar.icao||'') + '</div>' +
-                    '<div style="color:#ef5350;margin-bottom:8px;">TAF 取得に失敗しました</div>' +
-                    '<div style="color:#90a4ae;margin-top:8px;font-size:20px;">Fetched: ' + escH(fetchedAt2.toLocaleString()) + '</div>' +
+                    '<div class="wx-radar-popup-metar" style="font-family:monospace;font-size:13px;min-width:400px;max-width:400px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
+                    '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;font-size:13px;">' + escH(metar.icao||'') + '</div>' +
+                    '<div style="color:#ef5350;font-size:13px;margin-bottom:8px;">TAF 取得に失敗しました</div>' +
                     '</div>'
                   );
                 });
