@@ -325,6 +325,28 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
       '&dlon=' + encodeURIComponent(dlon);
   }
 
+  function approxGridCells(box, dlat, dlon) {
+    var spanLat = Math.abs(box.north - box.south);
+    var spanLon = Math.abs(box.east - box.west);
+    var nlat = Math.floor(spanLat / dlat + 0.5) + 1;
+    var nlon = Math.floor(spanLon / dlon + 0.5) + 1;
+    if (nlat < 1) nlat = 1;
+    if (nlon < 1) nlon = 1;
+    return nlat * nlon;
+  }
+
+  function pickGridStepForBbox(box, maxCells) {
+    // choose smallest (finest) step that stays under maxCells
+    var cand = [0.25, 0.5, 1.0, 1.5, 2.0];
+    var best = cand[cand.length - 1];
+    for (var i = 0; i < cand.length; i++) {
+      var s = cand[i];
+      var cells = approxGridCells(box, s, s);
+      if (cells <= maxCells) { best = s; break; }
+    }
+    return best;
+  }
+
   function gfsGridLoad(box, validUtc, dlat, dlon, done) {
     if (!box || typeof box.north !== 'number' || typeof box.south !== 'number' ||
         typeof box.west !== 'number' || typeof box.east !== 'number') {
@@ -335,8 +357,21 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
       if (typeof done === 'function') done(new Error('invalid validUtc'));
       return;
     }
-    dlat = (typeof dlat === 'number' && isFinite(dlat) && dlat > 0) ? dlat : 0.5;
-    dlon = (typeof dlon === 'number' && isFinite(dlon) && dlon > 0) ? dlon : 0.5;
+    var maxCells = 1000;
+    // If caller didn't specify, auto-pick from bbox to stay under limit.
+    if (!(typeof dlat === 'number' && isFinite(dlat) && dlat > 0) ||
+        !(typeof dlon === 'number' && isFinite(dlon) && dlon > 0)) {
+      var step = pickGridStepForBbox(box, maxCells);
+      dlat = step;
+      dlon = step;
+    } else {
+      dlat = dlat;
+      dlon = dlon;
+    }
+    var cellsLog = approxGridCells(box, dlat, dlon);
+    console.log('[GFS-grid] bbox=' +
+      Math.abs(box.north - box.south).toFixed(1) + 'x' + Math.abs(box.east - box.west).toFixed(1) +
+      ' deg -> dlat/dlon=' + dlat + ', cells~=' + cellsLog);
     var meta = pointMetaFromValid(validUtc);
     var key = gridKey(box, meta.cycle, meta.fhr, dlat, dlon);
     var cached = GRID_CACHE[key];
