@@ -900,7 +900,7 @@ function navTo(tab){
     ensureGfsLoadedForAtm();
     renderGfsAtmTable();
     renderGfsWsTable();
-    if(window.GFS && window.GFS.status === 'loading') {
+    if(window.GFS_POINT && window.GFS_POINT.status === 'loading') {
       startAtmGfsPolling();
     }
   }
@@ -2603,6 +2603,7 @@ var ATM_GFS_WS = 'vws';
 var GFS_ATM_LEVELS_MB = [300, 275, 250, 225, 200, 175, 150];
 var GFS_ATM_COLUMN_CACHE = {};
 var GFS_WS_PT_CACHE = {};
+var GFS_POINT_STATE = { status: 'idle', error: null, key: null };
 
 function setAtmGfsHeat(mode) {
   ATM_GFS_HEAT = mode;
@@ -2692,41 +2693,31 @@ function gfsAtWpIsaFallback(wp, alt, validUtc) {
 }
 
 function gfsAtmBuildVerticalColumn(wp, dbgCol) {
-  if(!window.GFS || window.GFS.status !== 'ready' || typeof gfsValueAt !== 'function') return null;
   var validUtc = gfsAtmValidUtcForWp(wp);
-  var cacheKey = wp.id + '|' + validUtc.getTime();
-  if(GFS_ATM_COLUMN_CACHE[cacheKey]) {
-    if(dbgCol) console.log('[GFS-debug] column cache hit ' + cacheKey);
-    return GFS_ATM_COLUMN_CACHE[cacheKey];
-  }
   var lat = wp.lat;
   var lon = typeof wp.lon === 'number' ? wp.lon : wp.lng;
   if(typeof lat !== 'number' || typeof lon !== 'number') return null;
+  var cacheKey = wp.id + '|' + validUtc.getTime();
+  if(GFS_ATM_COLUMN_CACHE[cacheKey]) {
+    if(dbgCol) console.log('[GFS-debug] point column cache hit ' + cacheKey);
+    return GFS_ATM_COLUMN_CACHE[cacheKey];
+  }
+  if(typeof gfsPointCached !== 'function') return null;
+  var point = gfsPointCached(lat, lon, validUtc);
+  if(!point || !point.levels || !point.levels.length) return null;
   var col = [];
-  var li, lev, hgt, u, v, tmp, sl;
-  for(li = 0; li < GFS_ATM_LEVELS_MB.length; li++) {
-    lev = GFS_ATM_LEVELS_MB[li];
-    hgt = gfsValueAt(lat, lon, lev, 'HGT', validUtc);
-    u = gfsValueAt(lat, lon, lev, 'UGRD', validUtc);
-    v = gfsValueAt(lat, lon, lev, 'VGRD', validUtc);
-    tmp = gfsValueAt(lat, lon, lev, 'TMP', validUtc);
+  var i, lv, hgtFt, flEq;
+  for(i = 0; i < point.levels.length; i++) {
+    lv = point.levels[i];
+    if(!lv) continue;
+    col.push({ lev: lv.mb, hgt: lv.hgt, u: lv.u, v: lv.v, t: lv.t });
     if(dbgCol) {
-      sl = (typeof gfsPickSliceForValid === 'function') ? gfsPickSliceForValid(lev, validUtc) : null;
-      var wantFhrLog = null;
-      var rtDbg = sl && sl.meta && sl.meta.refTime;
-      if(rtDbg && typeof rtDbg.year === 'number') {
-        wantFhrLog = (validUtc.getTime() - Date.UTC(rtDbg.year, rtDbg.month - 1, rtDbg.day,
-          rtDbg.hour, rtDbg.minute, rtDbg.second || 0)) / 3600000;
-      }
-      var hgtFt = hgt !== null && !isNaN(hgt) ? (hgt / 0.3048) : null;
-      var flEq = hgtFt !== null ? (hgtFt / 100) : null;
-      console.log('[GFS-debug] lev=' + lev + 'mb wantFhr=' + wantFhrLog + ' pickedFhr=' + (sl && sl.meta ? sl.meta.fhr : null) +
-        ' metaLev=' + (sl && sl.meta ? sl.meta.lev : null) + ' cycle=' + (sl && sl.meta ? sl.meta.cycle : null) +
-        ' bilin HGT(m)=' + hgt + ' HGT_as_FL~=' + (flEq !== null ? flEq.toFixed(1) : null) +
-        ' U/V/TMP(K)=' + u + ',' + v + ',' + tmp);
+      hgtFt = lv.hgt / 0.3048;
+      flEq = hgtFt / 100;
+      console.log('[GFS-debug] point lev=' + lv.mb + ' cycle=' + point.cycle + ' fhr=' + point.fhr +
+        ' HGT(m)=' + lv.hgt + ' HGT_as_FL~=' + flEq.toFixed(1) +
+        ' U/V/TMP(K)=' + lv.u + ',' + lv.v + ',' + lv.t);
     }
-    if(hgt === null || u === null || v === null || tmp === null) continue;
-    col.push({ lev: lev, hgt: hgt, u: u, v: v, t: tmp });
   }
   col.sort(function(a, b) { return a.hgt - b.hgt; });
   GFS_ATM_COLUMN_CACHE[cacheKey] = col;
@@ -2770,7 +2761,7 @@ function gfsAtmInterpHeightColumn(col, altFt, dbg) {
 }
 
 function gfsAtWp(wpId, alt) {
-  if(!window.GFS || window.GFS.status !== 'ready') return null;
+  if(!window.GFS_POINT || window.GFS_POINT.status !== 'ready') return null;
   if(typeof WP === 'undefined') return null;
   var wp = null;
   for(var i=0;i<WP.length;i++) {
@@ -2784,13 +2775,9 @@ function gfsAtWp(wpId, alt) {
   if(dbg) {
     var lonD = typeof wp.lon === 'number' ? wp.lon : wp.lng;
     console.log('[GFS-debug] gfsAtWp wpId=' + wpId + ' FL=' + alt + ' lat/lon=' + wp.lat + ',' + lonD);
-    console.log('[GFS-debug] GFS.cycle=' + (window.GFS && window.GFS.cycle) + ' validUtc=' + validUtc.toISOString());
-    var ref0 = window.GFS && window.GFS.slices && window.GFS.slices[0] && window.GFS.slices[0].meta;
-    if(ref0 && ref0.refTime && typeof ref0.refTime.year === 'number') {
-      var rtMs = Date.UTC(ref0.refTime.year, ref0.refTime.month - 1, ref0.refTime.day,
-        ref0.refTime.hour, ref0.refTime.minute, ref0.refTime.second || 0);
-      var wantFhr = (validUtc.getTime() - rtMs) / 3600000;
-      console.log('[GFS-debug] wantFhr(~) from ref0=' + wantFhr + ' refTime=', ref0.refTime);
+    if(typeof gfsPointMetaFromValid === 'function') {
+      var pm = gfsPointMetaFromValid(validUtc);
+      console.log('[GFS-debug] point cycle=' + pm.cycle + ' fhr=' + pm.fhr + ' validUtc=' + validUtc.toISOString());
     }
   }
   var col = gfsAtmBuildVerticalColumn(wp, dbgCol);
@@ -2817,24 +2804,66 @@ function gfsAtWp(wpId, alt) {
 }
 
 function ensureGfsLoadedForAtm() {
-  if(window.GFS && (window.GFS.status === 'ready' || window.GFS.status === 'loading')) return;
-  if(typeof gfsLoad !== 'function' || typeof gfsWaypointsFromWP !== 'function' || typeof gfsDepartureUtcDate !== 'function') return;
+  if(typeof gfsPointAt !== 'function') return;
   if(typeof WP === 'undefined' || !WP || !WP.length) return;
-  console.log('[ATM-GFS] auto-loading GFS for atmosphere display');
-  gfsLoad(gfsWaypointsFromWP(), gfsDepartureUtcDate(), null, { padDeg: gfsLoadPadDeg() });
+  var sig = [];
+  var i, w, lo;
+  for(i = 0; i < WP.length; i++) {
+    w = WP[i];
+    lo = (typeof w.lon === 'number') ? w.lon : w.lng;
+    sig.push(w.id + ':' + w.lat + ':' + lo + ':' + (w.ctme || 0));
+  }
+  var key = sig.join('|');
+  if(window.GFS_POINT && window.GFS_POINT.status === 'ready' && window.GFS_POINT.key === key) return;
+  if(window.GFS_POINT && window.GFS_POINT.status === 'loading' && window.GFS_POINT.key === key) return;
+  window.GFS_POINT = { status: 'loading', error: null, key: key };
+  GFS_POINT_STATE = window.GFS_POINT;
+  var remain = 0;
+  var firstErr = null;
+  for(i = 0; i < WP.length; i++) {
+    w = WP[i];
+    lo = (typeof w.lon === 'number') ? w.lon : w.lng;
+    if(typeof w.lat !== 'number' || typeof lo !== 'number') continue;
+    remain++;
+  }
+  if(remain === 0) {
+    window.GFS_POINT.status = 'error';
+    window.GFS_POINT.error = 'no valid waypoint coordinates';
+    return;
+  }
+  function doneOne(err) {
+    if(err && !firstErr) firstErr = err;
+    remain--;
+    if(remain > 0) return;
+    if(firstErr) {
+      window.GFS_POINT.status = 'error';
+      window.GFS_POINT.error = String(firstErr && firstErr.message ? firstErr.message : firstErr);
+    } else {
+      window.GFS_POINT.status = 'ready';
+      window.GFS_POINT.error = null;
+    }
+    renderGfsAtmTable();
+    renderGfsWsTable();
+  }
+  for(i = 0; i < WP.length; i++) {
+    w = WP[i];
+    lo = (typeof w.lon === 'number') ? w.lon : w.lng;
+    if(typeof w.lat !== 'number' || typeof lo !== 'number') continue;
+    gfsPointAt(w.lat, lo, gfsAtmValidUtcForWp(w), doneOne);
+  }
 }
 
 var atmGfsPollId = null;
 function startAtmGfsPolling() {
   if(atmGfsPollId) return;
   atmGfsPollId = setInterval(function(){
-    if(!window.GFS) return;
-    if(window.GFS.status === 'ready') {
+    if(!window.GFS_POINT) return;
+    if(window.GFS_POINT.status === 'ready') {
       clearInterval(atmGfsPollId);
       atmGfsPollId = null;
       renderGfsAtmTable();
       renderGfsWsTable();
-    } else if(window.GFS.status === 'error') {
+    } else if(window.GFS_POINT.status === 'error') {
       clearInterval(atmGfsPollId);
       atmGfsPollId = null;
       renderGfsAtmTable();
@@ -2851,11 +2880,11 @@ function renderGfsAtmTable() {
       'Flight Plan で NAV LOG を Apply すると、ここに GFS の Wind/Temp が表示されます</div>';
     return;
   }
-  if(!window.GFS || window.GFS.status !== 'ready') {
-    if(window.GFS && window.GFS.status === 'error') {
-      wrap.innerHTML = '<div style="color:#ef5350;padding:24px;text-align:center;font-size:1em;">GFS ロードエラー: ' + (window.GFS.error || 'unknown') + '</div>';
+  if(!window.GFS_POINT || window.GFS_POINT.status !== 'ready') {
+    if(window.GFS_POINT && window.GFS_POINT.status === 'error') {
+      wrap.innerHTML = '<div style="color:#ef5350;padding:24px;text-align:center;font-size:1em;">GFS Point ロードエラー: ' + (window.GFS_POINT.error || 'unknown') + '</div>';
     } else {
-      wrap.innerHTML = '<div style="color:#90a4ae;padding:24px;text-align:center;font-size:1em;">GFS データをロード中...</div>';
+      wrap.innerHTML = '<div style="color:#90a4ae;padding:24px;text-align:center;font-size:1em;">GFS Point データをロード中...</div>';
     }
     return;
   }
@@ -2946,23 +2975,21 @@ function renderGfsWsTable() {
       'Flight Plan で NAV LOG を Apply すると、ここに GFS の Wind Shear / Turbulence が表示されます</div>';
     return;
   }
-  if(!window.GFS || window.GFS.status !== 'ready') {
-    if(window.GFS && window.GFS.status === 'error') {
-      wrap.innerHTML = '<div style="color:#ef5350;padding:24px;text-align:center;font-size:1em;">GFS ロードエラー: ' + (window.GFS.error || 'unknown') + '</div>';
+  if(!window.GFS_POINT || window.GFS_POINT.status !== 'ready') {
+    if(window.GFS_POINT && window.GFS_POINT.status === 'error') {
+      wrap.innerHTML = '<div style="color:#ef5350;padding:24px;text-align:center;font-size:1em;">GFS Point ロードエラー: ' + (window.GFS_POINT.error || 'unknown') + '</div>';
     } else {
-      wrap.innerHTML = '<div style="color:#90a4ae;padding:24px;text-align:center;font-size:1em;">GFS データをロード中...</div>';
+      wrap.innerHTML = '<div style="color:#90a4ae;padding:24px;text-align:center;font-size:1em;">GFS Point データをロード中...</div>';
     }
     return;
   }
   GFS_WS_PT_CACHE = {};
-  if(typeof GfsRadar === 'undefined' || !GfsRadar.nearestFhr || !GfsRadar.computeAtCell || !GfsRadar.methodValue ||
-      !GfsRadar.getColor || !GfsRadar.bucketCategoryIndex) {
-    wrap.innerHTML = '<div style="color:#ef5350;padding:24px;text-align:center;font-size:1em;">GfsRadar が利用できません（gfs-radar-layer.js を確認してください）</div>';
-    return;
-  }
 
   function gfsWsPaletteCell(mode, value) {
     if(value === null || value === undefined || isNaN(value)) return { bg: 'transparent', fg: null };
+    if(typeof GfsRadar === 'undefined' || !GfsRadar.getColor || !GfsRadar.bucketCategoryIndex) {
+      return { bg: 'transparent', fg: null };
+    }
     var bg = GfsRadar.getColor(mode, value);
     if(!bg) return { bg: 'transparent', fg: null };
     var idx = GfsRadar.bucketCategoryIndex(mode, value);
@@ -2973,29 +3000,8 @@ function renderGfsWsTable() {
     return { bg: bg, fg: fg };
   }
 
-  function findSliceFhrLev(fhr, levMb) {
-    var s = window.GFS && window.GFS.slices;
-    if(!s) return null;
-    var j;
-    for(j = 0; j < s.length; j++) {
-      if(s[j].meta.fhr === fhr && s[j].meta.lev === levMb) return s[j];
-    }
-    return null;
-  }
   function validUtcForWp(wp) {
-    var ato;
-    if(typeof DEP_ATO_MIN === 'number' && DEP_ATO_MIN !== null) {
-      var now = new Date();
-      ato = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
-        Math.floor(DEP_ATO_MIN/60), DEP_ATO_MIN%60, 0));
-    } else if(typeof DEP_STD_MIN === 'number' && DEP_STD_MIN !== null) {
-      var now2 = new Date();
-      ato = new Date(Date.UTC(now2.getUTCFullYear(), now2.getUTCMonth(), now2.getUTCDate(),
-        Math.floor(DEP_STD_MIN/60), DEP_STD_MIN%60, 0));
-    } else {
-      ato = new Date();
-    }
-    return new Date(ato.getTime() + (wp.ctme || 0) * 60000);
+    return gfsAtmValidUtcForWp(wp);
   }
 
   function wsInterpScalarByHeight(pts, hTarget) {
@@ -3024,27 +3030,29 @@ function renderGfsWsTable() {
     var lon = typeof wp.lon === 'number' ? wp.lon : wp.lng;
     if(typeof lat !== 'number' || typeof lon !== 'number') return null;
     var vu = validUtcForWp(wp);
-    var fhr = GfsRadar.nearestFhr(vu);
-    if(fhr === null) return null;
     var mode = (typeof ATM_GFS_WS === 'string') ? ATM_GFS_WS : 'vws';
     var cacheKey = wp.id + '|' + vu.getTime() + '|' + mode;
     var pts = GFS_WS_PT_CACHE[cacheKey];
     if(!pts) {
       pts = [];
-      var li, lev, sCenter, ij, c, val;
-      for(li = 0; li < GFS_ATM_LEVELS_MB.length; li++) {
-        lev = GFS_ATM_LEVELS_MB[li];
-        sCenter = findSliceFhrLev(fhr, lev);
-        if(!sCenter || !sCenter.grid) continue;
-        ij = gfsLatLonToCellIxIy(lat, lon, sCenter.grid);
-        if(!ij) continue;
-        c = GfsRadar.computeAtCell(fhr, lev, ij.ix, ij.iy);
-        if(!c || c.h === null || c.h === undefined || isNaN(c.h)) continue;
-        if(mode === 'ti1') val = GfsRadar.methodValue('TI1', c);
-        else if(mode === 'ti2') val = GfsRadar.methodValue('TI2', c);
-        else val = GfsRadar.methodValue('VWS', c);
-        if(val === null || isNaN(val)) continue;
-        pts.push({ h: c.h, val: val });
+      var col = gfsAtmBuildVerticalColumn(wp, false);
+      if(col && col.length >= 2) {
+        var i, lo, hi, dz, du, dv, vws;
+        for(i = 0; i < col.length - 1; i++) {
+          lo = col[i];
+          hi = col[i + 1];
+          dz = hi.hgt - lo.hgt;
+          if(Math.abs(dz) < 1) continue;
+          du = hi.u - lo.u;
+          dv = hi.v - lo.v;
+          vws = Math.sqrt(du * du + dv * dv) / Math.abs(dz);
+          if(mode === 'ti1' || mode === 'ti2') {
+            // point query has no horizontal derivatives; use VWS proxy for TI display
+            pts.push({ h: (lo.hgt + hi.hgt) / 2, val: vws });
+          } else {
+            pts.push({ h: (lo.hgt + hi.hgt) / 2, val: vws });
+          }
+        }
       }
       pts.sort(function(a, b) { return a.h - b.h; });
       GFS_WS_PT_CACHE[cacheKey] = pts;

@@ -6,6 +6,7 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
 
   var LEVELS_MB = [300, 275, 250, 225, 200, 175, 150];
   var VARS_DEFAULT = 'UGRD,VGRD,TMP,HGT';
+  var POINT_CACHE = {};
 
   function pad2(n) {
     return (n < 10 ? '0' : '') + n;
@@ -174,6 +175,134 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
       '&south=' + box.south +
       '&north=' + box.north +
       '&vars=' + encodeURIComponent(VARS_DEFAULT);
+  }
+
+  function roundCoordForKey(v) {
+    return Math.round(v * 1000) / 1000;
+  }
+
+  function clamp(v, lo, hi) {
+    if (v < lo) return lo;
+    if (v > hi) return hi;
+    return v;
+  }
+
+  function pointMetaFromValid(validUtc) {
+    var cycle = pickGfsCycle(validUtc);
+    var y = parseInt(cycle.slice(0, 4), 10);
+    var m = parseInt(cycle.slice(4, 6), 10) - 1;
+    var d = parseInt(cycle.slice(6, 8), 10);
+    var h = parseInt(cycle.slice(8, 10), 10);
+    var cycleMs = Date.UTC(y, m, d, h, 0, 0);
+    var hrs = (validUtc.getTime() - cycleMs) / 3600000;
+    if (!isFinite(hrs)) hrs = 0;
+    var fhr = Math.round(hrs / 3) * 3;
+    fhr = clamp(fhr, 0, 384);
+    return { cycle: cycle, fhr: fhr };
+  }
+
+  function pointKey(lat, lon, cycle, fhr) {
+    return roundCoordForKey(lat) + '|' + roundCoordForKey(lon) + '|' + cycle + '|' + fhr;
+  }
+
+  function pointUrl(lat, lon, cycle, fhr) {
+    var base = GFS_PROXY.replace(/\/$/, '');
+    return base + '/api/point?lat=' + encodeURIComponent(lat) +
+      '&lon=' + encodeURIComponent(lon) +
+      '&cycle=' + encodeURIComponent(cycle) +
+      '&fhr=' + encodeURIComponent(fhr);
+  }
+
+  function normalizePointLevels(json) {
+    if (!json || !json.levels || !json.levels.length) return null;
+    var out = [];
+    var i, lv;
+    for (i = 0; i < json.levels.length; i++) {
+      lv = json.levels[i];
+      if (!lv) continue;
+      if (typeof lv.mb !== 'number') continue;
+      if (typeof lv.hgt_m !== 'number' || isNaN(lv.hgt_m)) continue;
+      if (typeof lv.u_ms !== 'number' || isNaN(lv.u_ms)) continue;
+      if (typeof lv.v_ms !== 'number' || isNaN(lv.v_ms)) continue;
+      if (typeof lv.tmp_k !== 'number' || isNaN(lv.tmp_k)) continue;
+      out.push({
+        mb: lv.mb,
+        hgt: lv.hgt_m,
+        u: lv.u_ms,
+        v: lv.v_ms,
+        t: lv.tmp_k
+      });
+    }
+    if (!out.length) return null;
+    out.sort(function(a, b) { return a.hgt - b.hgt; });
+    return out;
+  }
+
+  function gfsPointAt(lat, lon, validUtc, done) {
+    if (!(validUtc instanceof Date) || isNaN(validUtc.getTime())) {
+      if (typeof done === 'function') done(new Error('invalid validUtc'));
+      return;
+    }
+    var meta = pointMetaFromValid(validUtc);
+    var key = pointKey(lat, lon, meta.cycle, meta.fhr);
+    var cached = POINT_CACHE[key];
+    if (cached && cached.status === 'ready') {
+      if (typeof done === 'function') done(null, cached.data);
+      return;
+    }
+    if (cached && cached.status === 'loading') {
+      cached.waiters.push(done);
+      return;
+    }
+    POINT_CACHE[key] = { status: 'loading', waiters: [done], data: null, error: null };
+    var url = pointUrl(lat, lon, meta.cycle, meta.fhr);
+    fetch(url, { method: 'GET', cache: 'default' }).then(function(r) {
+      if (!r.ok) {
+        var e = new Error('HTTP ' + r.status);
+        e.status = r.status;
+        throw e;
+      }
+      return r.json();
+    }).then(function(json) {
+      var levels = normalizePointLevels(json);
+      if (!levels) throw new Error('point levels empty');
+      var data = {
+        cycle: json.cycle || meta.cycle,
+        fhr: (typeof json.fhr === 'number') ? json.fhr : meta.fhr,
+        validUtc: json.validUtc || null,
+        lat: (typeof json.lat === 'number') ? json.lat : lat,
+        lon: (typeof json.lon === 'number') ? json.lon : lon,
+        levels: levels
+      };
+      var rec = POINT_CACHE[key];
+      rec.status = 'ready';
+      rec.data = data;
+      var ws = rec.waiters.slice();
+      rec.waiters = [];
+      var i;
+      for (i = 0; i < ws.length; i++) if (typeof ws[i] === 'function') ws[i](null, data);
+    }).catch(function(err) {
+      var rec = POINT_CACHE[key];
+      if (!rec) return;
+      rec.status = 'error';
+      rec.error = String(err && err.message ? err.message : err);
+      var ws = rec.waiters.slice();
+      rec.waiters = [];
+      var i;
+      for (i = 0; i < ws.length; i++) if (typeof ws[i] === 'function') ws[i](err);
+    });
+  }
+
+  function gfsPointCached(lat, lon, validUtc) {
+    if (!(validUtc instanceof Date) || isNaN(validUtc.getTime())) return null;
+    var meta = pointMetaFromValid(validUtc);
+    var key = pointKey(lat, lon, meta.cycle, meta.fhr);
+    var rec = POINT_CACHE[key];
+    return (rec && rec.status === 'ready') ? rec.data : null;
+  }
+
+  function gfsPointClearCache() {
+    POINT_CACHE = {};
   }
 
   function refTimeToMs(rt) {
@@ -366,6 +495,10 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
 
   global.gfsLoad = gfsLoad;
   global.gfsValueAt = gfsValueAt;
+  global.gfsPointAt = gfsPointAt;
+  global.gfsPointCached = gfsPointCached;
+  global.gfsPointMetaFromValid = pointMetaFromValid;
+  global.gfsPointClearCache = gfsPointClearCache;
   global.gfsPickSliceForValid = function (levMb, validUtc) {
     return pickSliceForValid(global.GFS, levMb, validUtc);
   };
