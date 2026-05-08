@@ -4151,16 +4151,8 @@ function applyGfsRadarForCurrentMethod() {
   if(typeof gfsPointAt !== 'function') return;
   var routePts = buildGfsRadarRoutePoints();
   if(!routePts || !routePts.length) return;
-  if(!window.GFS_POINT) window.GFS_POINT = {};
-  window.GFS_POINT.status = 'loading';
-  window.GFS_POINT.error = null;
-  preloadGfsRadarPoints(routePts, function(err){
-    if(err) {
-      window.GFS_POINT.status = 'error';
-      window.GFS_POINT.error = String(err && err.message ? err.message : err);
-      console.warn('[GfsRadar] point preload failed', err);
-      return;
-    }
+  var preloadKey = gfsRadarBuildPreloadKey(routePts);
+  var renderReady = function(){
     window.GFS_POINT.status = 'ready';
     gfsRadarLayer = GfsRadar.render(map, {
       method: methodKey,
@@ -4172,6 +4164,28 @@ function applyGfsRadarForCurrentMethod() {
       tiOffsetNm: 200
     });
     bringTop();
+  };
+  if(!GFS_RADAR_PRELOAD_STATE.inflight &&
+     GFS_RADAR_PRELOAD_STATE.lastDoneKey === preloadKey &&
+     GFS_RADAR_PRELOAD_STATE.lastStatus === 'ready') {
+    console.log('[GfsRadar] skip preload on method change (cache ready)');
+    if(!window.GFS_POINT) window.GFS_POINT = {};
+    window.GFS_POINT.status = 'ready';
+    renderReady();
+    bringTop();
+    return;
+  }
+  if(!window.GFS_POINT) window.GFS_POINT = {};
+  window.GFS_POINT.status = 'loading';
+  window.GFS_POINT.error = null;
+  preloadGfsRadarPoints(routePts, function(err){
+    if(err) {
+      window.GFS_POINT.status = 'error';
+      window.GFS_POINT.error = String(err && err.message ? err.message : err);
+      console.warn('[GfsRadar] point preload failed', err);
+      return;
+    }
+    renderReady();
   });
   bringTop();
 }
@@ -4304,9 +4318,8 @@ function gfsRadarBuildPreloadKey(routePts) {
     if(!p) continue;
     parts.push((p.id || 'P') + ':' + Number(p.lat).toFixed(3) + ':' + Number(p.lon).toFixed(3) + ':' + (p.ctme || 0));
   }
-  var m = WX_GFS_CORR_METHOD || '';
-  var fl = (typeof CURRENT_FL === 'number') ? CURRENT_FL : '';
-  return m + '|' + fl + '|' + parts.join(',');
+  var dep = (typeof DEP_ATO_MIN === 'number' ? DEP_ATO_MIN : (typeof DEP_STD_MIN === 'number' ? DEP_STD_MIN : -1));
+  return dep + '|' + parts.join(',');
 }
 
 function preloadGfsRadarPoints(routePts, done) {

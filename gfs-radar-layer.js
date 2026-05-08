@@ -724,9 +724,10 @@
       var pitchNm = 20;
       var lateralStepNm = 20;
       var halfCellNm = 10;
+      var corridorInnerNm = Math.max(0, corridorNM - halfCellNm);
       var lateralOffsets = [];
       lateralOffsets.push(0);
-      for (var o = lateralStepNm; o <= corridorNM + 1e-6; o += lateralStepNm) {
+      for (var o = lateralStepNm; o <= corridorInnerNm + 1e-6; o += lateralStepNm) {
         lateralOffsets.push(o);
         lateralOffsets.push(-o);
       }
@@ -756,7 +757,7 @@
           if (!colorMid) { nNull++; continue; }
           for (var lo = 0; lo < lateralOffsets.length; lo++) {
             var latOffPt = offsetPointByNm(center, segHeading, lateralOffsets[lo]);
-            if (useFilter && minDistToRoutePolylineNM(latOffPt.lat, latOffPt.lon, routeWps, corridorNM) > corridorNM) {
+            if (useFilter && minDistToRoutePolylineNM(latOffPt.lat, latOffPt.lon, routeWps, corridorInnerNm) > corridorInnerNm) {
               nFiltered++;
               continue;
             }
