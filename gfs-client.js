@@ -374,21 +374,18 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
     }
     console.log("[GFS-grid debug] candidates check:", JSON.stringify(candidates_eval_result));
 
-    // If caller didn't specify, auto-pick from bbox to stay under limit.
-    if (!(typeof dlat === 'number' && isFinite(dlat) && dlat > 0) ||
-        !(typeof dlon === 'number' && isFinite(dlon) && dlon > 0)) {
-      var step = pickGridStep(box.north, box.south, box.east, box.west);
-      dlat = step;
-      dlon = step;
-    }
-    var nlatLog = Math.ceil(dLatAbs / dlat) + 1;
-    var nlonLog = Math.ceil(dLonAbs / dlon) + 1;
+    // Always use helper result for request (ignore function args dlat/dlon).
+    var step = pickGridStep(box.north, box.south, box.east, box.west);
+    var reqDlat = step;
+    var reqDlon = step;
+    var nlatLog = Math.ceil(dLatAbs / reqDlat) + 1;
+    var nlonLog = Math.ceil(dLonAbs / reqDlon) + 1;
     var cellsLog = nlatLog * nlonLog;
-    console.log("[GFS-grid debug] picked dlat=" + dlat + " dlon=" + dlon);
+    console.log("[GFS-grid debug] picked dlat=" + reqDlat + " dlon=" + reqDlon);
     console.log('[GFS-grid] bbox=' + dLatAbs.toFixed(1) + 'x' + dLonAbs.toFixed(1) +
-      ' deg -> dlat/dlon=' + dlat + ', cells~=' + cellsLog);
+      ' deg -> dlat/dlon=' + reqDlat + ', cells~=' + cellsLog);
     var meta = pointMetaFromValid(validUtc);
-    var key = gridKey(box, meta.cycle, meta.fhr, dlat, dlon);
+    var key = gridKey(box, meta.cycle, meta.fhr, reqDlat, reqDlon);
     var cached = GRID_CACHE[key];
     if (cached && cached.status === 'ready') {
       if (typeof done === 'function') done(null, cached.data);
@@ -399,8 +396,8 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
       return;
     }
     GRID_CACHE[key] = { status: 'loading', waiters: [done], data: null, error: null };
-    var url = gridUrl(box, meta.cycle, meta.fhr, dlat, dlon);
-    console.log("[GFS-grid debug] request url params dlat=" + dlat + " dlon=" + dlon + " url=" + url);
+    var url = gridUrl(box, meta.cycle, meta.fhr, reqDlat, reqDlon);
+    console.log("[GFS-grid debug] request url params dlat=" + reqDlat + " dlon=" + reqDlon + " url=" + url);
     fetch(url, { method: 'GET', cache: 'default' }).then(function(r) {
       if (!r.ok) {
         var e = new Error('HTTP ' + r.status);
@@ -415,8 +412,8 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
         fhr: (typeof json.fhr === 'number') ? json.fhr : meta.fhr,
         validUtc: json.validUtc || null,
         bbox: json.bbox || { N: box.north, S: box.south, W: box.west, E: box.east },
-        dlat: json.dlat || dlat,
-        dlon: json.dlon || dlon,
+        dlat: json.dlat || reqDlat,
+        dlon: json.dlon || reqDlon,
         nlat: json.nlat,
         nlon: json.nlon,
         levels: json.levels
