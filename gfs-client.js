@@ -325,24 +325,27 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
       '&dlon=' + encodeURIComponent(dlon);
   }
 
-  function approxGridCells(box, dlat, dlon) {
-    var spanLat = Math.abs(box.north - box.south);
-    var spanLon = Math.abs(box.east - box.west);
-    var nlat = Math.floor(spanLat / dlat + 0.5) + 1;
-    var nlon = Math.floor(spanLon / dlon + 0.5) + 1;
+  function approxGridCells(box, step) {
+    // Spec: nlat = ceil(dLat/step)+1, nlon = ceil(dLon/step)+1
+    var dLat = box.north - box.south;
+    var dLon = box.east - box.west;
+    if (!isFinite(dLat) || dLat < 0) dLat = Math.abs(dLat);
+    if (!isFinite(dLon) || dLon < 0) dLon = Math.abs(dLon);
+    var nlat = Math.ceil(dLat / step) + 1;
+    var nlon = Math.ceil(dLon / step) + 1;
     if (nlat < 1) nlat = 1;
     if (nlon < 1) nlon = 1;
-    return nlat * nlon;
+    return { nlat: nlat, nlon: nlon, cells: nlat * nlon, dLat: dLat, dLon: dLon };
   }
 
   function pickGridStepForBbox(box, maxCells) {
-    // choose smallest (finest) step that stays under maxCells
+    // Spec: fine -> coarse, pick first that satisfies cells <= maxCells
     var cand = [0.25, 0.5, 1.0, 1.5, 2.0];
     var best = cand[cand.length - 1];
     for (var i = 0; i < cand.length; i++) {
-      var s = cand[i];
-      var cells = approxGridCells(box, s, s);
-      if (cells <= maxCells) { best = s; break; }
+      var step = cand[i];
+      var est = approxGridCells(box, step);
+      if (est.cells <= maxCells) { best = step; break; }
     }
     return best;
   }
@@ -357,21 +360,17 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
       if (typeof done === 'function') done(new Error('invalid validUtc'));
       return;
     }
-    var maxCells = 1000;
+    var MAX_CELLS = 1000;
     // If caller didn't specify, auto-pick from bbox to stay under limit.
     if (!(typeof dlat === 'number' && isFinite(dlat) && dlat > 0) ||
         !(typeof dlon === 'number' && isFinite(dlon) && dlon > 0)) {
-      var step = pickGridStepForBbox(box, maxCells);
+      var step = pickGridStepForBbox(box, MAX_CELLS);
       dlat = step;
       dlon = step;
-    } else {
-      dlat = dlat;
-      dlon = dlon;
     }
-    var cellsLog = approxGridCells(box, dlat, dlon);
-    console.log('[GFS-grid] bbox=' +
-      Math.abs(box.north - box.south).toFixed(1) + 'x' + Math.abs(box.east - box.west).toFixed(1) +
-      ' deg -> dlat/dlon=' + dlat + ', cells~=' + cellsLog);
+    var estLog = approxGridCells(box, dlat);
+    console.log('[GFS-grid] bbox=' + estLog.dLat.toFixed(1) + 'x' + estLog.dLon.toFixed(1) +
+      ' deg -> dlat/dlon=' + dlat + ', cells~=' + estLog.cells);
     var meta = pointMetaFromValid(validUtc);
     var key = gridKey(box, meta.cycle, meta.fhr, dlat, dlon);
     var cached = GRID_CACHE[key];
