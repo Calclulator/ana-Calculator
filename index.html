@@ -129,15 +129,37 @@
   .wsm-body .wsm-note{font-size:13px;color:#ffb74d;margin:0 0 10px;}
   .ws-method-help-btn{min-width:44px;min-height:36px;padding:6px 12px!important;display:inline-flex;align-items:center;justify-content:center;}
   .ws-method-help-ico{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;border:1.5px solid #4fc3f7;color:#4fc3f7;font-size:15px;font-weight:bold;font-style:italic;font-family:Georgia,'Times New Roman',serif;line-height:1;}
+  /* Crew Rest Calculator */
+  #crew-rest-panel{overflow:auto;}
+  #crew-rest-panel .cr-wrap{display:flex;flex:1;min-height:0;gap:14px;padding:12px;flex-wrap:wrap;}
+  #crew-rest-panel .cr-col{flex:1;min-width:260px;display:flex;flex-direction:column;gap:10px;}
+  #crew-rest-panel .cr-box{border:1px solid #1e2a38;border-radius:6px;padding:12px;background:#080a12;}
+  #crew-rest-panel .cr-box h3{margin:0 0 10px;font-size:14px;color:#4fc3f7;letter-spacing:.04em;}
+  #crew-rest-panel .cr-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
+  #crew-rest-panel .cr-row label{font-size:12px;color:#90a4ae;min-width:140px;}
+  #crew-rest-panel .cr-inp{width:72px;background:#0d1117;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:inherit;font-size:14px;padding:6px 8px;}
+  #crew-rest-panel .cr-note{font-size:12px;color:#90a4ae;line-height:1.55;margin-top:6px;}
+  #crew-rest-panel .cr-block{border:1px solid #243044;border-radius:4px;padding:8px 10px;margin-bottom:6px;background:#0d1117;}
+  #crew-rest-panel .cr-block .cr-bt{font-size:13px;color:#4fc3f7;font-weight:bold;}
+  #crew-rest-panel .cr-block .cr-sub{font-size:12px;color:#cfd8dc;margin-top:4px;}
+  #crew-rest-panel .cr-summary{font-size:12px;color:#ffb74d;margin-top:8px;padding-top:8px;border-top:1px solid #243044;}
+  #crew-rest-panel .cr-out-meta{font-size:13px;color:#cfd8dc;margin-bottom:8px;}
   @media print{
     #ws-method-help-overlay,#ws-method-help-panel{display:none!important;}
+    #nav-overlay,#nav-panel,#metar-overlay,#metar-panel{display:none!important;}
     #tab-bar,.bar,#fp-navlog,#statusbar{display:none!important;}
-    #wx-panel{display:none!important;}
-    #fp-panel{display:flex!important;}
+    #wx-panel,#atm-panel,#atm-gfs-panel{display:none!important;}
+    body.print-crew #fp-panel{display:none!important;}
+    body.print-crew #crew-rest-panel{display:flex!important;}
+    body:not(.print-crew) #crew-rest-panel{display:none!important;}
+    body:not(.print-crew) #fp-panel{display:flex!important;}
     .fp-wrap{overflow:visible!important;}
+    #crew-rest-panel .cr-wrap{overflow:visible!important;}
     body{background:white!important;color:black!important;}
     .fp-table th{background:#eee!important;color:#333!important;}
     .fp-table td{color:#000!important;}
+    #crew-rest-panel .cr-box,#crew-rest-panel .cr-block{background:#fff!important;border-color:#ccc!important;}
+    #crew-rest-panel .cr-inp{background:#fff!important;color:#111!important;}
   }
 </style>
 </head>
@@ -393,6 +415,49 @@
     ※ GFS-VWS は暫定 calibration（2026-05-07）、再調整予定。手法の詳細・閾値の注意・共通補足は横の Method 解説（ⓘ）を参照。
   </div>
 </div><!-- atm-gfs-panel -->
+<!-- ===== CREW REST CALCULATOR ===== -->
+<div id="crew-rest-panel" class="panel">
+  <div class="bar">
+    <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.06em;font-size:1em;">Crew Rest Calculator</span>
+    <span style="font-size:0.95em;color:#90a4ae;margin-left:10px;">UTC / HHMM</span>
+  </div>
+  <div style="padding:8px 12px;border-bottom:1px solid #1e2a38;display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+    <span style="font-size:0.95em;color:#90a4ae;">編成タイプ:</span>
+    <select id="crew-rest-formation-sel" class="btn" onchange="onCrewRestFormationChange()" style="font-size:14px;padding:6px 10px;max-width:320px;">
+      <option value="triple">3分割 (Triple Crew: CAP / COP1 / COP2)</option>
+      <option value="augmented">6分割 (Augmented: CAP / CAPM / COP)</option>
+      <option value="double">ダブル編成 (Double Crew: CAP / CAPM / COP1 / COP2)</option>
+    </select>
+    <button type="button" class="btn" onclick="computeCrewRest()" style="font-size:14px;padding:6px 14px;">計算</button>
+    <button type="button" class="btn" onclick="clearCrewRest()" style="font-size:14px;padding:6px 14px;">Clear data</button>
+  </div>
+  <div style="font-size:12px;color:#90a4ae;padding:6px 12px;border-bottom:1px solid #1e2a38;line-height:1.55;">
+    ※ 余り分は Rest1 前と最終 Rest 後に折半配置 (奇数分は後半に+1)。3分割では Rest1 前 / Rest3 後、6分割・ダブルでは最初の Rest 前 / 最後の Rest 後。
+  </div>
+  <div class="cr-wrap">
+    <div class="cr-col" id="crew-rest-col-in">
+      <div class="cr-box" id="crew-rest-in-single">
+        <h3>入力</h3>
+        <div class="cr-row"><label>Start time (UTC)</label><input id="cr-start" class="cr-inp" type="text" inputmode="numeric" placeholder="0105" maxlength="4"></div>
+        <div class="cr-row"><label>End time (UTC)</label><input id="cr-end" class="cr-inp" type="text" inputmode="numeric" placeholder="1300" maxlength="4"></div>
+      </div>
+      <div class="cr-box" id="crew-rest-in-double" style="display:none;">
+        <h3>CAP / CAPM Rest period</h3>
+        <div class="cr-row"><label>Start time (UTC)</label><input id="cr-cap-start" class="cr-inp" type="text" placeholder="0105" maxlength="4"></div>
+        <div class="cr-row"><label>End time (UTC)</label><input id="cr-cap-end" class="cr-inp" type="text" placeholder="1300" maxlength="4"></div>
+        <h3 style="margin-top:14px;">COP1 / COP2 Rest period</h3>
+        <div class="cr-row"><label>Start time (UTC)</label><input id="cr-cop-start" class="cr-inp" type="text" placeholder="0105" maxlength="4"></div>
+        <div class="cr-row"><label>End time (UTC)</label><input id="cr-cop-end" class="cr-inp" type="text" placeholder="1300" maxlength="4"></div>
+      </div>
+    </div>
+    <div class="cr-col" id="crew-rest-col-out">
+      <div class="cr-box" id="crew-rest-out">
+        <h3>結果</h3>
+        <div id="crew-rest-out-body" class="cr-note" style="color:#cfd8dc;">HHMM を入力して「計算」を押してください。</div>
+      </div>
+    </div>
+  </div>
+</div><!-- crew-rest-panel -->
 </div><!-- #panels -->
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -778,7 +843,7 @@ var lightningReconnectTimer = null;
 // TABS
 // =====================================================================
 function showTab(name) {
-  ['wx','fp','atm','atm-gfs'].forEach(function(n) {
+  ['wx','fp','atm','atm-gfs','crew-rest'].forEach(function(n) {
     document.getElementById(n+'-panel').classList.remove('active');
     var ni=document.getElementById('nav-'+n);
     if(ni) ni.classList.toggle('nav-act', n===name);
@@ -834,6 +899,14 @@ window.addEventListener('load', function(){
     }
     setTimeout(function(){ showTab('fp'); }, 300);
   }, 200);
+  window.addEventListener('beforeprint', function(){
+    var p = document.querySelector('#panels .panel.active');
+    if(p && p.id === 'crew-rest-panel') document.body.classList.add('print-crew');
+    else document.body.classList.remove('print-crew');
+  });
+  window.addEventListener('afterprint', function(){
+    document.body.classList.remove('print-crew');
+  });
 });
 
 // =====================================================================
@@ -852,6 +925,217 @@ function hhmmToMins(str) {
   if(isNaN(h)||isNaN(m)||m>59) return null;
   return h*60+m;
 }
+
+// =====================================================================
+// CREW REST CALCULATOR
+// =====================================================================
+function crewFlightDurationMins(startMin, endMin) {
+  if(startMin === null || endMin === null) return null;
+  var e = endMin;
+  if(e <= startMin) e += 1440;
+  return e - startMin;
+}
+
+function crewSplitRemainderPads(totalRem) {
+  var pre = Math.floor(totalRem / 2);
+  var post = totalRem - pre;
+  return { pre: pre, post: post };
+}
+
+function crewFmtDurationMins(totalM) {
+  var h = Math.floor(totalM / 60);
+  var m = totalM % 60;
+  return h + 'h ' + ('0' + m).slice(-2) + 'm';
+}
+
+function crewFmtUtcFromStart(startMin, offsetMins) {
+  var abs = startMin + offsetMins;
+  var day = Math.floor(abs / 1440);
+  var mo = ((abs % 1440) + 1440) % 1440;
+  var hh = ('0' + Math.floor(mo / 60)).slice(-2);
+  var mm = ('0' + (mo % 60)).slice(-2);
+  var suf = day > 0 ? ' (翌日)' : '';
+  return hh + ':' + mm + suf;
+}
+
+function crewEqualSplitRestBlocks(flightMins, n) {
+  var eachIdeal = flightMins / n;
+  var eachRest = Math.floor(eachIdeal / 5) * 5;
+  var used = n * eachRest;
+  var R = flightMins - used;
+  var pads = crewSplitRemainderPads(R);
+  return { eachRest: eachRest, prePad: pads.pre, postPad: pads.post };
+}
+
+function crewRatioFiveSegsAbsorbLast(F) {
+  var ratios = [2, 3.5, 3, 3.5, 2];
+  var sumR = 14;
+  var segs = [0, 0, 0, 0, 0];
+  var i;
+  for(i = 0; i < 4; i++) {
+    var raw = F * ratios[i] / sumR;
+    segs[i] = Math.floor(raw / 5) * 5;
+  }
+  segs[4] = F - segs[0] - segs[1] - segs[2] - segs[3];
+  return { segs: segs, prePad: 0, postPad: 0 };
+}
+
+function crewCopFourEqualWithPads(F) {
+  var rawEach = F / 4;
+  var each = Math.floor(rawEach / 5) * 5;
+  var R = F - 4 * each;
+  var pads = crewSplitRemainderPads(R);
+  return { segs: [each, each, each, each], prePad: pads.pre, postPad: pads.post };
+}
+
+function crewHtmlBlock(title, sub, durM) {
+  return '<div class="cr-block"><div class="cr-bt">' + title + '</div><div class="cr-sub">' + sub + '</div><div class="cr-sub">' + crewFmtDurationMins(durM) + '</div></div>';
+}
+
+function onCrewRestFormationChange() {
+  var sel = document.getElementById('crew-rest-formation-sel');
+  var v = sel ? sel.value : 'triple';
+  var single = document.getElementById('crew-rest-in-single');
+  var dbl = document.getElementById('crew-rest-in-double');
+  if(!single || !dbl) return;
+  if(v === 'double') {
+    single.style.display = 'none';
+    dbl.style.display = 'block';
+  } else {
+    single.style.display = 'block';
+    dbl.style.display = 'none';
+  }
+}
+
+function clearCrewRest() {
+  var ids = ['cr-start','cr-end','cr-cap-start','cr-cap-end','cr-cop-start','cr-cop-end'];
+  var i;
+  for(i = 0; i < ids.length; i++) {
+    var el = document.getElementById(ids[i]);
+    if(el) el.value = '';
+  }
+  var ob = document.getElementById('crew-rest-out-body');
+  if(ob) {
+    ob.innerHTML = 'HHMM を入力して「計算」を押してください。';
+    ob.style.color = '#cfd8dc';
+  }
+}
+
+function computeCrewRest() {
+  var out = document.getElementById('crew-rest-out-body');
+  var sel = document.getElementById('crew-rest-formation-sel');
+  if(!out || !sel) return;
+  out.style.color = '#cfd8dc';
+  var mode = sel.value;
+  var html = '';
+
+  if(mode === 'triple' || mode === 'augmented') {
+    var st = hhmmToMins((document.getElementById('cr-start') || {}).value);
+    var en = hhmmToMins((document.getElementById('cr-end') || {}).value);
+    if(st === null || en === null) {
+      out.innerHTML = '<span style="color:#ef5350;">Start / End を HHMM (例 0105) で入力してください。</span>';
+      return;
+    }
+    var F = crewFlightDurationMins(st, en);
+    if(F <= 0) {
+      out.innerHTML = '<span style="color:#ef5350;">飛行時間が不正です。</span>';
+      return;
+    }
+    var n = mode === 'triple' ? 3 : 6;
+    var sp = crewEqualSplitRestBlocks(F, n);
+    var crews3 = ['COP2', 'COP1', 'CAP'];
+    var crews6 = ['CAPM', 'CAP', 'COP', 'CAPM', 'CAP', 'COP'];
+    var crews = mode === 'triple' ? crews3 : crews6;
+    html += '<div class="cr-out-meta">Flight time: ' + crewFmtDurationMins(F) + '</div>';
+    html += '<div class="cr-out-meta">Each rest (5分切捨): ' + crewFmtDurationMins(sp.eachRest) + '</div>';
+    html += '<div class="cr-out-meta">Pre-rest pad: ' + sp.prePad + ' 分 (Start ～ Rest1 開始)</div>';
+    var off = sp.prePad;
+    var r;
+    for(r = 0; r < n; r++) {
+      var d = sp.eachRest;
+      var tStart = crewFmtUtcFromStart(st, off);
+      off += d;
+      var tEnd = crewFmtUtcFromStart(st, off);
+      var who = crews[r];
+      html += crewHtmlBlock('Rest ' + (r + 1) + ': ' + tStart + ' ～ ' + tEnd, who + ' rest', d);
+    }
+    html += '<div class="cr-out-meta">Post-rest pad: ' + sp.postPad + ' 分 (Rest' + n + ' 終了 ～ End)</div>';
+    out.innerHTML = html;
+    return;
+  }
+
+  if(mode === 'double') {
+    var cs = hhmmToMins((document.getElementById('cr-cap-start') || {}).value);
+    var ce = hhmmToMins((document.getElementById('cr-cap-end') || {}).value);
+    var os = hhmmToMins((document.getElementById('cr-cop-start') || {}).value);
+    var oe = hhmmToMins((document.getElementById('cr-cop-end') || {}).value);
+    if(cs === null || ce === null || os === null || oe === null) {
+      out.innerHTML = '<span style="color:#ef5350;">CAP 系 / COP 系の Start・End を HHMM で入力してください。</span>';
+      return;
+    }
+    var Fcap = crewFlightDurationMins(cs, ce);
+    var Fcop = crewFlightDurationMins(os, oe);
+    if(Fcap <= 0 || Fcop <= 0) {
+      out.innerHTML = '<span style="color:#ef5350;">飛行時間が不正です。</span>';
+      return;
+    }
+    var capData = crewRatioFiveSegsAbsorbLast(Fcap);
+    var copData = crewCopFourEqualWithPads(Fcop);
+    if(capData.segs[4] < 0) {
+      out.innerHTML = '<span style="color:#ef5350;">CAP 系の飛行時間が短すぎます (比率分割できません)。</span>';
+      return;
+    }
+    var capLbl = [
+      'CAPM rest (CAP duty)',
+      'CAP rest (CAPM duty)',
+      'CAPM rest',
+      'CAP rest',
+      'CAPM rest'
+    ];
+    var copLbl = ['COP2 rest', 'COP1 rest', 'COP2 rest', 'COP1 rest'];
+    html += '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;">';
+    html += '<div style="flex:1;min-width:240px;">';
+    html += '<div class="cr-out-meta" style="margin-bottom:8px;color:#4fc3f7;font-weight:bold;">CAP / CAPM (5 blocks)</div>';
+    html += '<div class="cr-out-meta">Flight time: ' + crewFmtDurationMins(Fcap) + '</div>';
+    html += '<div class="cr-out-meta">Pre-pad: ' + capData.prePad + ' 分</div>';
+    var cOff = capData.prePad;
+    var b;
+    for(b = 0; b < 5; b++) {
+      var cd = capData.segs[b];
+      var cS = crewFmtUtcFromStart(cs, cOff);
+      cOff += cd;
+      var cE = crewFmtUtcFromStart(cs, cOff);
+      html += crewHtmlBlock('B' + (b + 1) + ': ' + cS + ' ～ ' + cE, capLbl[b], cd);
+    }
+    html += '<div class="cr-out-meta">Post-pad: ' + capData.postPad + ' 分</div>';
+    var capRestSum = capData.segs[1] + capData.segs[3];
+    var capmRestSum = capData.segs[0] + capData.segs[2] + capData.segs[4];
+    html += '<div class="cr-summary">CAP 合計 Rest: ' + crewFmtDurationMins(capRestSum) + '</div>';
+    html += '<div class="cr-summary">CAPM 合計 Rest: ' + crewFmtDurationMins(capmRestSum) + '</div>';
+    html += '</div>';
+    html += '<div style="flex:1;min-width:240px;">';
+    html += '<div class="cr-out-meta" style="margin-bottom:8px;color:#4fc3f7;font-weight:bold;">COP1 / COP2 (4 blocks)</div>';
+    html += '<div class="cr-out-meta">Flight time: ' + crewFmtDurationMins(Fcop) + '</div>';
+    html += '<div class="cr-out-meta">Pre-pad: ' + copData.prePad + ' 分</div>';
+    var oOff = copData.prePad;
+    var k;
+    for(k = 0; k < 4; k++) {
+      var od = copData.segs[k];
+      var oS = crewFmtUtcFromStart(os, oOff);
+      oOff += od;
+      var oE = crewFmtUtcFromStart(os, oOff);
+      html += crewHtmlBlock('B' + (k + 1) + ': ' + oS + ' ～ ' + oE, copLbl[k], od);
+    }
+    html += '<div class="cr-out-meta">Post-pad: ' + copData.postPad + ' 分</div>';
+    var cop1Sum = copData.segs[1] + copData.segs[3];
+    var cop2Sum = copData.segs[0] + copData.segs[2];
+    html += '<div class="cr-summary">COP1 合計 Rest: ' + crewFmtDurationMins(cop1Sum) + '</div>';
+    html += '<div class="cr-summary">COP2 合計 Rest: ' + crewFmtDurationMins(cop2Sum) + '</div>';
+    html += '</div></div>';
+    out.innerHTML = html;
+  }
+}
+
 function parseCTME(s) {
   if(!s||s==='..') return null;
   var p=s.split('.');
@@ -3849,6 +4133,14 @@ function toggleMode() {
     #ws-method-help-panel .wsm-body .wsm-p{color:#37474f!important;}
     #ws-method-help-panel .wsm-body .wsm-note{color:#e65100!important;}
     body.day-mode .ws-method-help-ico{border-color:#1565c0!important;color:#1565c0!important;}
+    #crew-rest-panel .cr-box{background:#ffffff!important;border-color:#d0d8e4!important;}
+    #crew-rest-panel .cr-block{background:#f5f7fa!important;border-color:#dde3ea!important;}
+    #crew-rest-panel .cr-inp{background:#ffffff!important;border-color:#c8d0da!important;color:#1a2a3a!important;}
+    #crew-rest-panel .cr-note{color:#546e7a!important;}
+    #crew-rest-panel .cr-out-meta{color:#37474f!important;}
+    #crew-rest-panel .cr-block .cr-bt{color:#1565c0!important;}
+    #crew-rest-panel .cr-block .cr-sub{color:#37474f!important;}
+    #crew-rest-panel .cr-summary{color:#e65100!important;border-top-color:#d0d8e4!important;}
   ` : '';
   applyMapTheme();
   if(LY.sat) LY.sat.bringToFront();
@@ -4781,7 +5073,7 @@ applyGfsRadarForCurrentMethod();
     </div>
     <div class="nav-sec">
       <div class="nav-sec-lbl">Calculators</div>
-      <button class="nav-item nav-dis">💤 Crew Rest Calculator<span class="nav-tag">WIP</span></button>
+      <button class="nav-item" id="nav-crew-rest" onclick="navTo('crew-rest')">💤 Crew Rest Calculator</button>
       <button class="nav-item nav-dis">🔔 Curfew Calculator<span class="nav-tag">WIP</span></button>
     </div>
     <div class="nav-sec">
