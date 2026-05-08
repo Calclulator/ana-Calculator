@@ -79,7 +79,7 @@
   .leaflet-tooltip.wxt::before{display:none!important;}
   .leaflet-tooltip.wxt-wp{background:rgba(6,8,18,.88)!important;border:.5px solid rgba(79,195,247,.25)!important;color:#b0bec5!important;font-family:'Helvetica Neue',Arial,sans-serif!important;padding:1px 4px!important;border-radius:2px!important;box-shadow:none!important;}
   .leaflet-tooltip.wxt-wp::before{display:none!important;}
-  .leaflet-tooltip.sgx{background:rgba(18,4,4,.94)!important;border:.5px solid rgba(239,83,80,.4)!important;color:#ffcdd2!important;font-family:monospace!important;font-size:10px!important;padding:2px 6px!important;border-radius:2px!important;box-shadow:none!important;}
+  .leaflet-tooltip.sgx{background:rgba(18,4,4,.94)!important;border:.5px solid rgba(239,83,80,.4)!important;color:#ffcdd2!important;font-family:monospace!important;font-size:12px!important;padding:2px 6px!important;border-radius:2px!important;box-shadow:none!important;}
   .leaflet-tooltip.sgx::before{display:none!important;}
   .leaflet-control-zoom a{background:#0d1117!important;color:#90a4ae!important;border-color:#2a3a4e!important;}
   /* Nav / Hamburger */
@@ -406,7 +406,9 @@
     <button class="btn on" id="atm-gfs-show-wt" onclick="setAtmGfsShow('wt')">Wind &amp; temp</button>
     <button class="btn" id="atm-gfs-show-isa" onclick="setAtmGfsShow('isa')">ISA deviation</button>
   </div>
-  <div id="atm-gfs-tbody-wrap" style="flex:1;min-height:0;overflow:auto;padding:6px;"></div>
+  <div id="atm-gfs-scroll-top" style="flex:1;min-height:0;overflow:auto;padding:6px;">
+    <div id="atm-gfs-tbody-wrap"></div>
+  </div>
   <div style="padding:8px 12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;border-top:1px solid #1e2a38;">
     <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.06em;font-size:1em;">WIND SHEAR &amp; TURBULENCE</span>
     <span style="font-size:1em;color:#90a4ae;margin-left:14px;">Method:</span>
@@ -1599,7 +1601,25 @@ function runParse() {
   ACTIVE_ETOPS_KEY = (etopsKey && ETOPS_DATA[etopsKey]) ? etopsKey : 'NH9D';
   syncEtops207Availability();
 
+  var savedFirstAto = '';
+  var savedFirstId = null;
+  if(typeof FP_ROWS !== 'undefined' && FP_ROWS && FP_ROWS.length && FP_ROWS[0]) {
+    savedFirstId = FP_ROWS[0].id;
+    if(FP_ROWS[0].ato && String(FP_ROWS[0].ato).trim() !== '') {
+      savedFirstAto = String(FP_ROWS[0].ato).trim();
+    }
+  }
+
   buildFpRows(dep, depFuel);
+
+  var newFirstId = FP_ROWS.length && FP_ROWS[0] ? FP_ROWS[0].id : null;
+  if(savedFirstAto && savedFirstId === newFirstId) {
+    FP_ROWS[0].ato = savedFirstAto;
+    var pa = hhmmToMins(savedFirstAto);
+    DEP_ATO_MIN = (pa !== null) ? pa : null;
+  } else {
+    maybeAutoFillFirstWpAtoFromStd();
+  }
 
   if (fplParseOk) {
     try {
@@ -1646,6 +1666,15 @@ function buildFpRows(dep, depFuel) {
     var ztme = (w.ctme!==null) ? Math.max(0,w.ctme-prevCtme) : null;
     FP_ROWS.push({id:w.id,ctme:w.ctme,ztme:ztme,fuel:w.fuel,alt:w.alt,ato:'',actualFuel:'',crossAt:'',note:'',phase:(w.phase||'climb')});
   }
+}
+
+// 最初の WP ATO が空のときのみ STD+TAXI(=DEP_STD_MIN) を自動入力
+function maybeAutoFillFirstWpAtoFromStd() {
+  if(!FP_ROWS || !FP_ROWS.length) return;
+  if(DEP_STD_MIN === null || typeof DEP_STD_MIN !== 'number') return;
+  if(FP_ROWS[0].ato && String(FP_ROWS[0].ato).trim() !== '') return;
+  FP_ROWS[0].ato = minsToHHMM(DEP_STD_MIN);
+  DEP_ATO_MIN = DEP_STD_MIN;
 }
 
 function atmCruiseLowFlHide(wpPhaseMap, wpId, fl) {
@@ -2337,6 +2366,24 @@ function initAtmHScrollSync() {
   botEl.addEventListener('scroll', function(){ atmSyncScroll(botEl, topEl); });
 }
 
+var atmGfsSyncing = false;
+var atmGfsHScrollSyncInited = false;
+function atmGfsSyncScroll(src, dst) {
+  if(atmGfsSyncing) return;
+  atmGfsSyncing = true;
+  dst.scrollLeft = src.scrollLeft;
+  setTimeout(function(){ atmGfsSyncing = false; }, 0);
+}
+function initAtmGfsHScrollSync() {
+  if(atmGfsHScrollSyncInited) return;
+  var topEl = document.getElementById('atm-gfs-scroll-top');
+  var botEl = document.getElementById('atm-gfs-ws-wrap');
+  if(!topEl || !botEl) return;
+  atmGfsHScrollSyncInited = true;
+  topEl.addEventListener('scroll', function(){ atmGfsSyncScroll(topEl, botEl); });
+  botEl.addEventListener('scroll', function(){ atmGfsSyncScroll(botEl, topEl); });
+}
+
 function renderWsTable() {
   var wrap = document.getElementById('atm-ws-wrap');
   var explain = document.getElementById('atm-ws-explain');
@@ -2681,9 +2728,9 @@ function renderGfsAtmTable() {
   // テーブル組み立て
   var html = '<table style="table-layout:fixed;border-collapse:collapse;font-size:1em;width:100%;">';
   html += '<thead><tr>';
-  html += '<th style="position:sticky;top:0;left:0;z-index:4;background:#0d1620;padding:4px 6px;text-align:right;border-right:1px solid #1e2a38;min-width:70px;width:70px;">Altitude</th>';
+  html += '<th style="position:sticky;top:0;left:0;z-index:4;background:#0d1620;color:#90a4ae;padding:4px 6px;text-align:right;border-right:1px solid #1e2a38;min-width:70px;width:70px;">Altitude</th>';
   wpIds.forEach(function(wp){
-    html += '<th style="position:sticky;top:0;z-index:3;background:#0d1620;padding:4px 5px;font-weight:600;border-bottom:1px solid #1e2a38;border-right:1px solid #1e2a38;white-space:nowrap;min-width:9em;width:9em;">'+wp+'</th>';
+    html += '<th style="position:sticky;top:0;z-index:3;background:#0d1620;color:#cfd8dc;padding:4px 5px;font-weight:600;border-bottom:1px solid #1e2a38;border-right:1px solid #1e2a38;white-space:nowrap;min-width:9em;width:9em;">'+wp+'</th>';
   });
   html += '</tr></thead><tbody>';
   var prevFl = null;
@@ -2696,7 +2743,7 @@ function renderGfsAtmTable() {
       }
     }
     html += '<tr>';
-    html += '<td style="position:sticky;left:0;z-index:2;background:#0d1620;padding:3px 6px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;min-width:70px;width:70px;'+topBorder+'">'+(altFt.toLocaleString())+' ft</td>';
+    html += '<td style="position:sticky;left:0;z-index:2;background:#0d1620;color:#90a4ae;padding:3px 6px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;min-width:70px;width:70px;'+topBorder+'">'+(altFt.toLocaleString())+' ft</td>';
     wpIds.forEach(function(wp){
       if(typeof atmCruiseLowFlHide === 'function' && atmCruiseLowFlHide(wpPhaseMap, wp, alt)) {
         html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:transparent;color:transparent;white-space:nowrap;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'"></td>';
@@ -2718,7 +2765,7 @@ function renderGfsAtmTable() {
           else if(ATM_GFS_HEAT === 'temp') bg = tempColor(c.tmp);
         }
       }
-      html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:'+bg+';white-space:nowrap;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'">'+txt2+'</td>';
+      html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:'+bg+';color:#cfd8dc;white-space:nowrap;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'">'+txt2+'</td>';
     });
     html += '</tr>';
     prevFl = alt;
@@ -2859,9 +2906,9 @@ function renderGfsWsTable() {
 
   var html = '<table style="table-layout:fixed;border-collapse:collapse;font-size:1em;width:100%;">';
   html += '<thead><tr>';
-  html += '<th style="position:sticky;top:0;left:0;z-index:4;background:#0d1620;padding:4px 6px;text-align:right;border-right:1px solid #1e2a38;min-width:70px;width:70px;">Altitude</th>';
+  html += '<th style="position:sticky;top:0;left:0;z-index:4;background:#0d1620;color:#90a4ae;padding:4px 6px;text-align:right;border-right:1px solid #1e2a38;min-width:70px;width:70px;">Altitude</th>';
   wpIds.forEach(function(wp){
-    html += '<th style="position:sticky;top:0;z-index:3;background:#0d1620;padding:4px 5px;font-weight:600;border-bottom:1px solid #1e2a38;border-right:1px solid #1e2a38;white-space:nowrap;min-width:9em;width:9em;">'+wp+'</th>';
+    html += '<th style="position:sticky;top:0;z-index:3;background:#0d1620;color:#cfd8dc;padding:4px 5px;font-weight:600;border-bottom:1px solid #1e2a38;border-right:1px solid #1e2a38;white-space:nowrap;min-width:9em;width:9em;">'+wp+'</th>';
   });
   html += '</tr></thead><tbody>';
   var prevFl = null;
@@ -2874,7 +2921,7 @@ function renderGfsWsTable() {
       }
     }
     html += '<tr>';
-    html += '<td style="position:sticky;left:0;z-index:2;background:#0d1620;padding:3px 6px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;min-width:70px;width:70px;'+topBorder+'">'+(altFt.toLocaleString())+' ft</td>';
+    html += '<td style="position:sticky;left:0;z-index:2;background:#0d1620;color:#90a4ae;padding:3px 6px;text-align:right;border-right:1px solid #1e2a38;white-space:nowrap;min-width:70px;width:70px;'+topBorder+'">'+(altFt.toLocaleString())+' ft</td>';
     wpIds.forEach(function(wp){
       if(typeof atmCruiseLowFlHide === 'function' && atmCruiseLowFlHide(wpPhaseMap, wp, alt)) {
         html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:transparent;color:transparent;text-align:center;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;white-space:nowrap;'+topBorder+'"></td>';
@@ -2892,7 +2939,8 @@ function renderGfsWsTable() {
       var pal = gfsWsPaletteCell(dispMode, val);
       var colorAttr = '';
       if(pal.fg !== null) colorAttr = 'color:'+pal.fg+' !important;';
-      html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:'+pal.bg+';'+colorAttr+'white-space:nowrap;text-align:center;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'">'+txt+'</td>';
+      var colorStyle = (pal.fg !== null) ? colorAttr : 'color:#cfd8dc;';
+      html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:'+pal.bg+';'+colorStyle+'white-space:nowrap;text-align:center;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;'+topBorder+'">'+txt+'</td>';
     });
     html += '</tr>';
     prevFl = alt;
@@ -3756,29 +3804,39 @@ function drawAlt() {
   if(!document.getElementById('oMetar').checked) return;
   if(!WP.length || !ALTS.length) return;
   var limitM = 400 * NM;
+  var worldLngOffsets = [-360, 0, 360];
   ALTS.forEach(function(a) {
     var minD = Infinity;
-    var aptPt = L.latLng(a.lat, a.lng);
+    var aptLat = a.lat;
+    var aptLng = a.lng;
     for(var i = 0; i < WP.length; i++) {
-      var d = aptPt.distanceTo(L.latLng(WP[i].lat, WP[i].lng));
+      var w = WP[i];
+      var wLng = (typeof w.lngU === 'number' && !isNaN(w.lngU)) ? w.lngU : w.lng;
+      var cellLon = aptLng;
+      while (cellLon - wLng > 180) cellLon -= 360;
+      while (wLng - cellLon > 180) cellLon += 360;
+      var d = L.latLng(aptLat, cellLon).distanceTo(L.latLng(w.lat, wLng));
       if(d < minD) minD = d;
     }
     if(minD > limitM) return;
-    var cOut = L.circle([a.lat, a.lng], {
-      radius: 400 * NM,
-      color: 'rgba(100,200,100,0.7)',
-      weight: 1.5,
-      fill: false,
-      interactive: false
-    }).addTo(map);
-    var cIn = L.circle([a.lat, a.lng], {
-      radius: 200 * NM,
-      color: 'rgba(100,200,100,0.5)',
-      weight: 1,
-      fill: false,
-      interactive: false
-    }).addTo(map);
-    LY.alt.push(cOut, cIn);
+    for(var aci = 0; aci < worldLngOffsets.length; aci++) {
+      var off = worldLngOffsets[aci];
+      var cOut = L.circle([a.lat, a.lng + off], {
+        radius: 400 * NM,
+        color: 'rgba(100,200,100,0.7)',
+        weight: 1.5,
+        fill: false,
+        interactive: false
+      }).addTo(map);
+      var cIn = L.circle([a.lat, a.lng + off], {
+        radius: 200 * NM,
+        color: 'rgba(100,200,100,0.5)',
+        weight: 1,
+        fill: false,
+        interactive: false
+      }).addTo(map);
+      LY.alt.push(cOut, cIn);
+    }
     var ic = L.divIcon({
       html: '<span style="font-size:9px;color:rgba(130,230,130,.95);font-family:monospace;'
           +'background:rgba(6,10,20,.82);padding:1px 4px;border-radius:2px;">'+a.id+'</span>',
@@ -3786,7 +3844,9 @@ function drawAlt() {
       iconSize: [40, 14],
       iconAnchor: [20, 7]
     });
-    LY.alt.push(L.marker(L.latLng(a.lat, a.lng).wrap(), {icon: ic, interactive: false}).addTo(map));
+    for(var ami = 0; ami < worldLngOffsets.length; ami++) {
+      LY.alt.push(L.marker(L.latLng(a.lat, a.lng + worldLngOffsets[ami]), {icon: ic, interactive: false}).addTo(map));
+    }
   });
   bringTop();
 }
@@ -3860,15 +3920,16 @@ function drawRoute() {
           +'background:'+col+';border:1.5px solid rgba(5,8,20,.9);"></div>',
       className:'', iconSize:[sz,sz], iconAnchor:[sz/2,sz/2]
     });
-    var wpLon = (w.lon != null ? w.lon : w.lng);
-    var m = L.marker(L.latLng(w.lat,wpLon).wrap(),{icon:ic}).addTo(map);
-    // 主要WPは常に表示、それ以外はzoom>=7で表示
-    if(w.t || KEY_WP[w.id]) {
-      m.bindTooltip('<span style="font-size:'+WP_FONT_SIZE+'px">'+w.id+'</span>',{permanent:true, direction:'top', className:'wxt', offset:[0,-4]});
-    } else {
-      m.bindTooltip(w.id,{permanent:false, direction:'top', className:'wxt-wp', offset:[0,-4]});
+    var wpLon = (typeof w.lngU === 'number' && !isNaN(w.lngU)) ? w.lngU : (w.lon != null ? w.lon : w.lng);
+    for(var wmk = 0; wmk < worldLngOffsets.length; wmk++) {
+      var m = L.marker(L.latLng(w.lat, wpLon + worldLngOffsets[wmk]),{icon:ic}).addTo(map);
+      if(w.t || KEY_WP[w.id]) {
+        m.bindTooltip('<span style="font-size:'+WP_FONT_SIZE+'px">'+w.id+'</span>',{permanent:true, direction:'top', className:'wxt', offset:[0,-4]});
+      } else {
+        m.bindTooltip(w.id,{permanent:false, direction:'top', className:'wxt-wp', offset:[0,-4]});
+      }
+      LY.wpts.push(m);
     }
-    LY.wpts.push(m);
   });
 
   // ETPマーカー
@@ -3880,7 +3941,9 @@ function drawRoute() {
           +'border:.5px solid rgba(255,138,101,.45);border-radius:2px;">'+e.id+'</div>',
       className:'', iconSize:[34,14], iconAnchor:[17,7]
     });
-    LY.wpts.push(L.marker(L.latLng(e.lat,eLon).wrap(),{icon:ic}).addTo(map));
+    for(var emk = 0; emk < worldLngOffsets.length; emk++) {
+      LY.wpts.push(L.marker(L.latLng(e.lat, eLon + worldLngOffsets[emk]),{icon:ic}).addTo(map));
+    }
   });
 
   drawAlt();
@@ -4240,20 +4303,26 @@ function drawEtops() {
   if(show207) ringDefs.push({min:207,nm:nmTab[207],w:1,da:'8 5',c:'rgba(210,200,90,0.38)'});
   if(show180) ringDefs.push({min:180,nm:nmTab[180],w:1.35,da:null,c:'rgba(215,220,120,0.68)'});
   if(show60) ringDefs.push({min:60,nm:nmTab[60],w:2.1,da:null,c:'rgba(230,240,160,0.92)'});
+  var worldLngOffsets = [-360, 0, 360];
   ALTS.forEach(function(a) {
     ringDefs.forEach(function(rd) {
-      var c = L.circle([a.lat,a.lng],{
-        radius:rd.nm*NM, color:rd.c, weight:rd.w, fill:false, dashArray:rd.da
-      }).addTo(map);
-      c.bindTooltip(a.id+' ETOPS '+rd.min+'min: '+rd.nm+' NM',{className:'wxt',sticky:true});
-      LY.etops.push(c);
+      for(var wi = 0; wi < worldLngOffsets.length; wi++) {
+        var off = worldLngOffsets[wi];
+        var c = L.circle([a.lat, a.lng + off],{
+          radius:rd.nm*NM, color:rd.c, weight:rd.w, fill:false, dashArray:rd.da
+        }).addTo(map);
+        c.bindTooltip(a.id+' ETOPS '+rd.min+'min: '+rd.nm+' NM',{className:'wxt',sticky:true});
+        LY.etops.push(c);
+      }
     });
     var ic = L.divIcon({
       html:'<span style="font-size:9px;color:rgba(79,195,247,.8);font-family:monospace;'
           +'background:rgba(6,10,20,.85);padding:1px 4px;border-radius:2px;">'+a.id+'</span>',
       className:'', iconSize:[36,13], iconAnchor:[18,6]
     });
-    LY.etops.push(L.marker(L.latLng(a.lat,a.lng).wrap(),{icon:ic}).addTo(map));
+    for(var wj = 0; wj < worldLngOffsets.length; wj++) {
+      LY.etops.push(L.marker(L.latLng(a.lat, a.lng + worldLngOffsets[wj]),{icon:ic}).addTo(map));
+    }
   });
   bringTop();
 }
@@ -4335,11 +4404,12 @@ function loadSigmets() {
           var firLabel = props.firName || props.firId || props.icaoId || '';
           var title = hazard + (firLabel ? ' - ' + firLabel : '');
           var raw = props.rawAirSigmet || props.rawSigmet || '(本文なし)';
-          var html = '<div style="font-family:monospace;font-size:11px;min-width:400px;max-width:400px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">'
-            + '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;">' + sigPopupEsc(title) + '</div>'
-            + '<pre style="white-space:pre-wrap;margin:0;color:#263238;">' + sigPopupEsc(raw) + '</pre>'
+          var html = '<div style="font-family:monospace;font-size:13px;min-width:400px;max-width:400px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">'
+            + '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;font-size:13px;">' + sigPopupEsc(title) + '</div>'
+            + '<pre style="white-space:pre-wrap;margin:0;color:#263238;font-size:13px;">' + sigPopupEsc(raw) + '</pre>'
             + '</div>';
           l.bindPopup(html, {maxWidth: 500, minWidth: 420});
+          l.bindTooltip(sigPopupEsc(title), {className: 'sgx', sticky: true, direction: 'auto'});
         }
       }).addTo(map);
       bringTop();
@@ -5065,6 +5135,7 @@ setInterval(function(){
 // HIMAWARI IR SANDWICH
 
 initAtmHScrollSync();
+initAtmGfsHScrollSync();
 renderAtmWsLegend();
 (function(){
   var s = document.getElementById('turbMethodSel');

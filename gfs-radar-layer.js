@@ -152,14 +152,17 @@
 
   function minDistToRouteNM(lat, lon, wps) {
     if (!wps || !wps.length) return 0;
-    var cellLon = lon;
-    if (cellLon < 0) cellLon += 360;
     var minD = Infinity;
     for (var i = 0; i < wps.length; i++) {
       var w = wps[i];
-      var wLon = (typeof w.lon === 'number') ? w.lon : w.lng;
-      if (typeof w.lat !== 'number' || typeof wLon !== 'number') continue;
-      if (wLon < 0) wLon += 360;
+      if (typeof w.lat !== 'number') continue;
+      var wLon = (typeof w.lngU === 'number' && !isNaN(w.lngU))
+        ? w.lngU
+        : ((typeof w.lon === 'number') ? w.lon : w.lng);
+      if (typeof wLon !== 'number' || isNaN(wLon)) continue;
+      var cellLon = lon;
+      while (cellLon - wLon > 180) cellLon -= 360;
+      while (wLon - cellLon > 180) cellLon += 360;
       var d = approxDistNM(lat, cellLon, w.lat, wLon);
       if (d < minD) minD = d;
     }
@@ -367,6 +370,8 @@
     var useFilter = !!(routeWps && routeWps.length && corridorNM > 0 && isFinite(corridorNM));
     var nFiltered = 0;
 
+    var worldLngOffsets = [-360, 0, 360];
+
     for (var iy = 0; iy < g.ny; iy++) {
       var lat = g.la1 + iy * dlat;
       for (var ix = 0; ix < g.nx; ix++) {
@@ -383,29 +388,32 @@
         var color = colorFor(method, v);
         if (!color) { nNull++; continue; }
 
-        var bounds = [
-          [lat - dlat / 2, lon - dlon / 2],
-          [lat + dlat / 2, lon + dlon / 2]
-        ];
-        var rectOpts = {
-          color: color,
-          fillColor: color,
-          fillOpacity: fillOpacity,
-          weight: 0,
-          interactive: true
-        };
-        if (renderer) rectOpts.renderer = renderer;
-        var rect = L.rectangle(bounds, rectOpts);
+        for (var iCopy = 0; iCopy < worldLngOffsets.length; iCopy++) {
+          var off = worldLngOffsets[iCopy];
+          var bounds = [
+            [lat - dlat / 2, lon - dlon / 2 + off],
+            [lat + dlat / 2, lon + dlon / 2 + off]
+          ];
+          var rectOpts = {
+            color: color,
+            fillColor: color,
+            fillOpacity: fillOpacity,
+            weight: 0,
+            interactive: true
+          };
+          if (renderer) rectOpts.renderer = renderer;
+          var rect = L.rectangle(bounds, rectOpts);
 
-        (function (cellData) {
-          rect.on('click', function (e) {
-            var html = buildPopupHtml(method, cellData, levelMb, fl);
-            L.popup().setLatLng(e.latlng).setContent(html).openOn(map);
-          });
-        })(c);
+          (function (cellData) {
+            rect.on('click', function (e) {
+              var html = buildPopupHtml(method, cellData, levelMb, fl);
+              L.popup().setLatLng(e.latlng).setContent(html).openOn(map);
+            });
+          })(c);
 
-        rect.addTo(group);
-        nDrawn++;
+          rect.addTo(group);
+          nDrawn++;
+        }
       }
     }
     if (map) group.addTo(map);
