@@ -239,6 +239,7 @@
     <label class="ck"><input type="checkbox" id="oGlide" onchange="updateGlide()"> Glide (B787)</label>
     <label class="ck"><input type="checkbox" id="oFir" checked onchange="drawFir()"> FIR</label>
     <label class="ck"><input type="checkbox" id="oSig" checked onchange="loadSigmets()"> SIGMETs</label>
+    <label class="ck"><input type="checkbox" id="oMetar" onchange="onApOverlayToggle()" oninput="onApOverlayToggle()" onclick="onApOverlayToggle()"> A/P</label>
     <label class="ck" style="display:none;"><input type="checkbox" id="oLightning" onchange="toggleLightning()"> Lightning</label>
     <span class="wx-ovl-break"></span>
     <label class="ck"><input type="checkbox" id="oTurb" checked onchange="drawRoute()"> Turbulence corridor</label>
@@ -254,7 +255,6 @@
       <option value="TI2">Ellrod TI2</option>
     </select>
     <button type="button" class="btn ws-method-help-btn" onclick="openWsMethodHelpFromWx()" aria-label="WIND SHEAR Method の解説"><span class="ws-method-help-ico">i</span></button>
-    <label class="ck"><input type="checkbox" id="oMetar" onchange="onApOverlayToggle()" oninput="onApOverlayToggle()" onclick="onApOverlayToggle()"> A/P</label>
     <span class="lbl" style="margin-left:8px;">回避</span>
     <button class="btn" id="avoidL" onclick="setAvoidSide('L')" style="padding:2px 6px;">L</button>
     <button class="btn" id="avoidR" onclick="setAvoidSide('R')" style="padding:2px 6px;">R</button>
