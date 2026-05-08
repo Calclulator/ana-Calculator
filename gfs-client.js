@@ -325,29 +325,29 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
       '&dlon=' + encodeURIComponent(dlon);
   }
 
-  function approxGridCells(box, step) {
-    // Spec: nlat = ceil(dLat/step)+1, nlon = ceil(dLon/step)+1
-    var dLat = box.north - box.south;
-    var dLon = box.east - box.west;
-    if (!isFinite(dLat) || dLat < 0) dLat = Math.abs(dLat);
-    if (!isFinite(dLon) || dLon < 0) dLon = Math.abs(dLon);
-    var nlat = Math.ceil(dLat / step) + 1;
-    var nlon = Math.ceil(dLon / step) + 1;
-    if (nlat < 1) nlat = 1;
-    if (nlon < 1) nlon = 1;
-    return { nlat: nlat, nlon: nlon, cells: nlat * nlon, dLat: dLat, dLon: dLon };
-  }
-
-  function pickGridStepForBbox(box, maxCells) {
-    // Spec: fine -> coarse, pick first that satisfies cells <= maxCells
-    var cand = [0.25, 0.5, 1.0, 1.5, 2.0];
-    var best = cand[cand.length - 1];
-    for (var i = 0; i < cand.length; i++) {
-      var step = cand[i];
-      var est = approxGridCells(box, step);
-      if (est.cells <= maxCells) { best = step; break; }
+  function pickGridStep(bboxN, bboxS, bboxE, bboxW) {
+    var candidates = [0.25, 0.5, 1.0, 1.5, 2.0];
+    var maxCells = 1000;
+    var dLat = Math.abs(bboxN - bboxS);
+    var dLon = Math.abs(bboxE - bboxW);
+    var picked = candidates[candidates.length - 1];
+    var debugList = [];
+    for (var i = 0; i < candidates.length; i++) {
+      var step = candidates[i];
+      var nlat = Math.ceil(dLat / step) + 1;
+      var nlon = Math.ceil(dLon / step) + 1;
+      var cells = nlat * nlon;
+      debugList.push({step: step, nlat: nlat, nlon: nlon, cells: cells, ok: cells <= maxCells});
+      if (cells <= maxCells) {
+        picked = step;
+        console.log("[GFS-grid] candidates:", JSON.stringify(debugList));
+        console.log("[GFS-grid] picked:", picked);
+        return picked;
+      }
     }
-    return best;
+    console.log("[GFS-grid] candidates:", JSON.stringify(debugList));
+    console.log("[GFS-grid] picked (fallback):", picked);
+    return picked;
   }
 
   function gfsGridLoad(box, validUtc, dlat, dlon, done) {
@@ -360,17 +360,33 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
       if (typeof done === 'function') done(new Error('invalid validUtc'));
       return;
     }
-    var MAX_CELLS = 1000;
+    var dLatAbs = Math.abs(box.north - box.south);
+    var dLonAbs = Math.abs(box.east - box.west);
+    var candidates_eval_result = [];
+    var candDbg = [0.25, 0.5, 1.0, 1.5, 2.0];
+    var iDbg;
+    for (iDbg = 0; iDbg < candDbg.length; iDbg++) {
+      var stDbg = candDbg[iDbg];
+      var nlDbg = Math.ceil(dLatAbs / stDbg) + 1;
+      var nwDbg = Math.ceil(dLonAbs / stDbg) + 1;
+      var csDbg = nlDbg * nwDbg;
+      candidates_eval_result.push({step: stDbg, nlat: nlDbg, nlon: nwDbg, cells: csDbg, ok: csDbg <= 1000});
+    }
+    console.log("[GFS-grid debug] candidates check:", JSON.stringify(candidates_eval_result));
+
     // If caller didn't specify, auto-pick from bbox to stay under limit.
     if (!(typeof dlat === 'number' && isFinite(dlat) && dlat > 0) ||
         !(typeof dlon === 'number' && isFinite(dlon) && dlon > 0)) {
-      var step = pickGridStepForBbox(box, MAX_CELLS);
+      var step = pickGridStep(box.north, box.south, box.east, box.west);
       dlat = step;
       dlon = step;
     }
-    var estLog = approxGridCells(box, dlat);
-    console.log('[GFS-grid] bbox=' + estLog.dLat.toFixed(1) + 'x' + estLog.dLon.toFixed(1) +
-      ' deg -> dlat/dlon=' + dlat + ', cells~=' + estLog.cells);
+    var nlatLog = Math.ceil(dLatAbs / dlat) + 1;
+    var nlonLog = Math.ceil(dLonAbs / dlon) + 1;
+    var cellsLog = nlatLog * nlonLog;
+    console.log("[GFS-grid debug] picked dlat=" + dlat + " dlon=" + dlon);
+    console.log('[GFS-grid] bbox=' + dLatAbs.toFixed(1) + 'x' + dLonAbs.toFixed(1) +
+      ' deg -> dlat/dlon=' + dlat + ', cells~=' + cellsLog);
     var meta = pointMetaFromValid(validUtc);
     var key = gridKey(box, meta.cycle, meta.fhr, dlat, dlon);
     var cached = GRID_CACHE[key];
@@ -384,6 +400,7 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
     }
     GRID_CACHE[key] = { status: 'loading', waiters: [done], data: null, error: null };
     var url = gridUrl(box, meta.cycle, meta.fhr, dlat, dlon);
+    console.log("[GFS-grid debug] request url params dlat=" + dlat + " dlon=" + dlon + " url=" + url);
     fetch(url, { method: 'GET', cache: 'default' }).then(function(r) {
       if (!r.ok) {
         var e = new Error('HTTP ' + r.status);
