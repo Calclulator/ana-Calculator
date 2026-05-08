@@ -3063,6 +3063,7 @@ function renderGfsWsTable() {
     return;
   }
   GFS_WS_PT_CACHE = {};
+  var gfsWsEllrodLogSeen = {};
 
   function gfsWsPaletteCell(mode, value) {
     if(value === null || value === undefined || isNaN(value)) return { bg: 'transparent', fg: null };
@@ -3138,7 +3139,34 @@ function renderGfsWsTable() {
     }
     if(pts.length < 1) return null;
     var hTarget = altFl * 100 * 0.3048;
-    return wsInterpScalarByHeight(pts, hTarget);
+    var outVal = wsInterpScalarByHeight(pts, hTarget);
+    var ellrodOn = (typeof GFS_DEBUG_ELLROD !== 'undefined' && GFS_DEBUG_ELLROD);
+    var cvgOn = (typeof GFS_DEBUG_CVG !== 'undefined' && GFS_DEBUG_CVG);
+    if((ellrodOn || cvgOn) && outVal !== null && !isNaN(outVal)) {
+      var logKey = wpId + '|' + altFl + '|' + mode;
+      if(!gfsWsEllrodLogSeen[logKey]) {
+        gfsWsEllrodLogSeen[logKey] = 1;
+        // ATM WS 表の point 近似経路では DEF/CVG を保持していないため、観測値は null を明示。
+        if(ellrodOn) {
+          var vwsObs = outVal;
+          var ti1Obs = outVal;
+          var ti2Obs = outVal;
+          var ratio = (vwsObs && vwsObs !== 0 && ti1Obs != null) ? (ti1Obs / vwsObs) : null;
+          console.log('[Ellrod] wp=' + wpId + ' alt=' + altFl
+            + ' VWS=' + (vwsObs != null ? vwsObs.toFixed(4) : 'null')
+            + ' DEF=' + 'null'
+            + ' TI1=' + (ti1Obs != null ? ti1Obs.toFixed(2) : 'null')
+            + ' TI2=' + (ti2Obs != null ? ti2Obs.toFixed(2) : 'null')
+            + ' TI1/VWS=' + (ratio != null ? ratio.toFixed(2) : 'null'));
+        }
+        if(cvgOn) {
+          console.log('[CVG] wp=' + wpId + ' alt=' + altFl
+            + ' CVG_raw=' + 'null'
+            + ' CVG_clipped=' + 'null');
+        }
+      }
+    }
+    return outVal;
   }
 
   var wpIds = [];
