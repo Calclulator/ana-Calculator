@@ -1619,6 +1619,7 @@ function runParse() {
       return !altIdMap[w.id];
     });
     WP = finalWP;
+    if(typeof gfsRadarInvalidateRoutePointsMemo === 'function') gfsRadarInvalidateRoutePointsMemo();
     VWS = newVWS;
     var hasWindFcst = Object.keys(newVWS_BY_FL).length > 0;
     [29,31,33,34,35,37,39,41,43,45].forEach(function(fl){
@@ -4389,7 +4390,7 @@ function applyGfsRadarForCurrentMethod() {
   var methodKey = WX_GFS_CORR_METHOD;
   if(!methodKey || typeof GfsRadar === 'undefined' || !GfsRadar.render) return;
   if(typeof gfsPointAt !== 'function') return;
-  var routePts = buildGfsRadarRoutePoints();
+  var routePts = getOrBuildGfsRadarRoutePoints();
   if(!routePts || !routePts.length) return;
   var preloadKey = gfsRadarBuildPreloadKey(routePts);
   var renderReady = function(){
@@ -4537,6 +4538,60 @@ var GFS_RADAR_PRELOAD_STATE = {
   lastStatus: 'idle',
   callbacks: []
 };
+
+var GFS_RADAR_ROUTE_PTS_MEMO = null;
+var GFS_RADAR_ROUTE_PTS_MEMO_KEY = '';
+
+function gfsRadarRoutePointsSourceKey() {
+  if(typeof WP === 'undefined' || !WP || !WP.length) return '';
+  var parts = [];
+  var i, w, np;
+  for(i = 0; i < WP.length; i++) {
+    w = WP[i];
+    np = normalizePoint(w);
+    if(np) {
+      parts.push((w.id || '') + ':' + np.lat + ':' + np.lon + ':' + (w.ctme || 0));
+    } else {
+      parts.push((w.id || '') + ':NOCOORD');
+    }
+  }
+  var dep = (typeof DEP_ATO_MIN === 'number' ? DEP_ATO_MIN : (typeof DEP_STD_MIN === 'number' ? DEP_STD_MIN : -1));
+  return dep + '|' + parts.join('|');
+}
+
+function gfsRadarSanitizeRoutePoints(pts) {
+  if(!pts || !pts.length) return pts;
+  var out = [];
+  var i, q;
+  for(i = 0; i < pts.length; i++) {
+    q = pts[i];
+    if(!q || typeof q.lat !== 'number' || typeof q.lon !== 'number') continue;
+    out.push({
+      id: q.id,
+      lat: Number(q.lat.toFixed(6)),
+      lon: Number(q.lon.toFixed(6)),
+      ctme: q.ctme || 0,
+      type: q.type || 'real'
+    });
+  }
+  return out;
+}
+
+function gfsRadarInvalidateRoutePointsMemo() {
+  GFS_RADAR_ROUTE_PTS_MEMO = null;
+  GFS_RADAR_ROUTE_PTS_MEMO_KEY = '';
+}
+
+function getOrBuildGfsRadarRoutePoints() {
+  var k = gfsRadarRoutePointsSourceKey();
+  if(k === '') return [];
+  if(GFS_RADAR_ROUTE_PTS_MEMO && GFS_RADAR_ROUTE_PTS_MEMO_KEY === k) {
+    return GFS_RADAR_ROUTE_PTS_MEMO;
+  }
+  GFS_RADAR_ROUTE_PTS_MEMO = gfsRadarSanitizeRoutePoints(buildGfsRadarRoutePoints());
+  GFS_RADAR_ROUTE_PTS_MEMO_KEY = k;
+  return GFS_RADAR_ROUTE_PTS_MEMO;
+}
 
 function gfsRadarBuildPreloadKey(routePts) {
   if(!routePts || !routePts.length) return 'empty';

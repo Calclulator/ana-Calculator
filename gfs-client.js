@@ -641,6 +641,12 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
   global.gfsValueAt = gfsValueAt;
   global.gfsPointAt = gfsPointAt;
   global.gfsPointCached = gfsPointCached;
+  global.gfsPointCacheKey = function (lat, lon, validUtc) {
+    if (typeof lat !== 'number' || isNaN(lat) || typeof lon !== 'number' || isNaN(lon)) return '';
+    if (!(validUtc instanceof Date) || isNaN(validUtc.getTime())) return '';
+    var meta = pointMetaFromValid(validUtc);
+    return pointKey(lat, lon, meta.cycle, meta.fhr);
+  };
   global.gfsPointMetaFromValid = pointMetaFromValid;
   global.gfsPointClearCache = gfsPointClearCache;
   global.gfsGridLoad = gfsGridLoad;

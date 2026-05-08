@@ -814,6 +814,16 @@
         var cA = computeAtPoint(aPt, levelMb, vuA, method, tiOffsetNm);
         if (!cA) {
           nNull++;
+          if (typeof window !== 'undefined' && window.GFS_DEBUG_NODATA) {
+            var kDbg = '';
+            if (typeof window.gfsPointCacheKey === 'function') {
+              kDbg = window.gfsPointCacheKey(aPt.lat, aPt.lon, vuA);
+            }
+            console.log('[GfsRadar nodata] segIdx=' + si
+              + ' lat=' + aPt.lat.toFixed(6)
+              + ' lon=' + aPt.lon.toFixed(6)
+              + ' key=' + kDbg);
+          }
           continue;
         }
         var vSeg = methodValue(method, cA);
