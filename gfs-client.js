@@ -361,5 +361,8 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
 
   global.gfsLoad = gfsLoad;
   global.gfsValueAt = gfsValueAt;
+  global.gfsPickSliceForValid = function (levMb, validUtc) {
+    return pickSliceForValid(global.GFS, levMb, validUtc);
+  };
   global.gfsNormalizeLongitudeForGridExtent = normalizeLongitudeForGridExtent;
 })(typeof window !== 'undefined' ? window : this);

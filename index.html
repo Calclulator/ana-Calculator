@@ -2598,6 +2598,10 @@ function isaDevColor(dev) {
 var ATM_GFS_HEAT = 'wind';
 var ATM_GFS_SHOW = 'wt';
 var ATM_GFS_WS = 'vws';
+// GFS isobaric levels (mb) used for atmosphere / WS vertical interpolation
+var GFS_ATM_LEVELS_MB = [300, 275, 250, 225, 200, 175, 150];
+var GFS_ATM_COLUMN_CACHE = {};
+var GFS_WS_PT_CACHE = {};
 
 function setAtmGfsHeat(mode) {
   ATM_GFS_HEAT = mode;
@@ -2629,14 +2633,7 @@ function setAtmGfsWs(mode) {
   renderGfsWsTable();
 }
 
-function gfsAtWp(wpId, alt) {
-  if(!window.GFS || window.GFS.status !== 'ready') return null;
-  if(typeof WP === 'undefined') return null;
-  var wp = null;
-  for(var i=0;i<WP.length;i++) {
-    if(WP[i].id === wpId) { wp = WP[i]; break; }
-  }
-  if(!wp) return null;
+function gfsAtmValidUtcForWp(wp) {
   var ato;
   if(typeof DEP_ATO_MIN === 'number' && DEP_ATO_MIN !== null) {
     var now = new Date();
@@ -2649,27 +2646,32 @@ function gfsAtWp(wpId, alt) {
   } else {
     ato = new Date();
   }
-  var validUtc = new Date(ato.getTime() + (wp.ctme || 0) * 60000);
+  return new Date(ato.getTime() + (wp.ctme || 0) * 60000);
+}
+
+function gfsAtWpIsaFallback(wp, alt, validUtc) {
   var altFt = alt * 100;
   var mb;
   if(altFt < 36089) mb = 1013.25 * Math.pow(1 - altFt/145442, 5.2559);
   else mb = 226.32 * Math.exp(-(altFt - 36089) / 20805);
   if(mb > 320) return null;
   if(typeof gfsValueAt !== 'function') return null;
-  var GFS_LV = [300, 275, 250, 225, 200, 175, 150];
+  var lon = typeof wp.lon === 'number' ? wp.lon : wp.lng;
+  var GFS_LV = GFS_ATM_LEVELS_MB;
   function interpVar(varName) {
     var lo = null, hi = null;
-    for(var i=0;i<GFS_LV.length-1;i++) {
-      if(mb <= GFS_LV[i] && mb >= GFS_LV[i+1]) { lo = GFS_LV[i]; hi = GFS_LV[i+1]; break; }
+    var ii;
+    for(ii = 0; ii < GFS_LV.length - 1; ii++) {
+      if(mb <= GFS_LV[ii] && mb >= GFS_LV[ii+1]) { lo = GFS_LV[ii]; hi = GFS_LV[ii+1]; break; }
     }
     if(lo === null) {
       if(mb > 300) { lo = hi = 300; }
       else if(mb < 150) { lo = hi = 150; }
       else return null;
     }
-    if(lo === hi) return gfsValueAt(wp.lat, wp.lng, lo, varName, validUtc);
-    var vLo = gfsValueAt(wp.lat, wp.lng, lo, varName, validUtc);
-    var vHi = gfsValueAt(wp.lat, wp.lng, hi, varName, validUtc);
+    if(lo === hi) return gfsValueAt(wp.lat, lon, lo, varName, validUtc);
+    var vLo = gfsValueAt(wp.lat, lon, lo, varName, validUtc);
+    var vHi = gfsValueAt(wp.lat, lon, hi, varName, validUtc);
     if(vLo === null || vHi === null) return null;
     var f = (Math.log(mb) - Math.log(lo)) / (Math.log(hi) - Math.log(lo));
     return vLo + (vHi - vLo) * f;
@@ -2680,6 +2682,121 @@ function gfsAtWp(wpId, alt) {
   if(u === null || v === null || t === null) return null;
   var spd = Math.sqrt(u*u + v*v) * 1.943844;
   var dir = (Math.atan2(-u, -v) * 180/Math.PI + 360) % 360;
+  return {
+    dir: Math.round(dir/10)*10,
+    spd: Math.round(spd),
+    tmp: Math.round(t - 273.15),
+    variable: false
+  };
+}
+
+function gfsAtmBuildVerticalColumn(wp, dbgCol) {
+  if(!window.GFS || window.GFS.status !== 'ready' || typeof gfsValueAt !== 'function') return null;
+  var validUtc = gfsAtmValidUtcForWp(wp);
+  var cacheKey = wp.id + '|' + validUtc.getTime();
+  if(GFS_ATM_COLUMN_CACHE[cacheKey]) {
+    if(dbgCol) console.log('[GFS-debug] column cache hit ' + cacheKey);
+    return GFS_ATM_COLUMN_CACHE[cacheKey];
+  }
+  var lat = wp.lat;
+  var lon = typeof wp.lon === 'number' ? wp.lon : wp.lng;
+  if(typeof lat !== 'number' || typeof lon !== 'number') return null;
+  var col = [];
+  var li, lev, hgt, u, v, tmp, sl;
+  for(li = 0; li < GFS_ATM_LEVELS_MB.length; li++) {
+    lev = GFS_ATM_LEVELS_MB[li];
+    hgt = gfsValueAt(lat, lon, lev, 'HGT', validUtc);
+    u = gfsValueAt(lat, lon, lev, 'UGRD', validUtc);
+    v = gfsValueAt(lat, lon, lev, 'VGRD', validUtc);
+    tmp = gfsValueAt(lat, lon, lev, 'TMP', validUtc);
+    if(dbgCol) {
+      sl = (typeof gfsPickSliceForValid === 'function') ? gfsPickSliceForValid(lev, validUtc) : null;
+      console.log('[GFS-debug] lev=' + lev + ' slice fhr=' + (sl && sl.meta ? sl.meta.fhr : null) +
+        ' metaLev=' + (sl && sl.meta ? sl.meta.lev : null) + ' bilin HGT/U/V/TMP(K)=' + hgt + ',' + u + ',' + v + ',' + tmp);
+    }
+    if(hgt === null || u === null || v === null || tmp === null) continue;
+    col.push({ lev: lev, hgt: hgt, u: u, v: v, t: tmp });
+  }
+  col.sort(function(a, b) { return a.hgt - b.hgt; });
+  GFS_ATM_COLUMN_CACHE[cacheKey] = col;
+  return col;
+}
+
+function gfsAtmInterpHeightColumn(col, altFt, dbg) {
+  if(!col || col.length === 0) return null;
+  var hTarget = altFt * 0.3048;
+  if(dbg) console.log('[GFS-debug] level interp: altFt=' + altFt + ' hTarget(m)=' + hTarget + ' (=FL ' + (altFt/100) + ')');
+  if(col.length === 1) {
+    if(dbg) console.log('[GFS-debug] single level clamp', col[0]);
+    return { u: col[0].u, v: col[0].v, t: col[0].t };
+  }
+  if(hTarget <= col[0].hgt) {
+    if(dbg) console.log('[GFS-debug] below column clamp', col[0]);
+    return { u: col[0].u, v: col[0].v, t: col[0].t };
+  }
+  if(hTarget >= col[col.length - 1].hgt) {
+    if(dbg) console.log('[GFS-debug] above column clamp', col[col.length - 1]);
+    return { u: col[col.length - 1].u, v: col[col.length - 1].v, t: col[col.length - 1].t };
+  }
+  var i, h0, h1, f;
+  for(i = 0; i < col.length - 1; i++) {
+    if(col[i].hgt <= hTarget && hTarget <= col[i + 1].hgt) {
+      h0 = col[i].hgt;
+      h1 = col[i + 1].hgt;
+      f = (hTarget - h0) / (h1 - h0);
+      if(dbg) {
+        console.log('[GFS-debug] bracket mb ' + col[i].lev + '–' + col[i+1].lev + ' H0/H1=' + h0 + '/' + h1 + ' f=' + f);
+        console.log('[GFS-debug] U/V/T lo=' + col[i].u + ',' + col[i].v + ',' + col[i].t + ' hi=' + col[i+1].u + ',' + col[i+1].v + ',' + col[i+1].t);
+      }
+      return {
+        u: col[i].u + f * (col[i + 1].u - col[i].u),
+        v: col[i].v + f * (col[i + 1].v - col[i].v),
+        t: col[i].t + f * (col[i + 1].t - col[i].t)
+      };
+    }
+  }
+  return null;
+}
+
+function gfsAtWp(wpId, alt) {
+  if(!window.GFS || window.GFS.status !== 'ready') return null;
+  if(typeof WP === 'undefined') return null;
+  var wp = null;
+  for(var i=0;i<WP.length;i++) {
+    if(WP[i].id === wpId) { wp = WP[i]; break; }
+  }
+  if(!wp) return null;
+  var validUtc = gfsAtmValidUtcForWp(wp);
+  var altFt = alt * 100;
+  var dbg = !!window.GFS_ATM_DEBUG || (wpId === 'BEMLO' && alt === 400);
+  var dbgCol = !!window.GFS_ATM_DEBUG || wpId === 'BEMLO';
+  if(dbg) {
+    var lonD = typeof wp.lon === 'number' ? wp.lon : wp.lng;
+    console.log('[GFS-debug] gfsAtWp wpId=' + wpId + ' FL=' + alt + ' lat/lon=' + wp.lat + ',' + lonD);
+    console.log('[GFS-debug] GFS.cycle=' + (window.GFS && window.GFS.cycle) + ' validUtc=' + validUtc.toISOString());
+    var ref0 = window.GFS && window.GFS.slices && window.GFS.slices[0] && window.GFS.slices[0].meta;
+    if(ref0 && ref0.refTime && typeof ref0.refTime.year === 'number') {
+      var rtMs = Date.UTC(ref0.refTime.year, ref0.refTime.month - 1, ref0.refTime.day,
+        ref0.refTime.hour, ref0.refTime.minute, ref0.refTime.second || 0);
+      var wantFhr = (validUtc.getTime() - rtMs) / 3600000;
+      console.log('[GFS-debug] wantFhr(~) from ref0=' + wantFhr + ' refTime=', ref0.refTime);
+    }
+  }
+  var col = gfsAtmBuildVerticalColumn(wp, dbgCol);
+  if(dbg) console.log('[GFS-debug] vertical column sorted by HGT (m), n=' + (col ? col.length : 0), col);
+  var samp = null;
+  if(col && col.length >= 2) samp = gfsAtmInterpHeightColumn(col, altFt, dbg);
+  else if(col && col.length === 1) samp = { u: col[0].u, v: col[0].v, t: col[0].t };
+  if(!samp) {
+    if(dbg) console.warn('[GFS-debug] HGT column insufficient, ISA log(p) fallback');
+    return gfsAtWpIsaFallback(wp, alt, validUtc);
+  }
+  var u = samp.u;
+  var v = samp.v;
+  var t = samp.t;
+  var spd = Math.sqrt(u*u + v*v) * 1.943844;
+  var dir = (Math.atan2(-u, -v) * 180/Math.PI + 360) % 360;
+  if(dbg) console.log('[GFS-debug] final u,v(m/s)=' + u + ',' + v + ' spdKt=' + spd + ' dir=' + dir + ' T(K)=' + t + ' T(C)=' + (t - 273.15));
   return {
     dir: Math.round(dir/10)*10,
     spd: Math.round(spd),
@@ -2731,6 +2848,8 @@ function renderGfsAtmTable() {
     }
     return;
   }
+
+  GFS_ATM_COLUMN_CACHE = {};
 
   // WP順 (FP_ROWS の順を尊重、FIR境界行は除外。WP 配列に存在するもののみ)
   var wpIds = [];
@@ -2824,7 +2943,8 @@ function renderGfsWsTable() {
     }
     return;
   }
-  if(typeof GfsRadar === 'undefined' || !GfsRadar.nearestFhr || !GfsRadar.computeAtCell || !GfsRadar.methodValue || !GfsRadar.flToMb || !GfsRadar.snapLevel ||
+  GFS_WS_PT_CACHE = {};
+  if(typeof GfsRadar === 'undefined' || !GfsRadar.nearestFhr || !GfsRadar.computeAtCell || !GfsRadar.methodValue ||
       !GfsRadar.getColor || !GfsRadar.bucketCategoryIndex) {
     wrap.innerHTML = '<div style="color:#ef5350;padding:24px;text-align:center;font-size:1em;">GfsRadar が利用できません（gfs-radar-layer.js を確認してください）</div>';
     return;
@@ -2867,6 +2987,21 @@ function renderGfsWsTable() {
     return new Date(ato.getTime() + (wp.ctme || 0) * 60000);
   }
 
+  function wsInterpScalarByHeight(pts, hTarget) {
+    if(!pts || pts.length === 0) return null;
+    if(pts.length === 1) return pts[0].val;
+    if(hTarget <= pts[0].h) return pts[0].val;
+    if(hTarget >= pts[pts.length - 1].h) return pts[pts.length - 1].val;
+    var i, f;
+    for(i = 0; i < pts.length - 1; i++) {
+      if(pts[i].h <= hTarget && hTarget <= pts[i + 1].h) {
+        f = (hTarget - pts[i].h) / (pts[i + 1].h - pts[i].h);
+        return pts[i].val + f * (pts[i + 1].val - pts[i].val);
+      }
+    }
+    return null;
+  }
+
   function wsValueAtWpAlt(wpId, altFl) {
     var wp = null;
     var wi;
@@ -2880,17 +3015,32 @@ function renderGfsWsTable() {
     var vu = validUtcForWp(wp);
     var fhr = GfsRadar.nearestFhr(vu);
     if(fhr === null) return null;
-    var centerMb = GfsRadar.snapLevel(GfsRadar.flToMb(altFl));
-    var sCenter = findSliceFhrLev(fhr, centerMb);
-    if(!sCenter || !sCenter.grid) return null;
-    var ij = gfsLatLonToCellIxIy(lat, lon, sCenter.grid);
-    if(!ij) return null;
-    var c = GfsRadar.computeAtCell(fhr, centerMb, ij.ix, ij.iy);
-    if(!c) return null;
     var mode = (typeof ATM_GFS_WS === 'string') ? ATM_GFS_WS : 'vws';
-    if(mode === 'ti1') return GfsRadar.methodValue('TI1', c);
-    if(mode === 'ti2') return GfsRadar.methodValue('TI2', c);
-    return GfsRadar.methodValue('VWS', c);
+    var cacheKey = wp.id + '|' + vu.getTime() + '|' + mode;
+    var pts = GFS_WS_PT_CACHE[cacheKey];
+    if(!pts) {
+      pts = [];
+      var li, lev, sCenter, ij, c, val;
+      for(li = 0; li < GFS_ATM_LEVELS_MB.length; li++) {
+        lev = GFS_ATM_LEVELS_MB[li];
+        sCenter = findSliceFhrLev(fhr, lev);
+        if(!sCenter || !sCenter.grid) continue;
+        ij = gfsLatLonToCellIxIy(lat, lon, sCenter.grid);
+        if(!ij) continue;
+        c = GfsRadar.computeAtCell(fhr, lev, ij.ix, ij.iy);
+        if(!c || c.h === null || c.h === undefined || isNaN(c.h)) continue;
+        if(mode === 'ti1') val = GfsRadar.methodValue('TI1', c);
+        else if(mode === 'ti2') val = GfsRadar.methodValue('TI2', c);
+        else val = GfsRadar.methodValue('VWS', c);
+        if(val === null || isNaN(val)) continue;
+        pts.push({ h: c.h, val: val });
+      }
+      pts.sort(function(a, b) { return a.h - b.h; });
+      GFS_WS_PT_CACHE[cacheKey] = pts;
+    }
+    if(pts.length < 1) return null;
+    var hTarget = altFl * 100 * 0.3048;
+    return wsInterpScalarByHeight(pts, hTarget);
   }
 
   var wpIds = [];
