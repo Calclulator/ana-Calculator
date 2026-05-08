@@ -4287,8 +4287,48 @@ function gfsRadarValidUtcForRoutePoint(routePts, idx) {
   return gfsAtmValidUtcForWp({ ctme: ctme });
 }
 
+var GFS_RADAR_PRELOAD_STATE = {
+  inflight: false,
+  key: '',
+  lastDoneKey: '',
+  lastStatus: 'idle',
+  callbacks: []
+};
+
+function gfsRadarBuildPreloadKey(routePts) {
+  if(!routePts || !routePts.length) return 'empty';
+  var parts = [];
+  var i, p;
+  for(i = 0; i < routePts.length; i++) {
+    p = routePts[i];
+    if(!p) continue;
+    parts.push((p.id || 'P') + ':' + Number(p.lat).toFixed(3) + ':' + Number(p.lon).toFixed(3) + ':' + (p.ctme || 0));
+  }
+  var m = WX_GFS_CORR_METHOD || '';
+  var fl = (typeof CURRENT_FL === 'number') ? CURRENT_FL : '';
+  return m + '|' + fl + '|' + parts.join(',');
+}
+
 function preloadGfsRadarPoints(routePts, done) {
   if(typeof gfsPointAt !== 'function') { done(new Error('gfsPointAt unavailable')); return; }
+  var preloadKey = gfsRadarBuildPreloadKey(routePts);
+  if(GFS_RADAR_PRELOAD_STATE.inflight && GFS_RADAR_PRELOAD_STATE.key === preloadKey) {
+    GFS_RADAR_PRELOAD_STATE.callbacks.push(done);
+    console.warn('[GfsRadar] preload skipped (inflight same key)', preloadKey);
+    return;
+  }
+  if(!GFS_RADAR_PRELOAD_STATE.inflight &&
+     GFS_RADAR_PRELOAD_STATE.lastDoneKey === preloadKey &&
+     GFS_RADAR_PRELOAD_STATE.lastStatus === 'ready') {
+    console.log('[GfsRadar] preload skipped (already ready)', preloadKey);
+    done(null);
+    return;
+  }
+  GFS_RADAR_PRELOAD_STATE.inflight = true;
+  GFS_RADAR_PRELOAD_STATE.key = preloadKey;
+  GFS_RADAR_PRELOAD_STATE.callbacks = [done];
+  console.log('[GfsRadar] preload trigger stack:', (new Error('preload trigger')).stack);
+
   var jobs = [];
   var seen = {};
   var i;
@@ -4322,7 +4362,15 @@ function preloadGfsRadarPoints(routePts, done) {
       console.warn('[GfsRadar] preload skip point idx=' + i, exPt);
     }
   }
-  if(jobs.length === 0) { done(null); return; }
+  if(jobs.length === 0) {
+    GFS_RADAR_PRELOAD_STATE.inflight = false;
+    GFS_RADAR_PRELOAD_STATE.lastDoneKey = preloadKey;
+    GFS_RADAR_PRELOAD_STATE.lastStatus = 'ready';
+    var cbs0 = GFS_RADAR_PRELOAD_STATE.callbacks.slice();
+    GFS_RADAR_PRELOAD_STATE.callbacks = [];
+    for(var ci0=0; ci0<cbs0.length; ci0++) if(typeof cbs0[ci0] === 'function') cbs0[ci0](null);
+    return;
+  }
   var t0 = Date.now();
   var okCount = 0, ngCount = 0;
   console.log('[GfsRadar] preload start wp=' + wpTotal + ' skipped=' + wpSkip + ' jobs=' + jobs.length);
@@ -4343,8 +4391,13 @@ function preloadGfsRadarPoints(routePts, done) {
     console.log('[GfsRadar] preload done wp=' + wpTotal + ' skipped=' + wpSkip +
       ' jobs=' + jobs.length + ' ok=' + okCount + ' ng=' + ngCount +
       ' cache=' + Object.keys(seen).length + ' elapsedMs=' + (Date.now() - t0));
-    if(okCount <= 0) done(new Error('preload failed all points'));
-    else done(null);
+    GFS_RADAR_PRELOAD_STATE.inflight = false;
+    GFS_RADAR_PRELOAD_STATE.lastDoneKey = preloadKey;
+    GFS_RADAR_PRELOAD_STATE.lastStatus = (okCount > 0) ? 'ready' : 'error';
+    var cbs = GFS_RADAR_PRELOAD_STATE.callbacks.slice();
+    GFS_RADAR_PRELOAD_STATE.callbacks = [];
+    var outErr = (okCount <= 0) ? new Error('preload failed all points') : null;
+    for(var ci=0; ci<cbs.length; ci++) if(typeof cbs[ci] === 'function') cbs[ci](outErr);
   });
 }
 
