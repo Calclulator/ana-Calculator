@@ -41,6 +41,20 @@
   var TI1_THRESH = [50, 30, 15, 8, 3];
   var TI2_THRESH = [70, 40, 20, 10, 5];
   var LAST_RENDER_LOG = null;
+  var ELLROD_LOG_SEEN = {};
+
+  function ellrodDebugLogOnce(key, line) {
+    if (!window.GFS_DEBUG_ELLROD) return;
+    if (ELLROD_LOG_SEEN[key]) return;
+    ELLROD_LOG_SEEN[key] = 1;
+    console.log(line);
+  }
+  function cvgDebugLogOnce(key, line) {
+    if (!window.GFS_DEBUG_CVG) return;
+    if (ELLROD_LOG_SEEN[key]) return;
+    ELLROD_LOG_SEEN[key] = 1;
+    console.log(line);
+  }
 
   function normalizeMethod(method) {
     var m = String(method || 'VWS').toUpperCase();
@@ -450,6 +464,26 @@
     var shear = dVdx + dUdy;
     var defm = Math.sqrt(stretch * stretch + shear * shear);
     var cvg = -(dUdx + dVdy); // positive = converging
+    if (window.GFS_DEBUG_ELLROD || window.GFS_DEBUG_CVG) {
+      var ti1 = (vws !== null) ? vws * defm : null;
+      var cvgClip = (cvg !== null && cvg !== undefined && !isNaN(cvg)) ? Math.max(0, cvg) : null;
+      var ti2 = (vws !== null) ? vws * (defm + (cvgClip !== null ? cvgClip : 0)) : null;
+      var ratio = (vws && vws !== 0 && ti1 != null) ? (ti1 / vws) : null;
+      var id = 'cell:' + fhr + ':' + centerMb + ':' + ix + ':' + iy;
+      ellrodDebugLogOnce('E|' + id,
+        '[Ellrod] wp=' + id + ' alt=' + centerMb +
+        ' VWS=' + (vws != null ? vws.toFixed(4) : 'null') +
+        ' DEF=' + (defm != null ? defm.toExponential(4) : 'null') +
+        ' stretching=' + (stretch != null ? stretch.toExponential(4) : 'null') +
+        ' shearing=' + (shear != null ? shear.toExponential(4) : 'null') +
+        ' TI1=' + (ti1 != null ? ti1.toFixed(2) : 'null') +
+        ' TI2=' + (ti2 != null ? ti2.toFixed(2) : 'null') +
+        ' TI1/VWS=' + (ratio != null ? ratio.toFixed(2) : 'null'));
+      cvgDebugLogOnce('C|' + id,
+        '[CVG] wp=' + id + ' alt=' + centerMb +
+        ' CVG_raw=' + (cvg != null ? cvg.toExponential(4) : 'null') +
+        ' CVG_clipped=' + (cvgClip != null ? cvgClip.toExponential(4) : 'null'));
+    }
 
     return {
       vws: vws,
@@ -550,6 +584,28 @@
       var shear = dVdx + dUdy;
       defm = Math.sqrt(stretch * stretch + shear * shear);
       cvg = -(dUdx + dVdy);
+      if (window.GFS_DEBUG_ELLROD || window.GFS_DEBUG_CVG) {
+        var cvgClip2 = (cvg !== null && cvg !== undefined && !isNaN(cvg)) ? Math.max(0, cvg) : null;
+        var ti1p = (vws !== null) ? vws * defm : null;
+        var ti2p = (vws !== null) ? vws * (defm + (cvgClip2 !== null ? cvgClip2 : 0)) : null;
+        var ratio2 = (vws && vws !== 0 && ti1p != null) ? (ti1p / vws) : null;
+        var wpName = (pt && pt.id) ? pt.id : (pt.lat.toFixed(3) + ',' + pt.lon.toFixed(3));
+        var alt = levelMb;
+        var k = 'pt:' + wpName + ':' + alt + ':' + validUtc.getTime();
+        ellrodDebugLogOnce('E|' + k,
+          '[Ellrod] wp=' + wpName + ' alt=' + alt +
+          ' VWS=' + (vws != null ? vws.toFixed(4) : 'null') +
+          ' DEF=' + (defm != null ? defm.toExponential(4) : 'null') +
+          ' stretching=' + (stretch != null ? stretch.toExponential(4) : 'null') +
+          ' shearing=' + (shear != null ? shear.toExponential(4) : 'null') +
+          ' TI1=' + (ti1p != null ? ti1p.toFixed(2) : 'null') +
+          ' TI2=' + (ti2p != null ? ti2p.toFixed(2) : 'null') +
+          ' TI1/VWS=' + (ratio2 != null ? ratio2.toFixed(2) : 'null'));
+        cvgDebugLogOnce('C|' + k,
+          '[CVG] wp=' + wpName + ' alt=' + alt +
+          ' CVG_raw=' + (cvg != null ? cvg.toExponential(4) : 'null') +
+          ' CVG_clipped=' + (cvgClip2 != null ? cvgClip2.toExponential(4) : 'null'));
+      }
     }
     return {
       vws: vws,

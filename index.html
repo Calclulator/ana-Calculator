@@ -593,6 +593,8 @@ var WX_TURB_METHOD = 'vws';
 var WX_GFS_CORR_ON = false;
 var WX_GFS_CORR_METHOD = 'VWS';
 var WX_CORRIDOR_NM = 200;
+var GFS_DEBUG_ELLROD = false;
+var GFS_DEBUG_CVG = false;
 var gfsRadarLayer = null;
 var ACTIVE_ETOPS_KEY = 'NH9D';
 var VWS = {};
@@ -3273,10 +3275,29 @@ function exportCalibrationData() {
     if(!c) return null;
     var rawCvg = c.cvg;
     var cvgClip = (rawCvg !== null && rawCvg !== undefined && !isNaN(rawCvg)) ? Math.max(0, rawCvg) : null;
+    var vwsVal = GfsRadar.methodValue('VWS', c);
+    var ti1Val = GfsRadar.methodValue('TI1', c);
+    var ti2Val = GfsRadar.methodValue('TI2', c);
+    if(GFS_DEBUG_ELLROD) {
+      var ratio = (vwsVal && vwsVal !== 0 && ti1Val != null) ? (ti1Val / vwsVal) : null;
+      var wpName = wp && wp.id ? wp.id : 'unknown';
+      console.log('[Ellrod] wp=' + wpName + ' alt=' + altFl
+        + ' VWS=' + (vwsVal != null ? vwsVal.toFixed(4) : 'null')
+        + ' DEF=' + (c.defm != null ? c.defm.toExponential(4) : 'null')
+        + ' TI1=' + (ti1Val != null ? ti1Val.toFixed(2) : 'null')
+        + ' TI2=' + (ti2Val != null ? ti2Val.toFixed(2) : 'null')
+        + ' TI1/VWS=' + (ratio != null ? ratio.toFixed(2) : 'null'));
+    }
+    if(GFS_DEBUG_CVG) {
+      var wpName2 = wp && wp.id ? wp.id : 'unknown';
+      console.log('[CVG] wp=' + wpName2 + ' alt=' + altFl
+        + ' CVG_raw=' + (rawCvg != null ? rawCvg.toExponential(4) : 'null')
+        + ' CVG_clipped=' + (cvgClip != null ? cvgClip.toExponential(4) : 'null'));
+    }
     return {
-      vws: GfsRadar.methodValue('VWS', c),
-      ti1: GfsRadar.methodValue('TI1', c),
-      ti2: GfsRadar.methodValue('TI2', c),
+      vws: vwsVal,
+      ti1: ti1Val,
+      ti2: ti2Val,
       defm: c.defm,
       cvg: rawCvg,
       cvg_clipped: cvgClip
