@@ -217,7 +217,13 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
     var lonN = normalizeLongitudeForGridExtent(lon, lo1, lo2);
     var iy = (la1 - lat) / dlat;
     var ix = (lonN - lo1) / dlon;
-    if (ix < 0 || ix > nx - 1 || iy < 0 || iy > ny - 1) return null;
+    // Floating point tolerance at the boundary.
+    var eps = 1e-9;
+    if (ix < -eps || ix > nx - 1 + eps || iy < -eps || iy > ny - 1 + eps) return null;
+    if (ix < 0) ix = 0;
+    if (ix > nx - 1) ix = nx - 1;
+    if (iy < 0) iy = 0;
+    if (iy > ny - 1) iy = ny - 1;
     var i0 = Math.floor(ix);
     var j0 = Math.floor(iy);
     var fx = ix - i0;

@@ -150,21 +150,93 @@
     return Math.sqrt(dLat * dLat + dLonNM * dLonNM);
   }
 
-  function minDistToRouteNM(lat, lon, wps) {
-    if (!wps || !wps.length) return 0;
+  // Planar (equirectangular) point-to-segment distance.
+  // Accuracy is sufficient for the corridor padding (e.g. <= ~200NM width).
+  function pointToSegmentDistNM(pLat, pLon, aLat, aLon, bLat, bLon) {
+    var DEG2RAD = Math.PI / 180;
+    var NM_M = 1852;
+
+    var latP = pLat * DEG2RAD;
+    var lonP = pLon * DEG2RAD;
+    var latA = aLat * DEG2RAD;
+    var lonA = aLon * DEG2RAD;
+    var latB = bLat * DEG2RAD;
+    var lonB = bLon * DEG2RAD;
+
+    var latMean = (latA + latB) * 0.5;
+    var cosMean = Math.cos(latMean);
+
+    var pX = lonP * cosMean;
+    var pY = latP;
+    var aX = lonA * cosMean;
+    var aY = latA;
+    var bX = lonB * cosMean;
+    var bY = latB;
+
+    var abX = bX - aX;
+    var abY = bY - aY;
+    var len2 = abX * abX + abY * abY;
+    if (len2 === 0) {
+      // Segment is a point
+      var dx = pX - aX;
+      var dy = pY - aY;
+      var rad = Math.sqrt(dx * dx + dy * dy);
+      return rad * R_EARTH_M / NM_M;
+    }
+
+    var t = ((pX - aX) * abX + (pY - aY) * abY) / len2;
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+
+    var cX = aX + t * abX;
+    var cY = aY + t * abY;
+    var dX = pX - cX;
+    var dY = pY - cY;
+    var dRad = Math.sqrt(dX * dX + dY * dY);
+    return dRad * R_EARTH_M / NM_M;
+  }
+
+  function unwrapLonForSegment(lon1, lon2) {
+    // Shift lon2 by +-360 so that (lon2-lon1) is within [-180,180] for the "short" path.
+    var d = lon2 - lon1;
+    while (d > 180) { lon2 -= 360; d = lon2 - lon1; }
+    while (d < -180) { lon2 += 360; d = lon2 - lon1; }
+    return lon2;
+  }
+
+  function wpLonForFilter(w) {
+    var lon = (typeof w.lngU === 'number' && !isNaN(w.lngU)) ? w.lngU : ((typeof w.lon === 'number') ? w.lon : w.lng);
+    if (typeof lon !== 'number' || isNaN(lon)) return null;
+    // Convert to a common base domain when possible. (If lon is unwrapped already, keep it.)
+    if (lon < 0) lon += 360;
+    return lon;
+  }
+
+  function minDistToRoutePolylineNM(lat, lon, wps, corridorNM) {
+    if (!wps || wps.length < 2) return 0;
     var minD = Infinity;
-    for (var i = 0; i < wps.length; i++) {
-      var w = wps[i];
-      if (typeof w.lat !== 'number') continue;
-      var wLon = (typeof w.lngU === 'number' && !isNaN(w.lngU))
-        ? w.lngU
-        : ((typeof w.lon === 'number') ? w.lon : w.lng);
-      if (typeof wLon !== 'number' || isNaN(wLon)) continue;
-      var cellLon = lon;
-      while (cellLon - wLon > 180) cellLon -= 360;
-      while (wLon - cellLon > 180) cellLon += 360;
-      var d = approxDistNM(lat, cellLon, w.lat, wLon);
-      if (d < minD) minD = d;
+    var segOffsets = [-360, 0, 360];
+
+    for (var i = 0; i < wps.length - 1; i++) {
+      var a = wps[i];
+      var b = wps[i + 1];
+      if (!a || !b) continue;
+      if (typeof a.lat !== 'number' || typeof b.lat !== 'number') continue;
+
+      var aLon = wpLonForFilter(a);
+      var bLon = wpLonForFilter(b);
+      if (aLon === null || bLon === null) continue;
+
+      // Ensure segment is the short-way around the dateline.
+      bLon = unwrapLonForSegment(aLon, bLon);
+
+      for (var oi = 0; oi < segOffsets.length; oi++) {
+        var off = segOffsets[oi];
+        var d = pointToSegmentDistNM(lat, lon, a.lat, aLon + off, b.lat, bLon + off);
+        if (d < minD) minD = d;
+        // Early exit: once inside corridor width, no need to check further.
+        if (corridorNM != null && isFinite(corridorNM) && minD <= corridorNM) return minD;
+      }
     }
     return minD;
   }
@@ -377,7 +449,7 @@
       for (var ix = 0; ix < g.nx; ix++) {
         var lon = g.lo1 + ix * dlon;
         if (useFilter) {
-          if (minDistToRouteNM(lat, lon, routeWps) > corridorNM) {
+          if (minDistToRoutePolylineNM(lat, lon, routeWps, corridorNM) > corridorNM) {
             nFiltered++;
             continue;
           }
