@@ -781,6 +781,7 @@
     var tiOffsetNm = (typeof opts.tiOffsetNm === 'number') ? opts.tiOffsetNm : 200;
 
     if (pointMode) {
+      // opts.routePoints: built with normalized {lat,lon} per leg (index buildGfsRadarRoutePoints + normalizePoint).
       var pts = opts.routePoints;
       // GFS overlay: fixed ~40NM total width (+-20NM from route); independent of Turbulence Corridor slider.
       var GFS_OVERLAY_HALF_NM = 20;

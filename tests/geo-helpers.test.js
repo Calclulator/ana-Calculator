@@ -17,6 +17,13 @@ describe('normalizePoint', () => {
     expect(r).toEqual({ lat: 10, lon: -175.25 });
   });
 
+  it('normalizes JetPlan-style coord WP id row (lat/lng only)', () => {
+    const r = normalizePoint({ id: '43E70', lat: 43.11666666666667, lng: -170.11666666666666 });
+    expect(r).not.toBeNull();
+    expect(r.lon).toBeCloseTo(-170.11666666666666, 8);
+    expect(r.lat).toBeCloseTo(43.11666666666667, 8);
+  });
+
   it('returns null when only lat is present', () => {
     expect(normalizePoint({ lat: 35 })).toBeNull();
   });

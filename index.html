@@ -1512,7 +1512,8 @@ function runParse() {
       var toks = line.trim().split(/\s+/);
       if(toks.length < 8) return;
       var wpId = toks[0];
-      if(!/^[A-Z][A-Z0-9]{1,7}$/.test(wpId)) return;
+      if(/^\d{2}[NSEW]\d{2}$/i.test(wpId)) wpId = wpId.toUpperCase();
+      if(!/^[A-Z][A-Z0-9]{1,7}$/.test(wpId) && !/^\d{2}[NSEW]\d{2}$/.test(wpId)) return;
       var speeds = [];
       // 全7段階の生データを WFM_DATA に保存
       if(!newWfmData[wpId]) newWfmData[wpId] = {};
@@ -2141,9 +2142,19 @@ function corridorShearValue(wpId) {
   var cLo = getWfmInterpolatedCell(wpId, flLo);
   var altLowFt = flLo * 100;
   var altFt = flTen * 100;
-  if(mode === 'company') return companyVwsAtWpFl(wpId, flTen);
-  if(mode === 'vws') return vwsValue(cLo, cHi, 1000);
-  if(mode === 'b787') return b787RiValue(cLo, cHi, altLowFt, altFt);
+  if(mode === 'company') {
+    var cComp = companyVwsAtWpFl(wpId, flTen);
+    if(cComp === null || isNaN(cComp)) return 0;
+    return cComp;
+  }
+  if(mode === 'vws') {
+    if(!cLo || !cHi) return 0;
+    return vwsValue(cLo, cHi, 1000);
+  }
+  if(mode === 'b787') {
+    if(!cLo || !cHi) return 999;
+    return b787RiValue(cLo, cHi, altLowFt, altFt);
+  }
   return null;
 }
 
@@ -4283,7 +4294,9 @@ function drawRoute() {
     var a=WP[i], b=WP[i+1];
     var au = routeCoords[i];
     var bu = routeCoords[i+1];
-    if(!au || !bu || isNaN(a.lat)||isNaN(a.lng)||isNaN(b.lat)||isNaN(b.lng)) continue;
+    var aNorm = normalizePoint(a);
+    var bNorm = normalizePoint(b);
+    if(!au || !bu || !aNorm || !bNorm) continue;
     var segVal = turbOn ? corridorShearValue(a.id) : null;
     var col = turbOn ? wsColor(segVal, turbMode === 'b787' ? 'b787' : turbMode) : 'transparent';
     var brg = bearing(au.lat,au.lng,bu.lat,bu.lng);
@@ -4444,12 +4457,12 @@ function gfsRadarInterpPoint(a, b, t) {
 function buildGfsRadarRoutePoints() {
   if(typeof WP === 'undefined' || !WP || WP.length < 2) return [];
   var base = [];
-  var i, w, lon;
+  var i, w, np;
   for(i=0;i<WP.length;i++) {
     w = WP[i];
-    lon = (typeof w.lon === 'number') ? w.lon : w.lng;
-    if(typeof w.lat !== 'number' || typeof lon !== 'number') continue;
-    base.push({ id: w.id || ('WP' + i), lat: w.lat, lon: lon, ctme: w.ctme || 0, type: 'real' });
+    np = normalizePoint(w);
+    if(!np) continue;
+    base.push({ id: w.id || ('WP' + i), lat: np.lat, lon: np.lon, ctme: w.ctme || 0, type: 'real' });
   }
   if(base.length < 2) return base;
   var out = [];
