@@ -326,8 +326,8 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
   }
 
   function pickGridStep(bboxN, bboxS, bboxE, bboxW) {
-    var candidates = [0.25, 0.5, 1.0, 1.5, 2.0];
-    var maxCells = 1000;
+    var candidates = [0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0];
+    var maxCells = 400;
     var dLat = Math.abs(bboxN - bboxS);
     var dLon = Math.abs(bboxE - bboxW);
     var picked = candidates[candidates.length - 1];
@@ -363,14 +363,14 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
     var dLatAbs = Math.abs(box.north - box.south);
     var dLonAbs = Math.abs(box.east - box.west);
     var candidates_eval_result = [];
-    var candDbg = [0.25, 0.5, 1.0, 1.5, 2.0];
+    var candDbg = [0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0];
     var iDbg;
     for (iDbg = 0; iDbg < candDbg.length; iDbg++) {
       var stDbg = candDbg[iDbg];
       var nlDbg = Math.ceil(dLatAbs / stDbg) + 1;
       var nwDbg = Math.ceil(dLonAbs / stDbg) + 1;
       var csDbg = nlDbg * nwDbg;
-      candidates_eval_result.push({step: stDbg, nlat: nlDbg, nlon: nwDbg, cells: csDbg, ok: csDbg <= 1000});
+      candidates_eval_result.push({step: stDbg, nlat: nlDbg, nlon: nwDbg, cells: csDbg, ok: csDbg <= 400});
     }
     console.log("[GFS-grid debug] candidates check:", JSON.stringify(candidates_eval_result));
 
