@@ -2682,7 +2682,8 @@ function gfsAtWpIsaFallback(wp, alt, validUtc) {
   else mb = 226.32 * Math.exp(-(altFt - 36089) / 20805);
   if(mb > 320) return null;
   if(typeof gfsValueAt !== 'function') return null;
-  var lon = typeof wp.lon === 'number' ? wp.lon : wp.lng;
+  var pIsa = normalizePoint(wp);
+  if(!pIsa) return null;
   var GFS_LV = GFS_ATM_LEVELS_MB;
   function interpVar(varName) {
     var lo = null, hi = null;
@@ -2695,9 +2696,9 @@ function gfsAtWpIsaFallback(wp, alt, validUtc) {
       else if(mb < 150) { lo = hi = 150; }
       else return null;
     }
-    if(lo === hi) return gfsValueAt(wp.lat, lon, lo, varName, validUtc);
-    var vLo = gfsValueAt(wp.lat, lon, lo, varName, validUtc);
-    var vHi = gfsValueAt(wp.lat, lon, hi, varName, validUtc);
+    if(lo === hi) return gfsValueAt(pIsa.lat, pIsa.lon, lo, varName, validUtc);
+    var vLo = gfsValueAt(pIsa.lat, pIsa.lon, lo, varName, validUtc);
+    var vHi = gfsValueAt(pIsa.lat, pIsa.lon, hi, varName, validUtc);
     if(vLo === null || vHi === null) return null;
     var f = (Math.log(mb) - Math.log(lo)) / (Math.log(hi) - Math.log(lo));
     return vLo + (vHi - vLo) * f;
@@ -2718,16 +2719,15 @@ function gfsAtWpIsaFallback(wp, alt, validUtc) {
 
 function gfsAtmBuildVerticalColumn(wp, dbgCol) {
   var validUtc = gfsAtmValidUtcForWp(wp);
-  var lat = wp.lat;
-  var lon = typeof wp.lon === 'number' ? wp.lon : wp.lng;
-  if(typeof lat !== 'number' || typeof lon !== 'number') return null;
+  var pCol = normalizePoint(wp);
+  if(!pCol) return null;
   var cacheKey = wp.id + '|' + validUtc.getTime();
   if(GFS_ATM_COLUMN_CACHE[cacheKey]) {
     if(dbgCol) console.log('[GFS-debug] point column cache hit ' + cacheKey);
     return GFS_ATM_COLUMN_CACHE[cacheKey];
   }
   if(typeof gfsPointCached !== 'function') return null;
-  var point = gfsPointCached(lat, lon, validUtc);
+  var point = gfsPointCached(pCol.lat, pCol.lon, validUtc);
   if(!point || !point.levels || !point.levels.length) return null;
   var col = [];
   var i, lv, hgtFt, flEq;
@@ -2883,11 +2883,15 @@ function ensureGfsLoadedForAtm() {
   if(typeof gfsPointAt !== 'function') return;
   if(typeof WP === 'undefined' || !WP || !WP.length) return;
   var sig = [];
-  var i, w, lo;
+  var i, w, p;
   for(i = 0; i < WP.length; i++) {
     w = WP[i];
-    lo = (typeof w.lon === 'number') ? w.lon : w.lng;
-    sig.push(w.id + ':' + w.lat + ':' + lo + ':' + (w.ctme || 0));
+    p = normalizePoint(w);
+    if(p) {
+      sig.push(w.id + ':' + p.lat + ':' + p.lon + ':' + (w.ctme || 0));
+    } else {
+      sig.push(w.id + ':NOCOORD:' + (w.ctme || 0));
+    }
   }
   var key = sig.join('|');
   if(window.GFS_POINT && window.GFS_POINT.status === 'ready' && window.GFS_POINT.key === key) return;
@@ -2899,14 +2903,17 @@ function ensureGfsLoadedForAtm() {
   var t0 = Date.now();
   for(i = 0; i < WP.length; i++) {
     w = WP[i];
-    lo = (typeof w.lon === 'number') ? w.lon : w.lng;
-    if(typeof w.lat !== 'number' || typeof lo !== 'number') continue;
+    p = normalizePoint(w);
+    if(!p) {
+      console.warn('[GFS-ATM] skip WP, no lat/lon:', w);
+      continue;
+    }
     var vu = gfsAtmValidUtcForWp(w);
-    jobs.push({ lat: w.lat, lon: lo, vu: vu });
-    var n = gfsRadarNeighborPt(w, 'N', 200);
-    var s = gfsRadarNeighborPt(w, 'S', 200);
-    var e = gfsRadarNeighborPt(w, 'E', 200);
-    var ww = gfsRadarNeighborPt(w, 'W', 200);
+    jobs.push({ lat: p.lat, lon: p.lon, vu: vu });
+    var n = gfsRadarNeighborPt(p, 'N', 200);
+    var s = gfsRadarNeighborPt(p, 'S', 200);
+    var e = gfsRadarNeighborPt(p, 'E', 200);
+    var ww = gfsRadarNeighborPt(p, 'W', 200);
     jobs.push({ lat: n.lat, lon: n.lon, vu: vu });
     jobs.push({ lat: s.lat, lon: s.lon, vu: vu });
     jobs.push({ lat: e.lat, lon: e.lon, vu: vu });
@@ -3141,9 +3148,8 @@ function renderGfsWsTable() {
       if(WP[wi].id === wpId) { wp = WP[wi]; break; }
     }
     if(!wp) return null;
-    var lat = wp.lat;
-    var lon = typeof wp.lon === 'number' ? wp.lon : wp.lng;
-    if(typeof lat !== 'number' || typeof lon !== 'number') return null;
+    var wpNorm = normalizePoint(wp);
+    if(!wpNorm) return null;
     var vu = validUtcForWp(wp);
     var mode = (typeof ATM_GFS_WS === 'string') ? ATM_GFS_WS : 'vws';
     var cacheKey = wp.id + '|' + vu.getTime() + '|' + mode;
@@ -3153,10 +3159,10 @@ function renderGfsWsTable() {
       var col = gfsAtmBuildVerticalColumn(wp, false);
       if(col && col.length >= 2) {
         var i, lo, hi, dz, du, dv, vws;
-        var nPt = gfsRadarNeighborPt(wp, 'N', 200);
-        var sPt = gfsRadarNeighborPt(wp, 'S', 200);
-        var ePt = gfsRadarNeighborPt(wp, 'E', 200);
-        var wPt = gfsRadarNeighborPt(wp, 'W', 200);
+        var nPt = gfsRadarNeighborPt(wpNorm, 'N', 200);
+        var sPt = gfsRadarNeighborPt(wpNorm, 'S', 200);
+        var ePt = gfsRadarNeighborPt(wpNorm, 'E', 200);
+        var wPt = gfsRadarNeighborPt(wpNorm, 'W', 200);
         var pN = (typeof gfsPointCached === 'function') ? gfsPointCached(nPt.lat, nPt.lon, vu) : null;
         var pS = (typeof gfsPointCached === 'function') ? gfsPointCached(sPt.lat, sPt.lon, vu) : null;
         var pE = (typeof gfsPointCached === 'function') ? gfsPointCached(ePt.lat, ePt.lon, vu) : null;
@@ -3182,7 +3188,7 @@ function renderGfsWsTable() {
           var cvgRaw = 0;
           if(nL && sL && eL && wL) {
             var dy_m = (2 * 200) * 1852.0;
-            var dx_m = (2 * 200) * 1852.0 * Math.cos(wp.lat * Math.PI / 180);
+            var dx_m = (2 * 200) * 1852.0 * Math.cos(wpNorm.lat * Math.PI / 180);
             if(Math.abs(dx_m) < 1) dx_m = 1;
             var dUdx = (eL.u - wL.u) / dx_m;
             var dUdy = (nL.u - sL.u) / dy_m;

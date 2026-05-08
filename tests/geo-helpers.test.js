@@ -1,5 +1,42 @@
 import { describe, it, expect } from 'vitest';
-import { gfsRadarNeighborPt } from '../geo-helpers.js';
+import { gfsRadarNeighborPt, normalizePoint } from '../geo-helpers.js';
+
+describe('normalizePoint', () => {
+  it('passes through { lat, lon }', () => {
+    const r = normalizePoint({ lat: 35, lon: 140 });
+    expect(r).toEqual({ lat: 35, lon: 140 });
+  });
+
+  it('maps lng to lon (Leaflet style)', () => {
+    const r = normalizePoint({ lat: -2, lng: 100.5 });
+    expect(r).toEqual({ lat: -2, lon: 100.5 });
+  });
+
+  it('returns null when only lat is present', () => {
+    expect(normalizePoint({ lat: 35 })).toBeNull();
+  });
+
+  it('returns null when only lng is present', () => {
+    expect(normalizePoint({ lng: 140 })).toBeNull();
+  });
+
+  it('returns null for null or undefined', () => {
+    expect(normalizePoint(null)).toBeNull();
+    expect(normalizePoint(undefined)).toBeNull();
+  });
+
+  it('returns null for non-numeric coordinates', () => {
+    expect(normalizePoint({ lat: '35', lon: 140 })).toBeNull();
+    expect(normalizePoint({ lat: 35, lon: '140' })).toBeNull();
+    expect(normalizePoint({ lat: 35, lng: '140' })).toBeNull();
+  });
+
+  it('returns null when lon or lat is NaN', () => {
+    expect(normalizePoint({ lat: NaN, lon: 0 })).toBeNull();
+    expect(normalizePoint({ lat: 0, lon: NaN })).toBeNull();
+    expect(normalizePoint({ lat: 0, lng: NaN })).toBeNull();
+  });
+});
 
 describe('gfsRadarNeighborPt', () => {
   const base = { lat: 35, lon: 140 };
