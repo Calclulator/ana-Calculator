@@ -179,7 +179,7 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
   }
 
   function roundCoordForKey(v) {
-    return Math.round(v * 1000) / 1000;
+    return Number(v).toFixed(3);
   }
 
   function clamp(v, lo, hi) {
