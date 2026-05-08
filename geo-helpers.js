@@ -2,6 +2,7 @@ function normalizePoint(pt) {
   if (!pt) return null;
   var lon = (typeof pt.lon === 'number' && isFinite(pt.lon)) ? pt.lon
           : (typeof pt.lng === 'number' && isFinite(pt.lng)) ? pt.lng
+          : (typeof pt.lngU === 'number' && isFinite(pt.lngU)) ? pt.lngU
           : null;
   if (typeof pt.lat !== 'number' || !isFinite(pt.lat) || lon === null) return null;
   return { lat: pt.lat, lon: lon };

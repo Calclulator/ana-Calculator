@@ -12,6 +12,11 @@ describe('normalizePoint', () => {
     expect(r).toEqual({ lat: -2, lon: 100.5 });
   });
 
+  it('maps lngU to lon when lon and lng are absent', () => {
+    const r = normalizePoint({ lat: 10, lngU: -175.25 });
+    expect(r).toEqual({ lat: 10, lon: -175.25 });
+  });
+
   it('returns null when only lat is present', () => {
     expect(normalizePoint({ lat: 35 })).toBeNull();
   });

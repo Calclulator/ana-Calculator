@@ -395,6 +395,7 @@
     <span style="font-size:1em;color:#90a4ae;margin-left:14px;">GFS データに基づく大気解析</span>
   </div>
   <div style="padding:8px 12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #1e2a38;">
+    <span id="gfsAtmProgress" style="font-size:12px;color:#888;min-width:140px;"></span>
     <span style="font-size:1em;color:#90a4ae;">Heat map:</span>
     <button class="btn" id="atm-gfs-heat-temp" onclick="setAtmGfsHeat('temp')">Temp</button>
     <button class="btn on" id="atm-gfs-heat-wind" onclick="setAtmGfsHeat('wind')">Wind</button>
@@ -2841,7 +2842,24 @@ function gfsPointDebugUrl(lat, lon, validUtc) {
   }
 }
 
-function gfsRunThrottledJobs(jobs, concurrency, worker, done) {
+function gfsAtmCoordsOk(lat, lon) {
+  return typeof lat === 'number' && isFinite(lat) && typeof lon === 'number' && isFinite(lon);
+}
+
+function updateGfsAtmProgress(done, total, ng) {
+  var el = document.getElementById('gfsAtmProgress');
+  if(!el) return;
+  if(done < total) {
+    el.textContent = 'GFS loading: ' + done + '/' + total;
+  } else {
+    var s = 'GFS loaded: ' + done + '/' + total;
+    if(ng && ng > 0) s += ' (ng=' + ng + ')';
+    el.textContent = s;
+    setTimeout(function () { el.textContent = ''; }, 2000);
+  }
+}
+
+function gfsRunThrottledJobs(jobs, concurrency, worker, done, onProgress) {
   if(!jobs || jobs.length === 0) { done(null, []); return; }
   var idx = 0, inFlight = 0, finished = 0;
   var results = new Array(jobs.length);
@@ -2854,6 +2872,9 @@ function gfsRunThrottledJobs(jobs, concurrency, worker, done) {
           if(err) { done(err); return; }
           results[k] = result;
           finished++;
+          if(typeof onProgress === 'function' && finished < jobs.length) {
+            onProgress(finished, jobs.length);
+          }
           if(finished >= jobs.length && inFlight === 0) {
             done(null, results);
             return;
@@ -2868,6 +2889,11 @@ function gfsRunThrottledJobs(jobs, concurrency, worker, done) {
 }
 
 function gfsPointAtRetry(lat, lon, validUtc, done) {
+  if(typeof lat !== 'number' || isNaN(lat) || typeof lon !== 'number' || isNaN(lon)) {
+    console.error('[gfsPointAtRetry] invalid coords lat=' + lat + ' lon=' + lon, new Error().stack);
+    if(typeof done === 'function') done(new Error('invalid coords'));
+    return;
+  }
   var url = gfsPointDebugUrl(lat, lon, validUtc);
   gfsPointAt(lat, lon, validUtc, function(err, data){
     if(!err) { done(null, data, url); return; }
@@ -2882,6 +2908,9 @@ function gfsPointAtRetry(lat, lon, validUtc, done) {
 function ensureGfsLoadedForAtm() {
   if(typeof gfsPointAt !== 'function') return;
   if(typeof WP === 'undefined' || !WP || !WP.length) return;
+  if(WP.length && WP[0].lngU === undefined) {
+    try { unwrapWPs(WP); } catch(_uw) {}
+  }
   var sig = [];
   var i, w, p;
   for(i = 0; i < WP.length; i++) {
@@ -2909,21 +2938,30 @@ function ensureGfsLoadedForAtm() {
       continue;
     }
     var vu = gfsAtmValidUtcForWp(w);
+    if(!gfsAtmCoordsOk(p.lat, p.lon)) {
+      console.warn('[GFS-ATM] skip WP center invalid:', w, p);
+      continue;
+    }
     jobs.push({ lat: p.lat, lon: p.lon, vu: vu });
     var n = gfsRadarNeighborPt(p, 'N', 200);
     var s = gfsRadarNeighborPt(p, 'S', 200);
     var e = gfsRadarNeighborPt(p, 'E', 200);
     var ww = gfsRadarNeighborPt(p, 'W', 200);
-    jobs.push({ lat: n.lat, lon: n.lon, vu: vu });
-    jobs.push({ lat: s.lat, lon: s.lon, vu: vu });
-    jobs.push({ lat: e.lat, lon: e.lon, vu: vu });
-    jobs.push({ lat: ww.lat, lon: ww.lon, vu: vu });
+    if(gfsAtmCoordsOk(n.lat, n.lon)) jobs.push({ lat: n.lat, lon: n.lon, vu: vu });
+    else console.warn('[GFS-ATM] skip neighbor N invalid:', n);
+    if(gfsAtmCoordsOk(s.lat, s.lon)) jobs.push({ lat: s.lat, lon: s.lon, vu: vu });
+    else console.warn('[GFS-ATM] skip neighbor S invalid:', s);
+    if(gfsAtmCoordsOk(e.lat, e.lon)) jobs.push({ lat: e.lat, lon: e.lon, vu: vu });
+    else console.warn('[GFS-ATM] skip neighbor E invalid:', e);
+    if(gfsAtmCoordsOk(ww.lat, ww.lon)) jobs.push({ lat: ww.lat, lon: ww.lon, vu: vu });
+    else console.warn('[GFS-ATM] skip neighbor W invalid:', ww);
   }
   if(jobs.length === 0) {
     window.GFS_POINT.status = 'error';
     window.GFS_POINT.error = 'no valid waypoint coordinates';
     return;
   }
+  updateGfsAtmProgress(0, jobs.length, 0);
   gfsRunThrottledJobs(jobs, 3, function(job, next){
     gfsPointAtRetry(job.lat, job.lon, job.vu, function(err, data, url){
       if(err) {
@@ -2944,8 +2982,11 @@ function ensureGfsLoadedForAtm() {
     }
     console.log('[GFS-ATM] preload done points=' + jobs.length +
       ' ok=' + okCount + ' ng=' + ngCount + ' elapsedMs=' + (Date.now() - t0));
+    updateGfsAtmProgress(jobs.length, jobs.length, ngCount);
     renderGfsAtmTable();
     renderGfsWsTable();
+  }, function(fin, tot) {
+    updateGfsAtmProgress(fin, tot, 0);
   });
 }
 
