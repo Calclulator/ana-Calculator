@@ -724,7 +724,9 @@
       var pitchNm = 20;
       var lateralStepNm = 20;
       var halfCellNm = 10;
-      var corridorInnerNm = Math.max(0, corridorNM - halfCellNm);
+      // Keep GFS band visually aligned with company corridor width (narrower than full filter radius).
+      var gfsBandHalfNm = Math.max(20, Math.min(corridorNM, 80));
+      var corridorInnerNm = Math.max(0, gfsBandHalfNm - halfCellNm);
       var lateralOffsets = [];
       lateralOffsets.push(0);
       for (var o = lateralStepNm; o <= corridorInnerNm + 1e-6; o += lateralStepNm) {

@@ -242,7 +242,7 @@
     <label class="ck"><input type="checkbox" id="oMetar" onchange="onApOverlayToggle()" oninput="onApOverlayToggle()" onclick="onApOverlayToggle()"> A/P</label>
     <label class="ck" style="display:none;"><input type="checkbox" id="oLightning" onchange="toggleLightning()"> Lightning</label>
     <span class="wx-ovl-break"></span>
-    <label class="ck"><input type="checkbox" id="oTurb" checked onchange="drawRoute()"> Turbulence corridor</label>
+    <label class="ck"><input type="checkbox" id="oTurb" checked onchange="onWxTurbCorrToggle()"> Turbulence corridor</label>
     <select id="turbMethodSel" class="btn" onchange="onWxTurbMethodChange()" style="max-width:220px;">
       <option value="company">Company (3段階)</option>
       <option value="vws" selected>VWS (6段階)</option>
@@ -254,7 +254,6 @@
       <option value="TI1">Ellrod TI1</option>
       <option value="TI2">Ellrod TI2</option>
     </select>
-    <button type="button" class="btn ws-method-help-btn" onclick="openWsMethodHelpFromWx()" aria-label="WIND SHEAR Method の解説"><span class="ws-method-help-ico">i</span></button>
     <span class="lbl" style="margin-left:8px;">回避</span>
     <button class="btn" id="avoidL" onclick="setAvoidSide('L')" style="padding:2px 6px;">L</button>
     <button class="btn" id="avoidR" onclick="setAvoidSide('R')" style="padding:2px 6px;">R</button>
@@ -2266,7 +2265,29 @@ function onWxTurbMethodChange() {
 function onWxGfsCorrToggle() {
   var cb = document.getElementById('oGfsCorr');
   WX_GFS_CORR_ON = cb && cb.checked;
+  if(WX_GFS_CORR_ON) {
+    var tcb = document.getElementById('oTurb');
+    if(tcb && tcb.checked) {
+      tcb.checked = false;
+      drawRoute();
+    }
+  }
   applyGfsRadarForCurrentMethod();
+  renderWxCorridorLegend();
+}
+
+function onWxTurbCorrToggle() {
+  var cb = document.getElementById('oTurb');
+  var on = !!(cb && cb.checked);
+  if(on) {
+    var gcb = document.getElementById('oGfsCorr');
+    if(gcb && gcb.checked) {
+      gcb.checked = false;
+      WX_GFS_CORR_ON = false;
+      applyGfsRadarForCurrentMethod();
+    }
+  }
+  drawRoute();
   renderWxCorridorLegend();
 }
 
@@ -5015,12 +5036,6 @@ function openWsMethodHelp(initialTab) {
   ov.style.display = 'block';
   pan.style.display = 'flex';
   showWsMethodHelpTab(tab);
-}
-
-function openWsMethodHelpFromWx() {
-  var sel = document.getElementById('gfsCorrMethodSel');
-  var v = sel ? sel.value : 'VWS';
-  openWsMethodHelp(v);
 }
 
 function openWsMethodHelpFromAtmGfs() {
