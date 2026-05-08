@@ -7,6 +7,7 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
   var LEVELS_MB = [300, 275, 250, 225, 200, 175, 150];
   var VARS_DEFAULT = 'UGRD,VGRD,TMP,HGT';
   var POINT_CACHE = {};
+  var GRID_CACHE = {};
 
   function pad2(n) {
     return (n < 10 ? '0' : '') + n;
@@ -305,6 +306,95 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
     POINT_CACHE = {};
   }
 
+  function gridKey(box, cycle, fhr, dlat, dlon) {
+    return [cycle, fhr,
+      roundCoordForKey(box.north), roundCoordForKey(box.south),
+      roundCoordForKey(box.west), roundCoordForKey(box.east),
+      dlat, dlon].join('|');
+  }
+
+  function gridUrl(box, cycle, fhr, dlat, dlon) {
+    var base = GFS_PROXY.replace(/\/$/, '');
+    return base + '/api/grid?bboxN=' + encodeURIComponent(box.north) +
+      '&bboxS=' + encodeURIComponent(box.south) +
+      '&bboxW=' + encodeURIComponent(box.west) +
+      '&bboxE=' + encodeURIComponent(box.east) +
+      '&cycle=' + encodeURIComponent(cycle) +
+      '&fhr=' + encodeURIComponent(fhr) +
+      '&dlat=' + encodeURIComponent(dlat) +
+      '&dlon=' + encodeURIComponent(dlon);
+  }
+
+  function gfsGridLoad(box, validUtc, dlat, dlon, done) {
+    if (!box || typeof box.north !== 'number' || typeof box.south !== 'number' ||
+        typeof box.west !== 'number' || typeof box.east !== 'number') {
+      if (typeof done === 'function') done(new Error('invalid bbox'));
+      return;
+    }
+    if (!(validUtc instanceof Date) || isNaN(validUtc.getTime())) {
+      if (typeof done === 'function') done(new Error('invalid validUtc'));
+      return;
+    }
+    dlat = (typeof dlat === 'number' && isFinite(dlat) && dlat > 0) ? dlat : 0.5;
+    dlon = (typeof dlon === 'number' && isFinite(dlon) && dlon > 0) ? dlon : 0.5;
+    var meta = pointMetaFromValid(validUtc);
+    var key = gridKey(box, meta.cycle, meta.fhr, dlat, dlon);
+    var cached = GRID_CACHE[key];
+    if (cached && cached.status === 'ready') {
+      if (typeof done === 'function') done(null, cached.data);
+      return;
+    }
+    if (cached && cached.status === 'loading') {
+      cached.waiters.push(done);
+      return;
+    }
+    GRID_CACHE[key] = { status: 'loading', waiters: [done], data: null, error: null };
+    var url = gridUrl(box, meta.cycle, meta.fhr, dlat, dlon);
+    fetch(url, { method: 'GET', cache: 'default' }).then(function(r) {
+      if (!r.ok) {
+        var e = new Error('HTTP ' + r.status);
+        e.status = r.status;
+        throw e;
+      }
+      return r.json();
+    }).then(function(json) {
+      if (!json || !json.levels || !json.levels.length) throw new Error('grid levels empty');
+      var data = {
+        cycle: json.cycle || meta.cycle,
+        fhr: (typeof json.fhr === 'number') ? json.fhr : meta.fhr,
+        validUtc: json.validUtc || null,
+        bbox: json.bbox || { N: box.north, S: box.south, W: box.west, E: box.east },
+        dlat: json.dlat || dlat,
+        dlon: json.dlon || dlon,
+        nlat: json.nlat,
+        nlon: json.nlon,
+        levels: json.levels
+      };
+      global.GFS_GRID = { status: 'ready', data: data };
+      var rec = GRID_CACHE[key];
+      rec.status = 'ready';
+      rec.data = data;
+      var ws = rec.waiters.slice();
+      rec.waiters = [];
+      var i;
+      for (i = 0; i < ws.length; i++) if (typeof ws[i] === 'function') ws[i](null, data);
+    }).catch(function(err) {
+      global.GFS_GRID = { status: 'error', error: String(err && err.message ? err.message : err), data: null };
+      var rec = GRID_CACHE[key];
+      if (!rec) return;
+      rec.status = 'error';
+      rec.error = String(err && err.message ? err.message : err);
+      var ws = rec.waiters.slice();
+      rec.waiters = [];
+      var i;
+      for (i = 0; i < ws.length; i++) if (typeof ws[i] === 'function') ws[i](err);
+    });
+  }
+
+  function gfsGridClearCache() {
+    GRID_CACHE = {};
+  }
+
   function refTimeToMs(rt) {
     if (!rt || typeof rt.year !== 'number') return NaN;
     return Date.UTC(rt.year, rt.month - 1, rt.day, rt.hour, rt.minute, rt.second || 0);
@@ -499,6 +589,8 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
   global.gfsPointCached = gfsPointCached;
   global.gfsPointMetaFromValid = pointMetaFromValid;
   global.gfsPointClearCache = gfsPointClearCache;
+  global.gfsGridLoad = gfsGridLoad;
+  global.gfsGridClearCache = gfsGridClearCache;
   global.gfsPickSliceForValid = function (levMb, validUtc) {
     return pickSliceForValid(global.GFS, levMb, validUtc);
   };

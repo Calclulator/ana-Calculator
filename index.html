@@ -4091,16 +4091,43 @@ function applyGfsRadarForCurrentMethod() {
   }
   if(!WX_GFS_CORR_ON) return;
   var methodKey = WX_GFS_CORR_METHOD;
-  if(methodKey && (!window.GFS || window.GFS.status !== 'ready')) {
-    if(typeof gfsLoad === 'function' && typeof gfsWaypointsFromWP === 'function') {
-      console.log('[GfsRadar] auto-loading GFS on demand');
+  if(methodKey && (!window.GFS_GRID || window.GFS_GRID.status !== 'ready')) {
+    if(typeof gfsGridLoad === 'function' && typeof gfsWaypointsFromWP === 'function') {
+      console.log('[GfsRadar] auto-loading GFS grid on demand');
+      var pad = gfsLoadPadDeg();
+      var box = null;
+      try {
+        // Reuse gfs-client bbox logic indirectly via current WP list.
+        var wps = gfsWaypointsFromWP();
+        if(wps && wps.length >= 2 && typeof gfsLoadPadDeg === 'function') {
+          // bboxFromWaypoints is inside gfs-client; here we approximate using min/max.
+          var s = 90, n = -90, w = 1e9, e = -1e9;
+          for(var i=0;i<wps.length;i++) {
+            if(typeof wps[i].lat !== 'number' || typeof wps[i].lon !== 'number') continue;
+            if(wps[i].lat < s) s = wps[i].lat;
+            if(wps[i].lat > n) n = wps[i].lat;
+            if(wps[i].lon < w) w = wps[i].lon;
+            if(wps[i].lon > e) e = wps[i].lon;
+          }
+          if(s <= n && w <= e) {
+            box = { north: Math.min(85, n + pad), south: Math.max(-85, s - pad), west: w - pad, east: e + pad };
+          }
+        }
+      } catch(ex) {}
+      if(!box) return;
+      gfsGridLoad(box, new Date(), 0.5, 0.5, function(err){
+        if(!err) applyGfsRadarForCurrentMethod();
+      });
+    } else if(typeof gfsLoad === 'function' && typeof gfsWaypointsFromWP === 'function') {
+      // fallback legacy NOMADS
+      console.log('[GfsRadar] auto-loading legacy GFS on demand');
       gfsLoad(gfsWaypointsFromWP(), gfsDepartureUtcDate(), function(err){
         if(!err) applyGfsRadarForCurrentMethod();
       }, { padDeg: gfsLoadPadDeg() });
     }
     return;
   }
-  if(methodKey && window.GFS && window.GFS.status === 'ready') {
+  if(methodKey && ((window.GFS_GRID && window.GFS_GRID.status === 'ready') || (window.GFS && window.GFS.status === 'ready'))) {
     if(typeof GfsRadar !== 'undefined' && GfsRadar.render) {
       gfsRadarLayer = GfsRadar.render(map, {
         method: methodKey,

@@ -241,7 +241,12 @@
     return minD;
   }
 
+  function hasGrid() {
+    return !!(window.GFS_GRID && window.GFS_GRID.status === 'ready' && window.GFS_GRID.data);
+  }
+
   function findSlice(fhr, levMb) {
+    // legacy NOMADS path
     var s = window.GFS && window.GFS.slices;
     if (!s) return null;
     for (var i = 0; i < s.length; i++) {
@@ -250,8 +255,46 @@
     return null;
   }
 
+  function gridLevelIndex(levMb) {
+    var gd = window.GFS_GRID && window.GFS_GRID.data;
+    if (!gd || !gd.levels) return -1;
+    for (var i = 0; i < gd.levels.length; i++) {
+      if (gd.levels[i] && gd.levels[i].mb === levMb) return i;
+    }
+    return -1;
+  }
+
+  function gridAt(fhr, levMb, ix, iy) {
+    var gd = window.GFS_GRID && window.GFS_GRID.data;
+    if (!gd || gd.fhr !== fhr) return null;
+    if (!gd.levels || !gd.levels.length) return null;
+    if (ix < 0 || ix >= gd.nlon || iy < 0 || iy >= gd.nlat) return null;
+    var li = gridLevelIndex(levMb);
+    if (li < 0) return null;
+    var lv = gd.levels[li];
+    if (!lv) return null;
+    function at2(a) {
+      if (!a || !a.length) return null;
+      var row = a[iy];
+      if (!row || !row.length) return null;
+      var v = row[ix];
+      return (v === null || v === undefined || isNaN(v)) ? null : v;
+    }
+    var u = at2(lv.u_ms);
+    var v = at2(lv.v_ms);
+    var t = at2(lv.tmp_k);
+    var h = at2(lv.hgt_m);
+    if (u === null || v === null) return null;
+    return { u: u, v: v, t: t, h: h };
+  }
+
   // Find fhr in slices closest to the given valid time.
   function nearestFhr(validUtc) {
+    if (hasGrid()) {
+      var gd = window.GFS_GRID.data;
+      if (!gd || typeof gd.fhr !== 'number') return null;
+      return gd.fhr;
+    }
     var s = window.GFS && window.GFS.slices;
     if (!s || !s.length) return null;
     var ref = s[0].meta.refTime;
@@ -271,6 +314,14 @@
 
   // List of available levels for a given fhr (sorted ascending mb = descending altitude).
   function levelsForFhr(fhr) {
+    if (hasGrid()) {
+      var gd = window.GFS_GRID.data;
+      if (!gd || !gd.levels) return [];
+      var out = [];
+      for (var i = 0; i < gd.levels.length; i++) if (gd.levels[i]) out.push(gd.levels[i].mb);
+      out.sort(function (a, b) { return a - b; });
+      return out;
+    }
     var s = window.GFS && window.GFS.slices;
     if (!s) return [];
     var levs = [];
@@ -288,33 +339,68 @@
     var ci = -1;
     for (var k = 0; k < levs.length; k++) if (levs[k] === centerMb) { ci = k; break; }
     if (ci < 0) return null;
-    var sCenter = findSlice(fhr, centerMb);
-    if (!sCenter) return null;
-    var g = sCenter.grid;
-    var nx = g.nx, ny = g.ny;
-    if (ix < 0 || ix >= nx || iy < 0 || iy >= ny) return null;
-    var idx = iy * nx + ix;
-
-    var u = sCenter.vars.UGRD[idx];
-    var v = sCenter.vars.VGRD[idx];
-    var t = sCenter.vars.TMP[idx];
-    var h = sCenter.vars.HGT[idx];
-    if (u === null || v === null || u === undefined || v === undefined) return null;
+    var u, v, t, h, nx, ny, g;
+    if (hasGrid()) {
+      var gd = window.GFS_GRID.data;
+      nx = gd.nlon; ny = gd.nlat;
+      if (ix < 0 || ix >= nx || iy < 0 || iy >= ny) return null;
+      var cc = gridAt(fhr, centerMb, ix, iy);
+      if (!cc) return null;
+      u = cc.u; v = cc.v; t = cc.t; h = cc.h;
+      g = {
+        nx: nx,
+        ny: ny,
+        la1: gd.bbox.N,
+        lo1: gd.bbox.W,
+        la2: gd.bbox.S,
+        lo2: gd.bbox.E
+      };
+    } else {
+      var sCenter = findSlice(fhr, centerMb);
+      if (!sCenter) return null;
+      g = sCenter.grid;
+      nx = g.nx; ny = g.ny;
+      if (ix < 0 || ix >= nx || iy < 0 || iy >= ny) return null;
+      var idx = iy * nx + ix;
+      u = sCenter.vars.UGRD[idx];
+      v = sCenter.vars.VGRD[idx];
+      t = sCenter.vars.TMP[idx];
+      h = sCenter.vars.HGT[idx];
+      if (u === null || v === null || u === undefined || v === undefined) return null;
+    }
 
     // VWS via centered-or-one-sided difference between adjacent levels in our set.
-    var sUp = ci > 0 ? findSlice(fhr, levs[ci - 1]) : null;            // smaller mb = higher alt
-    var sDn = ci < levs.length - 1 ? findSlice(fhr, levs[ci + 1]) : null; // larger mb = lower alt
     var vws = null;
     var uA, vA, hA, uB, vB, hB;
-    if (sUp && sDn) {
-      uA = sUp.vars.UGRD[idx]; vA = sUp.vars.VGRD[idx]; hA = sUp.vars.HGT[idx];
-      uB = sDn.vars.UGRD[idx]; vB = sDn.vars.VGRD[idx]; hB = sDn.vars.HGT[idx];
-    } else if (sUp) {
-      uA = sUp.vars.UGRD[idx]; vA = sUp.vars.VGRD[idx]; hA = sUp.vars.HGT[idx];
-      uB = u; vB = v; hB = h;
-    } else if (sDn) {
-      uA = u; vA = v; hA = h;
-      uB = sDn.vars.UGRD[idx]; vB = sDn.vars.VGRD[idx]; hB = sDn.vars.HGT[idx];
+    if (hasGrid()) {
+      var upMb = ci > 0 ? levs[ci - 1] : null;
+      var dnMb = ci < levs.length - 1 ? levs[ci + 1] : null;
+      var up = upMb != null ? gridAt(fhr, upMb, ix, iy) : null;
+      var dn = dnMb != null ? gridAt(fhr, dnMb, ix, iy) : null;
+      if (up && dn) {
+        uA = up.u; vA = up.v; hA = up.h;
+        uB = dn.u; vB = dn.v; hB = dn.h;
+      } else if (up) {
+        uA = up.u; vA = up.v; hA = up.h;
+        uB = u; vB = v; hB = h;
+      } else if (dn) {
+        uA = u; vA = v; hA = h;
+        uB = dn.u; vB = dn.v; hB = dn.h;
+      }
+    } else {
+      var sUp = ci > 0 ? findSlice(fhr, levs[ci - 1]) : null;            // smaller mb = higher alt
+      var sDn = ci < levs.length - 1 ? findSlice(fhr, levs[ci + 1]) : null; // larger mb = lower alt
+      var idx2 = iy * nx + ix;
+      if (sUp && sDn) {
+        uA = sUp.vars.UGRD[idx2]; vA = sUp.vars.VGRD[idx2]; hA = sUp.vars.HGT[idx2];
+        uB = sDn.vars.UGRD[idx2]; vB = sDn.vars.VGRD[idx2]; hB = sDn.vars.HGT[idx2];
+      } else if (sUp) {
+        uA = sUp.vars.UGRD[idx2]; vA = sUp.vars.VGRD[idx2]; hA = sUp.vars.HGT[idx2];
+        uB = u; vB = v; hB = h;
+      } else if (sDn) {
+        uA = u; vA = v; hA = h;
+        uB = sDn.vars.UGRD[idx2]; vB = sDn.vars.VGRD[idx2]; hB = sDn.vars.HGT[idx2];
+      }
     }
     if (uA !== undefined && uA !== null) {
       var dz = hA - hB;
@@ -333,14 +419,27 @@
 
     var ix0 = Math.max(0, ix - 1), ix1 = Math.min(nx - 1, ix + 1);
     var iy0 = Math.max(0, iy - 1), iy1 = Math.min(ny - 1, iy + 1);
-    var ue = sCenter.vars.UGRD[iy * nx + ix1];
-    var uw = sCenter.vars.UGRD[iy * nx + ix0];
-    var un = sCenter.vars.UGRD[iy1 * nx + ix];
-    var us = sCenter.vars.UGRD[iy0 * nx + ix];
-    var ve = sCenter.vars.VGRD[iy * nx + ix1];
-    var vw = sCenter.vars.VGRD[iy * nx + ix0];
-    var vn = sCenter.vars.VGRD[iy1 * nx + ix];
-    var vs = sCenter.vars.VGRD[iy0 * nx + ix];
+    var ue, uw, un, us, ve, vw, vn, vs;
+    if (hasGrid()) {
+      var e = gridAt(fhr, centerMb, ix1, iy);
+      var w = gridAt(fhr, centerMb, ix0, iy);
+      var n1 = gridAt(fhr, centerMb, ix, iy1);
+      var s1 = gridAt(fhr, centerMb, ix, iy0);
+      if (!e || !w || !n1 || !s1) return null;
+      ue = e.u; uw = w.u; un = n1.u; us = s1.u;
+      ve = e.v; vw = w.v; vn = n1.v; vs = s1.v;
+    } else {
+      var sCenter2 = findSlice(fhr, centerMb);
+      if (!sCenter2) return null;
+      ue = sCenter2.vars.UGRD[iy * nx + ix1];
+      uw = sCenter2.vars.UGRD[iy * nx + ix0];
+      un = sCenter2.vars.UGRD[iy1 * nx + ix];
+      us = sCenter2.vars.UGRD[iy0 * nx + ix];
+      ve = sCenter2.vars.VGRD[iy * nx + ix1];
+      vw = sCenter2.vars.VGRD[iy * nx + ix0];
+      vn = sCenter2.vars.VGRD[iy1 * nx + ix];
+      vs = sCenter2.vars.VGRD[iy0 * nx + ix];
+    }
 
     var dUdx = (ue - uw) / ((ix1 - ix0) * dx_m);
     var dUdy = (un - us) / ((iy1 - iy0) * dy_m);
@@ -390,8 +489,8 @@
 
   // Main render. Returns L.LayerGroup (already added to map).
   function render(map, opts) {
-    if (!window.GFS || !window.GFS.slices || !window.GFS.slices.length) {
-      console.warn('[GfsRadar] no GFS data loaded; call gfsLoad() first');
+    if (!(hasGrid() || (window.GFS && window.GFS.slices && window.GFS.slices.length))) {
+      console.warn('[GfsRadar] no GFS data loaded; call gfsGridLoad() or gfsLoad() first');
       return null;
     }
     if (typeof L === 'undefined' || !L.layerGroup) {
@@ -418,14 +517,22 @@
       return null;
     }
 
-    var sCenter = findSlice(fhr, levelMb);
-    if (!sCenter) {
-      console.warn('[GfsRadar] no slice for fhr=' + fhr + ' lev=' + levelMb);
-      return null;
+    var g, dlat, dlon;
+    if (hasGrid()) {
+      var gd = window.GFS_GRID.data;
+      g = { nx: gd.nlon, ny: gd.nlat, la1: gd.bbox.N, la2: gd.bbox.S, lo1: gd.bbox.W, lo2: gd.bbox.E };
+      dlat = (g.la2 - g.la1) / (g.ny - 1);
+      dlon = (g.lo2 - g.lo1) / (g.nx - 1);
+    } else {
+      var sCenter = findSlice(fhr, levelMb);
+      if (!sCenter) {
+        console.warn('[GfsRadar] no slice for fhr=' + fhr + ' lev=' + levelMb);
+        return null;
+      }
+      g = sCenter.grid;
+      dlat = (g.la2 - g.la1) / (g.ny - 1);
+      dlon = (g.lo2 - g.lo1) / (g.nx - 1);
     }
-    var g = sCenter.grid;
-    var dlat = (g.la2 - g.la1) / (g.ny - 1);
-    var dlon = (g.lo2 - g.lo1) / (g.nx - 1);
 
     var fillOpacity = opts.fillOpacity != null ? opts.fillOpacity : 0.35;
     var renderer = opts.renderer || (L.canvas ? L.canvas() : undefined);
