@@ -219,6 +219,41 @@
     return lon2;
   }
 
+  // [[lat,lng],...] unwrap consecutive longitudes (same idea as drawRoute / unwrapLatLngs in index.html)
+  function unwrapLatLngRing(ring) {
+    if (!ring || ring.length < 2) return ring;
+    var out = [];
+    var i, p, lat, lng, lngU, prevLngU, d;
+    for (i = 0; i < ring.length; i++) {
+      p = ring[i];
+      lat = p[0];
+      lng = p[1];
+      if (i === 0) {
+        lngU = lng;
+        prevLngU = lngU;
+        out.push([lat, lngU]);
+      } else {
+        lngU = lng;
+        d = lngU - prevLngU;
+        while (d > 180) { lngU -= 360; d = lngU - prevLngU; }
+        while (d < -180) { lngU += 360; d = lngU - prevLngU; }
+        prevLngU = lngU;
+        out.push([lat, lngU]);
+      }
+    }
+    return out;
+  }
+
+  function shiftRingLng(ring, deltaLng) {
+    if (!ring || !ring.length) return [];
+    var out = [];
+    var i;
+    for (i = 0; i < ring.length; i++) {
+      out.push([ring[i][0], ring[i][1] + deltaLng]);
+    }
+    return out;
+  }
+
   function wpLonForFilter(w) {
     var lon = (typeof w.lngU === 'number' && !isNaN(w.lngU)) ? w.lngU : ((typeof w.lon === 'number') ? w.lon : w.lng);
     if (typeof lon !== 'number' || isNaN(lon)) return null;
@@ -631,28 +666,6 @@
     return aLon + (b - aLon) * t;
   }
 
-  function interpPointOnSeg(a, b, t) {
-    return {
-      lat: a.lat + (b.lat - a.lat) * t,
-      lon: interpLonShort(a.lon, b.lon, t)
-    };
-  }
-
-  function interpolateCellValue(a, b, t) {
-    if (!a && !b) return null;
-    if (!a) return b;
-    if (!b) return a;
-    return {
-      vws: a.vws + (b.vws - a.vws) * t,
-      defm: a.defm + (b.defm - a.defm) * t,
-      cvg: a.cvg + (b.cvg - a.cvg) * t,
-      u: a.u + (b.u - a.u) * t,
-      v: a.v + (b.v - a.v) * t,
-      t: (a.t !== null && b.t !== null) ? (a.t + (b.t - a.t) * t) : (a.t !== null ? a.t : b.t),
-      h: (a.h !== null && b.h !== null) ? (a.h + (b.h - a.h) * t) : (a.h !== null ? a.h : b.h)
-    };
-  }
-
   function offsetPointByNm(p, headingDeg, lateralNm) {
     // headingDeg is route direction. Lateral offset is +right / -left from heading.
     var lat = p.lat;
@@ -781,78 +794,76 @@
     var tiOffsetNm = (typeof opts.tiOffsetNm === 'number') ? opts.tiOffsetNm : 200;
 
     if (pointMode) {
-      // opts.routePoints: built with normalized {lat,lon} per leg (index buildGfsRadarRoutePoints + normalizePoint).
+      // opts.routePoints: NAVLOG WP + virtual WP (buildGfsRadarRoutePoints). One polygon band per segment (Turbulence Corridor style).
       var pts = opts.routePoints;
-      // GFS overlay: fixed ~40NM total width (+-20NM from route); independent of Turbulence Corridor slider.
       var GFS_OVERLAY_HALF_NM = 20;
       var gfsFilterHalfNm = GFS_OVERLAY_HALF_NM;
-      var pitchNm = 20;
-      var lateralStepNm = 20;
-      var halfCellNm = 10;
-      var lateralOffsets = [0];
-      for (var o = lateralStepNm; o <= GFS_OVERLAY_HALF_NM + 1e-6; o += lateralStepNm) {
-        lateralOffsets.push(o);
-        lateralOffsets.push(-o);
-      }
 
       for (var si = 0; si < pts.length - 1; si++) {
         var aPt = pts[si];
         var bPt = pts[si + 1];
         if (!aPt || !bPt) continue;
+        if (typeof aPt.lat !== 'number' || typeof aPt.lon !== 'number' ||
+            typeof bPt.lat !== 'number' || typeof bPt.lon !== 'number') continue;
         var segNm = approxDistNM(aPt.lat, aPt.lon, bPt.lat, bPt.lon);
-        var nDiv = Math.max(1, Math.ceil(segNm / pitchNm));
-        var segHeading = headingDeg(aPt, bPt);
-        var vuA = validForPoint, vuB = validForPoint;
+        if (segNm < 0.01) continue;
+        var vuA = validForPoint;
         if (typeof window.gfsRadarValidUtcForRoutePoint === 'function') {
           vuA = window.gfsRadarValidUtcForRoutePoint(pts, si);
-          vuB = window.gfsRadarValidUtcForRoutePoint(pts, si + 1);
         }
         var cA = computeAtPoint(aPt, levelMb, vuA, method, tiOffsetNm);
-        var cB = computeAtPoint(bPt, levelMb, vuB, method, tiOffsetNm);
-        if (!cA && !cB) { nNull += (nDiv + 1); continue; }
-        for (var di = 0; di <= nDiv; di++) {
-          var tSeg = di / nDiv;
-          var center = interpPointOnSeg(aPt, bPt, tSeg);
-          var cMid = interpolateCellValue(cA, cB, tSeg);
-          if (!cMid) { nNull++; continue; }
-          var vMid = methodValue(method, cMid);
-          var colorMid = colorFor(method, vMid);
-          if (!colorMid) { nNull++; continue; }
-          for (var lo = 0; lo < lateralOffsets.length; lo++) {
-            var latOffPt = offsetPointByNm(center, segHeading, lateralOffsets[lo]);
-            if (useFilter && minDistToRoutePolylineNM(latOffPt.lat, latOffPt.lon, routeWps, gfsFilterHalfNm) > gfsFilterHalfNm) {
-              nFiltered++;
-              continue;
-            }
-            var cosLat2 = Math.cos(latOffPt.lat * Math.PI / 180);
-            if (Math.abs(cosLat2) < 1e-6) cosLat2 = 1e-6;
-            var halfLat = halfCellNm / 60.0;
-            var halfLon = (halfCellNm / 60.0) / cosLat2;
-            for (var iCopy = 0; iCopy < worldLngOffsets.length; iCopy++) {
-              var off = worldLngOffsets[iCopy];
-              var bounds = [
-                [latOffPt.lat - halfLat, latOffPt.lon - halfLon + off],
-                [latOffPt.lat + halfLat, latOffPt.lon + halfLon + off]
-              ];
-              var rectOpts = {
-                color: colorMid,
-                fillColor: colorMid,
-                fillOpacity: fillOpacity,
-                weight: 0,
-                interactive: true
-              };
-              if (renderer) rectOpts.renderer = renderer;
-              var rect = L.rectangle(bounds, rectOpts);
-              (function (cellData) {
-                rect.on('click', function (e) {
-                  var html = buildPopupHtml(method, cellData, levelMb, fl);
-                  L.popup().setLatLng(e.latlng).setContent(html).openOn(map);
-                });
-              })(cMid);
-              rect.addTo(group);
-              nDrawn++;
-            }
+        if (!cA) {
+          nNull++;
+          continue;
+        }
+        var vSeg = methodValue(method, cA);
+        var colorSeg = colorFor(method, vSeg);
+        if (!colorSeg) {
+          nNull++;
+          continue;
+        }
+        var segHeading = headingDeg(aPt, bPt);
+        var aLL = { lat: aPt.lat, lon: aPt.lon };
+        var bLL = { lat: bPt.lat, lon: bPt.lon };
+        var aL = offsetPointByNm(aLL, segHeading, -GFS_OVERLAY_HALF_NM);
+        var aR = offsetPointByNm(aLL, segHeading, GFS_OVERLAY_HALF_NM);
+        var bL = offsetPointByNm(bLL, segHeading, -GFS_OVERLAY_HALF_NM);
+        var bR = offsetPointByNm(bLL, segHeading, GFS_OVERLAY_HALF_NM);
+        var midLat = (aPt.lat + bPt.lat) * 0.5;
+        var midLon = interpLonShort(aPt.lon, bPt.lon, 0.5);
+        if (useFilter && minDistToRoutePolylineNM(midLat, midLon, routeWps, gfsFilterHalfNm) > gfsFilterHalfNm) {
+          nFiltered++;
+          continue;
+        }
+        var ring0 = [[aL.lat, aL.lon], [bL.lat, bL.lon], [bR.lat, bR.lon], [aR.lat, aR.lon]];
+        ring0 = unwrapLatLngRing(ring0);
+        var polyOpts = {
+          color: colorSeg,
+          fillColor: colorSeg,
+          fillOpacity: fillOpacity,
+          weight: 1,
+          opacity: 0.85,
+          interactive: true
+        };
+        if (renderer) polyOpts.renderer = renderer;
+        var ciPoly;
+        for (ciPoly = 0; ciPoly < worldLngOffsets.length; ciPoly++) {
+          var dLng = worldLngOffsets[ciPoly];
+          var ringShifted = shiftRingLng(ring0, dLng);
+          var latLngs = [];
+          var ri;
+          for (ri = 0; ri < ringShifted.length; ri++) {
+            latLngs.push(L.latLng(ringShifted[ri][0], ringShifted[ri][1]));
           }
+          var poly = L.polygon(latLngs, polyOpts);
+          (function (cellData) {
+            poly.on('click', function (e) {
+              var html = buildPopupHtml(method, cellData, levelMb, fl);
+              L.popup().setLatLng(e.latlng).setContent(html).openOn(map);
+            });
+          })(cA);
+          poly.addTo(group);
+          nDrawn++;
         }
       }
     } else {
@@ -900,8 +911,9 @@
       }
     }
     if (map) group.addTo(map);
+    var drawnLabel = pointMode ? 'segments' : 'cells';
     var logMsg = '[GfsRadar] ' + method + ' lev=' + levelMb +
-                 ' fhr=' + fhr + ': ' + nDrawn + ' cells drawn, ' +
+                 ' fhr=' + fhr + ': ' + nDrawn + ' ' + drawnLabel + ' drawn, ' +
                  nNull + ' nodata, ' + nFiltered + ' outside corridor';
     // Suppress immediate duplicate logs from repeated render triggers.
     if (LAST_RENDER_LOG !== logMsg) {
