@@ -32,33 +32,92 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
     return NaN;
   }
 
+  // 経度配列を連続化 (Leaflet unwrap と同じ・隣接との差が +-180 を超えない)
+  function unwrapLngSequence(lons) {
+    var out = [];
+    if (!lons || !lons.length) return out;
+    var i, prev, lngU, d;
+    prev = lons[0];
+    out.push(prev);
+    for (i = 1; i < lons.length; i++) {
+      lngU = lons[i];
+      d = lngU - prev;
+      while (d > 180) {
+        lngU -= 360;
+        d = lngU - prev;
+      }
+      while (d < -180) {
+        lngU += 360;
+        d = lngU - prev;
+      }
+      out.push(lngU);
+      prev = lngU;
+    }
+    return out;
+  }
+
   function bboxFromWaypoints(wps, pad) {
     pad = typeof pad === 'number' ? pad : 3.3;
-    var i, w, la, lo, s, n, e, wst, any = false;
-    s = 90;
-    n = -90;
-    e = -180;
-    wst = 180;
+    var pts = [];
+    var i, w, la, lo, j, lonU, wst, e;
     for (i = 0; i < wps.length; i++) {
       w = wps[i];
       la = w.lat;
       lo = wpLon(w);
       if (typeof la !== 'number' || isNaN(la) || typeof lo !== 'number' || isNaN(lo)) continue;
-      any = true;
-      if (la < s) s = la;
-      if (la > n) n = la;
-      if (lo < wst) wst = lo;
-      if (lo > e) e = lo;
+      pts.push({ lat: la, lon: lo });
     }
-    if (!any || s > n) return null;
+    if (!pts.length) return null;
+    var lons = [];
+    for (j = 0; j < pts.length; j++) {
+      lons.push(pts[j].lon);
+    }
+    lonU = unwrapLngSequence(lons);
+    var s = 90;
+    var n = -90;
+    for (j = 0; j < pts.length; j++) {
+      if (pts[j].lat < s) s = pts[j].lat;
+      if (pts[j].lat > n) n = pts[j].lat;
+    }
+    wst = lonU[0];
+    e = lonU[0];
+    for (j = 1; j < lonU.length; j++) {
+      if (lonU[j] < wst) wst = lonU[j];
+      if (lonU[j] > e) e = lonU[j];
+    }
+    if (s > n) return null;
     s = Math.max(-85, s - pad);
     n = Math.min(85, n + pad);
     wst = wst - pad;
     e = e + pad;
-    if (wst < -180) wst = -180;
-    if (e > 360) e = 360;
+    if (wst < -360) wst = -360;
+    if (e > 720) e = 720;
     if (wst >= e) return null;
     return { south: s, north: n, west: wst, east: e };
+  }
+
+  // グリッドの経度範囲 [min(lo1,lo2), max(lo1,lo2)] に入るよう lon を k*360 でシフト (look-up 共有用)
+  function normalizeLongitudeForGridExtent(lon, lo1, lo2) {
+    var gLo = Math.min(lo1, lo2);
+    var gHi = Math.max(lo1, lo2);
+    var best = lon;
+    var bestPen = 1e18;
+    var k, t, pen;
+    for (k = -3; k <= 3; k++) {
+      t = lon + k * 360;
+      if (t < gLo) {
+        pen = gLo - t;
+      } else if (t > gHi) {
+        pen = t - gHi;
+      } else {
+        pen = 0;
+      }
+      if (pen < bestPen) {
+        bestPen = pen;
+        best = t;
+      }
+    }
+    return best;
   }
 
   function maxCtmeMin(wps) {
@@ -155,8 +214,9 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
     var lo2 = g.lo2;
     var dlat = ny > 1 ? (la1 - la2) / (ny - 1) : (la1 - la2 || 1e-6);
     var dlon = nx > 1 ? (lo2 - lo1) / (nx - 1) : (lo2 - lo1 || 1e-6);
+    var lonN = normalizeLongitudeForGridExtent(lon, lo1, lo2);
     var iy = (la1 - lat) / dlat;
-    var ix = (lon - lo1) / dlon;
+    var ix = (lonN - lo1) / dlon;
     if (ix < 0 || ix > nx - 1 || iy < 0 || iy > ny - 1) return null;
     var i0 = Math.floor(ix);
     var j0 = Math.floor(iy);
@@ -228,10 +288,12 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
     return run(0);
   }
 
-  function gfsLoad(waypoints, ato, done) {
+  function gfsLoad(waypoints, ato, done, opts) {
     if (!waypoints || waypoints.length < 2) return;
     if (!ato || !(ato instanceof Date) || isNaN(ato.getTime())) return;
-    var box = bboxFromWaypoints(waypoints);
+    opts = opts || {};
+    var padDeg = typeof opts.padDeg === 'number' ? opts.padDeg : 3.3;
+    var box = bboxFromWaypoints(waypoints, padDeg);
     if (!box) return;
 
     var cycle = pickGfsCycle(ato);
@@ -244,6 +306,7 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
       cycle: cycle,
       ato: ato,
       bbox: box,
+      padDeg: padDeg,
       levelsMb: LEVELS_MB.slice(),
       fhrs: fhrs.slice(),
       slices: [],
@@ -292,4 +355,5 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
 
   global.gfsLoad = gfsLoad;
   global.gfsValueAt = gfsValueAt;
+  global.gfsNormalizeLongitudeForGridExtent = normalizeLongitudeForGridExtent;
 })(typeof window !== 'undefined' ? window : this);

@@ -1307,6 +1307,36 @@ function gfsDepartureUtcDate() {
   ));
 }
 
+// GFS proxy bbox のパディング (航路 corridors NM と下限 3.3deg を gfs-client と共有)
+function gfsLoadPadDeg() {
+  var nm = typeof WX_CORRIDOR_NM === 'number' ? WX_CORRIDOR_NM : 200;
+  var deg = nm / 60;
+  if (deg < 3.3) deg = 3.3;
+  return deg;
+}
+
+// GFS グリッド内のセル ix,iy (gfs-client の経度正規化と整合)
+function gfsLatLonToCellIxIy(lat, lon, g) {
+  var nx = g.nx;
+  var ny = g.ny;
+  var la1 = g.la1;
+  var lo1 = g.lo1;
+  var la2 = g.la2;
+  var lo2 = g.lo2;
+  var dlat = ny > 1 ? (la1 - la2) / (ny - 1) : (la1 - la2 || 1e-6);
+  var dlon = nx > 1 ? (lo2 - lo1) / (nx - 1) : (lo2 - lo1 || 1e-6);
+  var cellLon = lon;
+  if (typeof gfsNormalizeLongitudeForGridExtent === 'function') {
+    cellLon = gfsNormalizeLongitudeForGridExtent(lon, lo1, lo2);
+  } else if (cellLon < 0) {
+    cellLon += 360;
+  }
+  var iy = (la1 - lat) / dlat;
+  var ix = (cellLon - lo1) / dlon;
+  if (ix < 0 || ix > nx - 1 || iy < 0 || iy > ny - 1) return null;
+  return { ix: Math.floor(ix), iy: Math.floor(iy) };
+}
+
 function runParse() {
   var txt = document.getElementById('fpl-txt').value;
   if(!txt||txt.length<30) {
@@ -2659,7 +2689,7 @@ function ensureGfsLoadedForAtm() {
   if(typeof gfsLoad !== 'function' || typeof gfsWaypointsFromWP !== 'function' || typeof gfsDepartureUtcDate !== 'function') return;
   if(typeof WP === 'undefined' || !WP || !WP.length) return;
   console.log('[ATM-GFS] auto-loading GFS for atmosphere display');
-  gfsLoad(gfsWaypointsFromWP(), gfsDepartureUtcDate());
+  gfsLoad(gfsWaypointsFromWP(), gfsDepartureUtcDate(), null, { padDeg: gfsLoadPadDeg() });
 }
 
 var atmGfsPollId = null;
@@ -2817,24 +2847,6 @@ function renderGfsWsTable() {
     }
     return null;
   }
-
-  function latLonToCellIxIy(lat, lon, g) {
-    var nx = g.nx;
-    var ny = g.ny;
-    var la1 = g.la1;
-    var lo1 = g.lo1;
-    var la2 = g.la2;
-    var lo2 = g.lo2;
-    var dlat = ny > 1 ? (la1 - la2) / (ny - 1) : (la1 - la2 || 1e-6);
-    var dlon = nx > 1 ? (lo2 - lo1) / (nx - 1) : (lo2 - lo1 || 1e-6);
-    var cellLon = lon;
-    if(cellLon < 0) cellLon += 360;
-    var iy = (la1 - lat) / dlat;
-    var ix = (cellLon - lo1) / dlon;
-    if(ix < 0 || ix > nx - 1 || iy < 0 || iy > ny - 1) return null;
-    return { ix: Math.floor(ix), iy: Math.floor(iy) };
-  }
-
   function validUtcForWp(wp) {
     var ato;
     if(typeof DEP_ATO_MIN === 'number' && DEP_ATO_MIN !== null) {
@@ -2867,7 +2879,7 @@ function renderGfsWsTable() {
     var centerMb = GfsRadar.snapLevel(GfsRadar.flToMb(altFl));
     var sCenter = findSliceFhrLev(fhr, centerMb);
     if(!sCenter || !sCenter.grid) return null;
-    var ij = latLonToCellIxIy(lat, lon, sCenter.grid);
+    var ij = gfsLatLonToCellIxIy(lat, lon, sCenter.grid);
     if(!ij) return null;
     var c = GfsRadar.computeAtCell(fhr, centerMb, ij.ix, ij.iy);
     if(!c) return null;
@@ -2979,23 +2991,6 @@ function exportCalibrationData() {
     return null;
   }
 
-  function latLonToCellIxIy(lat, lon, g) {
-    var nx = g.nx;
-    var ny = g.ny;
-    var la1 = g.la1;
-    var lo1 = g.lo1;
-    var la2 = g.la2;
-    var lo2 = g.lo2;
-    var dlat = ny > 1 ? (la1 - la2) / (ny - 1) : (la1 - la2 || 1e-6);
-    var dlon = nx > 1 ? (lo2 - lo1) / (nx - 1) : (lo2 - lo1 || 1e-6);
-    var cellLon = lon;
-    if(cellLon < 0) cellLon += 360;
-    var iy = (la1 - lat) / dlat;
-    var ix = (cellLon - lo1) / dlon;
-    if(ix < 0 || ix > nx - 1 || iy < 0 || iy > ny - 1) return null;
-    return { ix: Math.floor(ix), iy: Math.floor(iy) };
-  }
-
   function validUtcForWp(wp) {
     var ato;
     if(typeof DEP_ATO_MIN === 'number' && DEP_ATO_MIN !== null) {
@@ -3022,7 +3017,7 @@ function exportCalibrationData() {
     var centerMb = GfsRadar.snapLevel(GfsRadar.flToMb(altFl));
     var sCenter = findSliceFhrLev(fhr, centerMb);
     if(!sCenter || !sCenter.grid) return null;
-    var ij = latLonToCellIxIy(lat, lon, sCenter.grid);
+    var ij = gfsLatLonToCellIxIy(lat, lon, sCenter.grid);
     if(!ij) return null;
     var c = GfsRadar.computeAtCell(fhr, centerMb, ij.ix, ij.iy);
     if(!c) return null;
@@ -3966,7 +3961,7 @@ function applyGfsRadarForCurrentMethod() {
       console.log('[GfsRadar] auto-loading GFS on demand');
       gfsLoad(gfsWaypointsFromWP(), gfsDepartureUtcDate(), function(err){
         if(!err) applyGfsRadarForCurrentMethod();
-      });
+      }, { padDeg: gfsLoadPadDeg() });
     }
     return;
   }
