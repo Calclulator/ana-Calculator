@@ -582,7 +582,14 @@
 
   // Main render. Returns L.LayerGroup (already added to map).
   function render(map, opts) {
-    if (!opts.routePoints && !(hasGrid() || (window.GFS && window.GFS.slices && window.GFS.slices.length))) {
+    opts = opts || {};
+    var pointMode = !!(opts.routePoints && opts.routePoints.length);
+    if (pointMode) {
+      if (!window.GFS_POINT || window.GFS_POINT.status !== 'ready') {
+        console.warn('[GfsRadar] point data not ready; skip render');
+        return null;
+      }
+    } else if (!(hasGrid() || (window.GFS && window.GFS.slices && window.GFS.slices.length))) {
       console.warn('[GfsRadar] no GFS data loaded; call gfsPointAt()/gfsGridLoad()/gfsLoad() first');
       return null;
     }
@@ -590,7 +597,6 @@
       console.warn('[GfsRadar] Leaflet not available');
       return null;
     }
-    opts = opts || {};
     var method = (opts.method || 'VWS').toUpperCase();
     if (method !== 'VWS' && method !== 'TI1' && method !== 'TI2') method = 'VWS';
 
@@ -604,10 +610,18 @@
     }
 
     var validUtc = opts.validUtc || new Date();
-    var fhr = nearestFhr(validUtc);
-    if (fhr === null) {
-      console.warn('[GfsRadar] no fhr available');
-      return null;
+    var fhr = null;
+    if (pointMode) {
+      if (typeof opts.fhr === 'number') fhr = opts.fhr;
+      else if (window.GFS_POINT && typeof window.GFS_POINT.fhr === 'number') fhr = window.GFS_POINT.fhr;
+      else if (window.GFS && window.GFS.fhrs && window.GFS.fhrs.length) fhr = window.GFS.fhrs[0];
+      if (fhr === null) fhr = 0;
+    } else {
+      fhr = nearestFhr(validUtc);
+      if (fhr === null) {
+        console.warn('[GfsRadar] no fhr available');
+        return null;
+      }
     }
 
     var g, dlat, dlon;
@@ -647,7 +661,6 @@
     var nFiltered = 0;
 
     var worldLngOffsets = [-360, 0, 360];
-    var pointMode = !!(opts.routePoints && opts.routePoints.length);
     var validForPoint = opts.validUtc || new Date();
     var tiOffsetNm = (typeof opts.tiOffsetNm === 'number') ? opts.tiOffsetNm : 200;
 

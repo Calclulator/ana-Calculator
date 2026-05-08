@@ -4095,17 +4095,24 @@ function applyGfsRadarForCurrentMethod() {
   if(typeof gfsPointAt !== 'function') return;
   var routePts = buildGfsRadarRoutePoints();
   if(!routePts || !routePts.length) return;
+  if(!window.GFS_POINT) window.GFS_POINT = {};
+  window.GFS_POINT.status = 'loading';
+  window.GFS_POINT.error = null;
   preloadGfsRadarPoints(routePts, function(err){
     if(err) {
+      window.GFS_POINT.status = 'error';
+      window.GFS_POINT.error = String(err && err.message ? err.message : err);
       console.warn('[GfsRadar] point preload failed', err);
       return;
     }
+    window.GFS_POINT.status = 'ready';
     gfsRadarLayer = GfsRadar.render(map, {
       method: methodKey,
       fl: CURRENT_FL,
       corridorNM: WX_CORRIDOR_NM,
       validUtc: new Date(),
       routePoints: routePts,
+      fhr: (window.GFS_POINT && typeof window.GFS_POINT.fhr === 'number') ? window.GFS_POINT.fhr : null,
       tiOffsetNm: 200
     });
     bringTop();
@@ -4203,18 +4210,25 @@ function preloadGfsRadarPoints(routePts, done) {
     pushJob(e.lat, e.lon, vu);
     pushJob(w.lat, w.lon, vu);
   }
-  var left = jobs.length;
-  if(left === 0) { done(null); return; }
-  var firstErr = null;
+  if(jobs.length === 0) { done(null); return; }
+  var promises = [];
   for(i=0;i<jobs.length;i++) {
     (function(j){
-      gfsPointAt(j.lat, j.lon, j.vu, function(err){
-        if(err && !firstErr) firstErr = err;
-        left--;
-        if(left === 0) done(firstErr);
-      });
+      promises.push(new Promise(function(resolve, reject){
+        gfsPointAt(j.lat, j.lon, j.vu, function(err, data){
+          if(err) { reject(err); return; }
+          if(data && typeof data.cycle === 'string') window.GFS_POINT.cycle = data.cycle;
+          if(data && typeof data.fhr === 'number') window.GFS_POINT.fhr = data.fhr;
+          resolve();
+        });
+      }));
     })(jobs[i]);
   }
+  Promise.all(promises).then(function(){
+    done(null);
+  }).catch(function(err){
+    done(err);
+  });
 }
 
 drawRoute();
