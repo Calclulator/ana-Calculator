@@ -562,6 +562,61 @@
     };
   }
 
+  function interpLonShort(aLon, bLon, t) {
+    var b = bLon;
+    var d = b - aLon;
+    while (d > 180) { b -= 360; d = b - aLon; }
+    while (d < -180) { b += 360; d = b - aLon; }
+    return aLon + (b - aLon) * t;
+  }
+
+  function interpPointOnSeg(a, b, t) {
+    return {
+      lat: a.lat + (b.lat - a.lat) * t,
+      lon: interpLonShort(a.lon, b.lon, t)
+    };
+  }
+
+  function interpolateCellValue(a, b, t) {
+    if (!a && !b) return null;
+    if (!a) return b;
+    if (!b) return a;
+    return {
+      vws: a.vws + (b.vws - a.vws) * t,
+      defm: a.defm + (b.defm - a.defm) * t,
+      cvg: a.cvg + (b.cvg - a.cvg) * t,
+      u: a.u + (b.u - a.u) * t,
+      v: a.v + (b.v - a.v) * t,
+      t: (a.t !== null && b.t !== null) ? (a.t + (b.t - a.t) * t) : (a.t !== null ? a.t : b.t),
+      h: (a.h !== null && b.h !== null) ? (a.h + (b.h - a.h) * t) : (a.h !== null ? a.h : b.h)
+    };
+  }
+
+  function offsetPointByNm(p, headingDeg, lateralNm) {
+    // headingDeg is route direction. Lateral offset is +right / -left from heading.
+    var lat = p.lat;
+    var rad = headingDeg * Math.PI / 180;
+    var rightRad = rad + Math.PI / 2;
+    var dNorthNm = lateralNm * Math.cos(rightRad);
+    var dEastNm = lateralNm * Math.sin(rightRad);
+    var dLat = dNorthNm / 60.0;
+    var cosLat = Math.cos(lat * Math.PI / 180);
+    if (Math.abs(cosLat) < 1e-6) cosLat = 1e-6;
+    var dLon = dEastNm / (60.0 * cosLat);
+    return { lat: p.lat + dLat, lon: p.lon + dLon };
+  }
+
+  function headingDeg(a, b) {
+    var dLon = b.lon - a.lon;
+    while (dLon > 180) dLon -= 360;
+    while (dLon < -180) dLon += 360;
+    var y = dLon * Math.cos((a.lat + b.lat) * 0.5 * Math.PI / 180);
+    var x = (b.lat - a.lat);
+    var brg = Math.atan2(y, x) * 180 / Math.PI;
+    if (brg < 0) brg += 360;
+    return brg;
+  }
+
   function buildPopupHtml(method, c, levelMb, fl) {
     var spdMs = Math.sqrt(c.u * c.u + c.v * c.v);
     var spdKt = spdMs * 1.943844;
@@ -666,49 +721,74 @@
 
     if (pointMode) {
       var pts = opts.routePoints;
-      for (var pi = 0; pi < pts.length; pi++) {
-        var p = pts[pi];
-        var lat = p.lat, lon = p.lon;
-        if (useFilter && minDistToRoutePolylineNM(lat, lon, routeWps, corridorNM) > corridorNM) {
-          nFiltered++;
-          continue;
-        }
-        var pointValidUtc = validForPoint;
+      var pitchNm = 20;
+      var lateralStepNm = 20;
+      var halfCellNm = 10;
+      var lateralOffsets = [];
+      lateralOffsets.push(0);
+      for (var o = lateralStepNm; o <= corridorNM + 1e-6; o += lateralStepNm) {
+        lateralOffsets.push(o);
+        lateralOffsets.push(-o);
+      }
+
+      for (var si = 0; si < pts.length - 1; si++) {
+        var aPt = pts[si];
+        var bPt = pts[si + 1];
+        if (!aPt || !bPt) continue;
+        var segNm = approxDistNM(aPt.lat, aPt.lon, bPt.lat, bPt.lon);
+        var nDiv = Math.max(1, Math.ceil(segNm / pitchNm));
+        var segHeading = headingDeg(aPt, bPt);
+        var vuA = validForPoint, vuB = validForPoint;
         if (typeof window.gfsRadarValidUtcForRoutePoint === 'function') {
-          pointValidUtc = window.gfsRadarValidUtcForRoutePoint(pts, pi);
+          vuA = window.gfsRadarValidUtcForRoutePoint(pts, si);
+          vuB = window.gfsRadarValidUtcForRoutePoint(pts, si + 1);
         }
-        var c = computeAtPoint(p, levelMb, pointValidUtc, method, tiOffsetNm);
-        if (!c) { nNull++; continue; }
-        var v = methodValue(method, c);
-        var color = colorFor(method, v);
-        if (!color) { nNull++; continue; }
-        var halfLat = 50 / 120.0;
-        var cosLat = Math.cos(lat * Math.PI / 180);
-        if (Math.abs(cosLat) < 1e-6) cosLat = 1e-6;
-        var halfLon = (50 / 120.0) / cosLat;
-        for (var iCopy = 0; iCopy < worldLngOffsets.length; iCopy++) {
-          var off = worldLngOffsets[iCopy];
-          var bounds = [
-            [lat - halfLat, lon - halfLon + off],
-            [lat + halfLat, lon + halfLon + off]
-          ];
-          var rectOpts = {
-            color: color,
-            fillColor: color,
-            fillOpacity: fillOpacity,
-            weight: 0,
-            interactive: true
-          };
-          if (renderer) rectOpts.renderer = renderer;
-          var rect = L.rectangle(bounds, rectOpts);
-          (function (cellData) {
-            rect.on('click', function (e) {
-              var html = buildPopupHtml(method, cellData, levelMb, fl);
-              L.popup().setLatLng(e.latlng).setContent(html).openOn(map);
-            });
-          })(c);
-          rect.addTo(group);
-          nDrawn++;
+        var cA = computeAtPoint(aPt, levelMb, vuA, method, tiOffsetNm);
+        var cB = computeAtPoint(bPt, levelMb, vuB, method, tiOffsetNm);
+        if (!cA && !cB) { nNull += (nDiv + 1); continue; }
+        for (var di = 0; di <= nDiv; di++) {
+          var tSeg = di / nDiv;
+          var center = interpPointOnSeg(aPt, bPt, tSeg);
+          var cMid = interpolateCellValue(cA, cB, tSeg);
+          if (!cMid) { nNull++; continue; }
+          var vMid = methodValue(method, cMid);
+          var colorMid = colorFor(method, vMid);
+          if (!colorMid) { nNull++; continue; }
+          for (var lo = 0; lo < lateralOffsets.length; lo++) {
+            var latOffPt = offsetPointByNm(center, segHeading, lateralOffsets[lo]);
+            if (useFilter && minDistToRoutePolylineNM(latOffPt.lat, latOffPt.lon, routeWps, corridorNM) > corridorNM) {
+              nFiltered++;
+              continue;
+            }
+            var cosLat2 = Math.cos(latOffPt.lat * Math.PI / 180);
+            if (Math.abs(cosLat2) < 1e-6) cosLat2 = 1e-6;
+            var halfLat = halfCellNm / 60.0;
+            var halfLon = (halfCellNm / 60.0) / cosLat2;
+            for (var iCopy = 0; iCopy < worldLngOffsets.length; iCopy++) {
+              var off = worldLngOffsets[iCopy];
+              var bounds = [
+                [latOffPt.lat - halfLat, latOffPt.lon - halfLon + off],
+                [latOffPt.lat + halfLat, latOffPt.lon + halfLon + off]
+              ];
+              var rectOpts = {
+                color: colorMid,
+                fillColor: colorMid,
+                fillOpacity: fillOpacity,
+                weight: 0,
+                interactive: true
+              };
+              if (renderer) rectOpts.renderer = renderer;
+              var rect = L.rectangle(bounds, rectOpts);
+              (function (cellData) {
+                rect.on('click', function (e) {
+                  var html = buildPopupHtml(method, cellData, levelMb, fl);
+                  L.popup().setLatLng(e.latlng).setContent(html).openOn(map);
+                });
+              })(cMid);
+              rect.addTo(group);
+              nDrawn++;
+            }
+          }
         }
       }
     } else {
