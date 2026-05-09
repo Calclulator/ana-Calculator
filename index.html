@@ -115,8 +115,9 @@
   #fp-note-panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:3099;background:#080a14;border:1px solid #2a3a4e;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.88);width:min(680px,94vw);max-height:88vh;display:none;flex-direction:column;font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;}
   #fp-note-panel .fpn-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #1e2a38;background:#0d1117;border-radius:8px 8px 0 0;flex-shrink:0;}
   #fp-note-panel .fpn-body{padding:12px 14px;overflow:auto;}
+  #fp-note-panel .fpn-edit{width:100%;min-height:120px;background:#0d1117;border:1px solid #2a3a4e;border-radius:4px;color:#cfd8dc;font-family:inherit;font-size:13px;padding:8px;line-height:1.5;resize:vertical;}
   #fp-note-panel .fpn-body pre{margin:0;white-space:pre-wrap;word-break:break-word;color:#cfd8dc;font-size:13px;line-height:1.6;}
-  .fp-note-short{cursor:pointer;text-decoration:underline dotted rgba(79,195,247,.45);color:#b0bec5;}
+  .fp-note-expand{margin-left:6px;color:#4fc3f7;cursor:pointer;text-decoration:underline;}
   .mp-hdr{background:#0d1117;border-bottom:1px solid #1e2a38;padding:8px 12px;display:flex;align-items:center;gap:8px;border-radius:6px 6px 0 0;}
   .mp-body{display:flex;max-height:72vh;}
   .mp-left{flex:1;padding:12px;overflow-y:auto;border-right:1px solid #1e2a38;min-width:0;}
@@ -1687,11 +1688,7 @@ function runParse() {
     document.getElementById('route-lbl').textContent = dep+' → '+dest;
     document.getElementById('fp-route-lbl').textContent = dep+' → '+dest;
   }
-  var eLabel = ETOPS_DATA[ACTIVE_ETOPS_KEY]
-    ? (ACTIVE_ETOPS_KEY+' '+ETOPS_DATA[ACTIVE_ETOPS_KEY].nm60+'/'+ETOPS_DATA[ACTIVE_ETOPS_KEY].nm180+'NM') : '--';
-  document.getElementById('fpl-info').textContent =
-    '機番:'+acReg+'  機材:'+ACTIVE_ETOPS_KEY+'  ETOPS:'+eLabel
-    +'  WP:'+WP.length+'点  代替:'+ALTS.map(function(a){return a.id;}).join(' ');
+  document.getElementById('fpl-info').textContent = '';
   document.getElementById('parse-result').textContent = '✓ 完了';
   var parseHint = document.getElementById('parse-hint-red');
   if(parseHint) parseHint.textContent = '離陸時刻を最初のATOに上書きしてください';
@@ -1925,10 +1922,9 @@ function renderFpTable() {
     }
     var ztmeStr = (row.ztme!==null) ? String(row.ztme) : '—';
 
-    var noteRaw = row.note || '';
-    var noteText = noteRaw;
-    if(noteText.length > 30) noteText = noteText.slice(0, 30) + '…';
-    var noteHtml = '<span class="fp-note-short" onclick="openFpNoteModal(' + idx + ')" title="クリックで全文表示">' + escH(noteText || '') + '</span>';
+    var noteHtml = '<input class="fp-in fp-note" value="' + escAttr(row.note || '') + '" ' +
+      'oninput="onNoteChange(' + idx + ',this.value)" onchange="onNoteChange(' + idx + ',this.value)">' +
+      '<span class="fp-note-expand" onclick="openFpNoteModal(' + idx + ')" title="全文編集">⛶ 全文</span>';
 
     tr.innerHTML =
       '<td style="color:'+(isFirBoundary?'#cfd8dc':'#90a4ae')+';padding:3px 8px;">'+row.id+'</td>'+
@@ -2002,15 +1998,25 @@ function onCrossChange(idx,val) {
   }
   renderFpTable();
 }
-function onNoteChange(idx,val)  { FP_ROWS[idx].note=val.trim(); }
+function onNoteChange(idx,val)  { FP_ROWS[idx].note = String(val || ''); }
+
+var FP_NOTE_EDIT_IDX = -1;
+function syncFpNoteModalPreview() {
+  var ed = document.getElementById('fp-note-edit');
+  var txt = document.getElementById('fp-note-text');
+  if(!ed || !txt) return;
+  txt.textContent = ed.value || '';
+}
 
 function openFpNoteModal(idx) {
   if(!FP_ROWS || !FP_ROWS[idx]) return;
   var ov = document.getElementById('fp-note-overlay');
   var pan = document.getElementById('fp-note-panel');
-  var txt = document.getElementById('fp-note-text');
-  if(!ov || !pan || !txt) return;
-  txt.textContent = FP_ROWS[idx].note || '';
+  var ed = document.getElementById('fp-note-edit');
+  if(!ov || !pan || !ed) return;
+  FP_NOTE_EDIT_IDX = idx;
+  ed.value = FP_ROWS[idx].note || '';
+  syncFpNoteModalPreview();
   ov.style.display = 'block';
   pan.style.display = 'flex';
 }
@@ -2018,6 +2024,12 @@ function openFpNoteModal(idx) {
 function closeFpNoteModal() {
   var ov = document.getElementById('fp-note-overlay');
   var pan = document.getElementById('fp-note-panel');
+  var ed = document.getElementById('fp-note-edit');
+  if(FP_NOTE_EDIT_IDX >= 0 && FP_ROWS && FP_ROWS[FP_NOTE_EDIT_IDX] && ed) {
+    FP_ROWS[FP_NOTE_EDIT_IDX].note = ed.value || '';
+    renderFpTable();
+  }
+  FP_NOTE_EDIT_IDX = -1;
   if(ov) ov.style.display = 'none';
   if(pan) pan.style.display = 'none';
 }
@@ -5677,6 +5689,7 @@ function closeWsMethodHelp() {
 }
 
 function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function escAttr(s){return escH(String(s || '')).replace(/"/g,'&quot;');}
 
 function mpField(label,val,col){
   return '<div class="mp-field"><div class="mp-lbl">'+label+'</div>'+
@@ -6404,6 +6417,9 @@ applyGfsRadarForCurrentMethod();
     <button type="button" class="ws-method-help-close" onclick="closeFpNoteModal()" aria-label="閉じる">× 閉じる</button>
   </div>
   <div class="fpn-body">
+    <textarea id="fp-note-edit" class="fpn-edit" oninput="syncFpNoteModalPreview()"></textarea>
+    <div style="height:8px;"></div>
+    <div style="color:#90a4ae;font-size:12px;margin-bottom:4px;">プレビュー</div>
     <pre id="fp-note-text"></pre>
   </div>
 </div>
