@@ -4416,7 +4416,6 @@ function applyGfsRadarForCurrentMethod() {
   if(typeof gfsPointAt !== 'function') return;
   var routePts = getOrBuildGfsRadarRoutePoints();
   if(!routePts || !routePts.length) return;
-  var preloadKey = gfsRadarBuildPreloadKey(routePts);
   var renderReady = function(){
     window.GFS_POINT.status = 'ready';
     gfsRadarLayer = GfsRadar.render(map, {
@@ -4430,20 +4429,10 @@ function applyGfsRadarForCurrentMethod() {
     });
     bringTop();
   };
-  if(!GFS_RADAR_PRELOAD_STATE.inflight &&
-     GFS_RADAR_PRELOAD_STATE.lastDoneKey === preloadKey &&
-     GFS_RADAR_PRELOAD_STATE.lastStatus === 'ready') {
-    console.log('[GfsRadar] skip preload on method change (cache ready)');
-    if(!window.GFS_POINT) window.GFS_POINT = {};
-    window.GFS_POINT.status = 'ready';
-    renderReady();
-    bringTop();
-    return;
-  }
   if(!window.GFS_POINT) window.GFS_POINT = {};
   window.GFS_POINT.status = 'loading';
   window.GFS_POINT.error = null;
-  preloadGfsRadarPoints(routePts, function(err){
+  preloadGfsRadarPoints(routePts, { method: methodKey, tiOffsetNm: 200 }, function(err){
     if(err) {
       window.GFS_POINT.status = 'error';
       window.GFS_POINT.error = String(err && err.message ? err.message : err);
@@ -4630,78 +4619,140 @@ function gfsRadarBuildPreloadKey(routePts) {
   return dep + '|' + parts.join(',');
 }
 
-function preloadGfsRadarPoints(routePts, done) {
+function gfsRadarNormalizeOverlayMethod(methodKey) {
+  var m = String(methodKey || 'VWS').toUpperCase();
+  if(m === 'TI1' || m === 'TI2') return m;
+  return 'VWS';
+}
+
+// Keys and fetch jobs for WX Radar GFS corridor overlay: matches gfs-radar-layer pointMode segment loop (aPt = pts[si], vu = gfsRadarValidUtcForRoutePoint(pts, si)).
+function gfsRadarBuildOverlayPreloadPlan(routePts, methodKey, tiOffsetNm) {
+  var wantNeighbors = false;
+  var m = gfsRadarNormalizeOverlayMethod(methodKey);
+  if(m === 'TI1' || m === 'TI2') wantNeighbors = true;
+  var tiNm = typeof tiOffsetNm === 'number' ? tiOffsetNm : 200;
+  var allKeyObj = {};
+  var missingJobs = [];
+  var seenMiss = {};
+  var si;
+  function hasNum(v) { return typeof v === 'number' && isFinite(v); }
+  function consider(lat, lon, vu) {
+    if(!hasNum(lat) || !hasNum(lon) || !vu || !(vu instanceof Date) || isNaN(vu.getTime())) return;
+    if(typeof gfsPointCacheKey !== 'function') return;
+    var k = gfsPointCacheKey(lat, lon, vu);
+    if(!k) return;
+    allKeyObj[k] = 1;
+    if(typeof gfsPointCached === 'function' && gfsPointCached(lat, lon, vu)) return;
+    if(seenMiss[k]) return;
+    seenMiss[k] = 1;
+    missingJobs.push({ lat: lat, lon: lon, vu: vu, cacheKey: k });
+  }
+  if(!routePts || routePts.length < 2) {
+    return { nTotal: 0, mMissing: 0, missingJobs: [], allKeyObj: {} };
+  }
+  for(si = 0; si < routePts.length - 1; si++) {
+    try {
+      var aPt = routePts[si];
+      if(!aPt || !hasNum(aPt.lat) || !hasNum(aPt.lon)) continue;
+      var vu = gfsRadarValidUtcForRoutePoint(routePts, si);
+      consider(aPt.lat, aPt.lon, vu);
+      if(wantNeighbors) {
+        var n = gfsRadarNeighborPt(aPt, 'N', tiNm);
+        var s = gfsRadarNeighborPt(aPt, 'S', tiNm);
+        var e = gfsRadarNeighborPt(aPt, 'E', tiNm);
+        var w = gfsRadarNeighborPt(aPt, 'W', tiNm);
+        consider(n.lat, n.lon, vu);
+        consider(s.lat, s.lon, vu);
+        consider(e.lat, e.lon, vu);
+        consider(w.lat, w.lon, vu);
+      }
+    } catch(exSeg) {
+      console.warn('[GfsRadar] overlay preload plan skip segIdx=' + si, exSeg);
+    }
+  }
+  var nTotal = Object.keys(allKeyObj).length;
+  return { nTotal: nTotal, mMissing: missingJobs.length, missingJobs: missingJobs, allKeyObj: allKeyObj };
+}
+
+function gfsRadarSeedGfsPointMetaFromPlan(routePts) {
+  if(typeof gfsPointCached !== 'function') return;
+  if(!routePts || routePts.length < 2) return;
+  var si, vu, d;
+  for(si = 0; si < routePts.length - 1; si++) {
+    var aPt = routePts[si];
+    if(!aPt || typeof aPt.lat !== 'number' || typeof aPt.lon !== 'number') continue;
+    vu = gfsRadarValidUtcForRoutePoint(routePts, si);
+    d = gfsPointCached(aPt.lat, aPt.lon, vu);
+    if(d) {
+      if(typeof d.cycle === 'string') window.GFS_POINT.cycle = d.cycle;
+      if(typeof d.fhr === 'number') window.GFS_POINT.fhr = d.fhr;
+      return;
+    }
+  }
+}
+
+function preloadGfsRadarPoints(routePts, options, done) {
   if(typeof gfsPointAt !== 'function') { done(new Error('gfsPointAt unavailable')); return; }
+  if(typeof options === 'function') {
+    done = options;
+    options = {};
+  }
+  options = options || {};
+  var methodKey = options.method != null ? options.method : (typeof WX_GFS_CORR_METHOD !== 'undefined' ? WX_GFS_CORR_METHOD : 'VWS');
+  var tiOffsetNm = typeof options.tiOffsetNm === 'number' ? options.tiOffsetNm : 200;
+
   var preloadKey = gfsRadarBuildPreloadKey(routePts);
-  if(GFS_RADAR_PRELOAD_STATE.inflight && GFS_RADAR_PRELOAD_STATE.key === preloadKey) {
+  var methodNorm = gfsRadarNormalizeOverlayMethod(methodKey);
+  var preloadQueueKey = preloadKey + '|ov:' + methodNorm + ':' + tiOffsetNm;
+
+  if(GFS_RADAR_PRELOAD_STATE.inflight && GFS_RADAR_PRELOAD_STATE.key === preloadQueueKey) {
     GFS_RADAR_PRELOAD_STATE.callbacks.push(done);
-    console.warn('[GfsRadar] preload skipped (inflight same key)', preloadKey);
+    console.warn('[GfsRadar] preload skipped (inflight same key)', preloadQueueKey);
     return;
   }
-  if(!GFS_RADAR_PRELOAD_STATE.inflight &&
-     GFS_RADAR_PRELOAD_STATE.lastDoneKey === preloadKey &&
-     GFS_RADAR_PRELOAD_STATE.lastStatus === 'ready') {
-    console.log('[GfsRadar] preload skipped (already ready)', preloadKey);
+
+  var plan = gfsRadarBuildOverlayPreloadPlan(routePts, methodKey, tiOffsetNm);
+  var allKeysList = Object.keys(plan.allKeyObj);
+  window.__gfsPreloadKeys = new Set(allKeysList);
+
+  if(plan.nTotal === 0) {
+    GFS_RADAR_PRELOAD_STATE.inflight = false;
+    GFS_RADAR_PRELOAD_STATE.lastDoneKey = preloadQueueKey;
+    GFS_RADAR_PRELOAD_STATE.lastStatus = 'ready';
     done(null);
     return;
   }
-  GFS_RADAR_PRELOAD_STATE.inflight = true;
-  GFS_RADAR_PRELOAD_STATE.key = preloadKey;
-  GFS_RADAR_PRELOAD_STATE.callbacks = [done];
-  console.log('[GfsRadar] preload trigger stack:', (new Error('preload trigger')).stack);
 
-  var jobs = [];
-  var seen = {};
-  var i;
-  var wpTotal = routePts && routePts.length ? routePts.length : 0;
-  var wpSkip = 0;
-  function hasNum(v) { return typeof v === 'number' && isFinite(v); }
-  function pushJob(lat, lon, vu) {
-    if(!hasNum(lat) || !hasNum(lon) || !vu || !(vu instanceof Date) || isNaN(vu.getTime())) return false;
-    var key = lat.toFixed(3) + '|' + lon.toFixed(3) + '|' + vu.getTime();
-    if(seen[key]) return false;
-    seen[key] = 1;
-    jobs.push({lat:lat, lon:lon, vu:vu});
-    return true;
-  }
-  for(i=0;i<routePts.length;i++) {
-    try {
-      var p = routePts[i];
-      if(!p || !hasNum(p.lat) || !hasNum(p.lon)) { wpSkip++; continue; }
-      var vu = gfsRadarValidUtcForRoutePoint(routePts, i);
-      pushJob(p.lat, p.lon, vu);
-      var n = gfsRadarNeighborPt(p, 'N', 200);
-      var s = gfsRadarNeighborPt(p, 'S', 200);
-      var e = gfsRadarNeighborPt(p, 'E', 200);
-      var w = gfsRadarNeighborPt(p, 'W', 200);
-      pushJob(n.lat, n.lon, vu);
-      pushJob(s.lat, s.lon, vu);
-      pushJob(e.lat, e.lon, vu);
-      pushJob(w.lat, w.lon, vu);
-    } catch(exPt) {
-      wpSkip++;
-      console.warn('[GfsRadar] preload skip point idx=' + i, exPt);
-    }
-  }
-  if(jobs.length === 0) {
-    window.__gfsPreloadKeys = new Set();
+  if(plan.mMissing === 0) {
+    console.log('[GfsRadar] skip preload (all ' + plan.nTotal + ' keys cached)');
+    gfsRadarSeedGfsPointMetaFromPlan(routePts);
     GFS_RADAR_PRELOAD_STATE.inflight = false;
-    GFS_RADAR_PRELOAD_STATE.lastDoneKey = preloadKey;
+    GFS_RADAR_PRELOAD_STATE.lastDoneKey = preloadQueueKey;
     GFS_RADAR_PRELOAD_STATE.lastStatus = 'ready';
-    var cbs0 = GFS_RADAR_PRELOAD_STATE.callbacks.slice();
-    GFS_RADAR_PRELOAD_STATE.callbacks = [];
-    for(var ci0=0; ci0<cbs0.length; ci0++) if(typeof cbs0[ci0] === 'function') cbs0[ci0](null);
+    done(null);
     return;
   }
+
+  console.log('[GfsRadar] preload missing ' + plan.mMissing + ' of ' + plan.nTotal + ' keys');
+  if(typeof window !== 'undefined' && window.GFS_DEBUG_PRELOAD_KEYS === true) {
+    var lim = Math.min(10, plan.missingJobs.length);
+    var di;
+    for(di = 0; di < lim; di++) {
+      console.log('[GfsRadar preload missing key]', plan.missingJobs[di].cacheKey);
+    }
+  }
+
+  GFS_RADAR_PRELOAD_STATE.inflight = true;
+  GFS_RADAR_PRELOAD_STATE.key = preloadQueueKey;
+  GFS_RADAR_PRELOAD_STATE.callbacks = [done];
+
+  var jobs = plan.missingJobs;
   var t0 = Date.now();
   var okCount = 0, ngCount = 0;
-  var preloadKeyAcc = {};
-  console.log('[GfsRadar] preload start wp=' + wpTotal + ' skipped=' + wpSkip + ' jobs=' + jobs.length);
   gfsRunThrottledJobs(jobs, 3, function(j, next){
-    var pCacheKey = (typeof gfsPointCacheKey === 'function') ? gfsPointCacheKey(j.lat, j.lon, j.vu) : '';
-    if(pCacheKey) preloadKeyAcc[pCacheKey] = 1;
     if(typeof window !== 'undefined' && window.GFS_DEBUG_PRELOAD_KEYS === true) {
-      console.log('[GfsRadar preload key]', pCacheKey);
+      var pkLog = j.cacheKey || ((typeof gfsPointCacheKey === 'function') ? gfsPointCacheKey(j.lat, j.lon, j.vu) : '');
+      if(pkLog) console.log('[GfsRadar preload key]', pkLog);
     }
     gfsPointAtRetry(j.lat, j.lon, j.vu, function(err, data, url){
       if(err) {
@@ -4716,14 +4767,11 @@ function preloadGfsRadarPoints(routePts, done) {
       next(null, { ok: true });
     });
   }, function(_ignoredErr){
-    var pkList = Object.keys(preloadKeyAcc);
-    var pkSet = new Set(pkList);
-    window.__gfsPreloadKeys = pkSet;
-    console.log('[GfsRadar] preload done wp=' + wpTotal + ' skipped=' + wpSkip +
-      ' jobs=' + jobs.length + ' ok=' + okCount + ' ng=' + ngCount +
-      ' cache=' + Object.keys(seen).length + ' elapsedMs=' + (Date.now() - t0));
+    window.__gfsPreloadKeys = new Set(Object.keys(gfsRadarBuildOverlayPreloadPlan(routePts, methodKey, tiOffsetNm).allKeyObj));
+    console.log('[GfsRadar] preload done jobs=' + jobs.length + ' ok=' + okCount + ' ng=' + ngCount +
+      ' elapsedMs=' + (Date.now() - t0));
     GFS_RADAR_PRELOAD_STATE.inflight = false;
-    GFS_RADAR_PRELOAD_STATE.lastDoneKey = preloadKey;
+    GFS_RADAR_PRELOAD_STATE.lastDoneKey = preloadQueueKey;
     GFS_RADAR_PRELOAD_STATE.lastStatus = (okCount > 0) ? 'ready' : 'error';
     var cbs = GFS_RADAR_PRELOAD_STATE.callbacks.slice();
     GFS_RADAR_PRELOAD_STATE.callbacks = [];
