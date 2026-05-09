@@ -2118,12 +2118,12 @@ function b787RiValue(c1, c2, alt1Ft, alt2Ft) {
 }
 
 var WS_UNIFIED_BG = [
-  'rgba(58,120,240,.36)',   // SMT
-  'rgba(100,181,246,.36)',  // L-
-  'rgba(102,187,106,.36)',  // L
-  'rgba(247,200,74,.36)',   // L+
-  'rgba(237,111,35,.38)',   // MOD
-  'rgba(207,32,39,.40)'     // SEV
+  '#3a78f0', // SMT (blue)
+  '#64b5f6', // L-  (light blue)
+  '#66bb6a', // L   (green)
+  '#f7c84a', // L+  (yellow)
+  '#ed6f23', // MOD (orange)
+  '#cf2027'  // SEV (red)
 ];
 
 function wsPaletteBucketIndex(val, mode) {
@@ -2191,7 +2191,7 @@ function wsColor(val, mode) {
 function wsPaletteCell(val, mode) {
   var idx = wsPaletteBucketIndex(val, mode);
   if(idx < 0) return { bg:'transparent', fg:null };
-  var fg = (idx <= 1 || idx >= 4) ? '#fff' : '#1a1a1a';
+  var fg = '#111';
   return { bg: WS_UNIFIED_BG[idx], fg: fg };
 }
 
