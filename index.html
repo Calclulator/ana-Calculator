@@ -2117,55 +2117,82 @@ function b787RiValue(c1, c2, alt1Ft, alt2Ft) {
   return (9.81 / avgT) * dthdz / shear2;
 }
 
+var WS_UNIFIED_BG = [
+  'rgba(58,120,240,.36)',   // SMT
+  'rgba(100,181,246,.36)',  // L-
+  'rgba(102,187,106,.36)',  // L
+  'rgba(247,200,74,.36)',   // L+
+  'rgba(237,111,35,.38)',   // MOD
+  'rgba(207,32,39,.40)'     // SEV
+];
+
+function wsPaletteBucketIndex(val, mode) {
+  if(val === null || val === undefined || isNaN(val)) return -1;
+  var m = String(mode || 'vws').toLowerCase();
+  if(m === 'company' || m === 'vws' || m === 'gfs-vws') {
+    if(val <= 4) return 0;
+    if(val <= 6) return 1;
+    if(val <= 9) return 2;
+    if(val <= 12) return 3;
+    if(val <= 17) return 4;
+    return 5;
+  }
+  if(m === 'b787' || m === 'b787ri') {
+    // Ri: high=stable(SMT), low=unstable(SEV)
+    if(val > 1) return 0;
+    if(val > 0.5) return 1;
+    if(val > 0.3) return 2;
+    if(val > 0.25) return 3;
+    if(val > 0.2) return 4;
+    return 5;
+  }
+  if(m === 'ti1' || m === 'ellrod') {
+    var v1 = val * ELLROD_DISPLAY_SCALE;
+    if(v1 < 1) return 0;
+    if(v1 < 2) return 1;
+    if(v1 < 4) return 2;
+    if(v1 < 6) return 3;
+    if(v1 < 8) return 4;
+    return 5;
+  }
+  if(m === 'ti2') {
+    var v2 = val * ELLROD_DISPLAY_SCALE;
+    if(v2 < 2) return 0;
+    if(v2 < 4) return 1;
+    if(v2 < 6) return 2;
+    if(v2 < 8) return 3;
+    if(v2 < 10) return 4;
+    return 5;
+  }
+  return -1;
+}
+
+function wsPaletteColor(val, mode) {
+  var idx = wsPaletteBucketIndex(val, mode);
+  if(idx < 0) return 'transparent';
+  return WS_UNIFIED_BG[idx];
+}
+
+function wsLegendGradient(method) {
+  return 'linear-gradient(to bottom,' +
+    wsPaletteColor(20, method) + ' 0%, ' +
+    wsPaletteColor(15, method) + ' 16.66%, ' +
+    wsPaletteColor(11, method) + ' 33.33%, ' +
+    wsPaletteColor(8, method) + ' 50%, ' +
+    wsPaletteColor(5, method) + ' 66.66%, ' +
+    wsPaletteColor(2, method) + ' 100%)';
+}
+
 // 値→色 (方式別)
 function wsColor(val, mode) {
-  if(val === null || isNaN(val)) return 'transparent';
-  var pal = wsPaletteCell(val, mode);
-  if(pal && pal.bg) return pal.bg;
-  return 'transparent';
+  return wsPaletteColor(val, mode);
 }
 
 function wsPaletteCell(val, mode) {
-  if(val === null || isNaN(val)) return { bg:'transparent', fg:null };
-  var m = String(mode || 'vws').toLowerCase();
-  if(m === 'company' || m === 'vws') {
-    if(typeof GfsRadar !== 'undefined' && GfsRadar.getColor && GfsRadar.bucketCategoryIndex) {
-      var SI_PER_KT_PER_KFT = 1 / (1.943844 * 0.3048 * 1000);
-      var vwsSi = val * SI_PER_KT_PER_KFT;
-      var bgG = GfsRadar.getColor('VWS', vwsSi);
-      var idxG = GfsRadar.bucketCategoryIndex('VWS', vwsSi);
-      if(bgG && idxG >= 0) {
-        return { bg:bgG, fg:(idxG===0 || idxG===1 || idxG===5) ? '#fff' : '#1a1a1a' };
-      }
-    }
-    // fallback
-    if(val <= 4) return { bg:'rgba(100,181,246,.30)', fg:'#fff' };
-    if(val <= 6) return { bg:'rgba(102,187,106,.32)', fg:'#1a1a1a' };
-    if(val <= 9) return { bg:'rgba(174,213,129,.32)', fg:'#1a1a1a' };
-    if(val <= 12) return { bg:'rgba(255,238,88,.32)', fg:'#1a1a1a' };
-    if(val <= 17) return { bg:'rgba(255,167,38,.35)', fg:'#fff' };
-    return { bg:'rgba(239,83,80,.40)', fg:'#fff' };
-  }
-  if(m === 'ti1' || m === 'ti2') {
-    if(typeof GfsRadar !== 'undefined' && GfsRadar.getColor && GfsRadar.bucketCategoryIndex) {
-      var mm = m.toUpperCase();
-      var bgTi = GfsRadar.getColor(mm, val);
-      var idxTi = GfsRadar.bucketCategoryIndex(mm, val);
-      if(bgTi && idxTi >= 0) return { bg:bgTi, fg:(idxTi===0 || idxTi===1 || idxTi===5) ? '#fff' : '#1a1a1a' };
-    }
-    return { bg:'transparent', fg:null };
-  }
-  if(m === 'b787') {
-  // Ri: 大きいほど安定。SMT >1, L- 0.5-1, L 0.3-0.5, L+ 0.25-0.3, MOD 0.2-0.25, SEV ≤0.2
-    if(val > 1) return { bg:'rgba(100,181,246,.30)', fg:'#fff' };
-    if(val > 0.5) return { bg:'rgba(102,187,106,.32)', fg:'#1a1a1a' };
-    if(val > 0.3) return { bg:'rgba(174,213,129,.32)', fg:'#1a1a1a' };
-    if(val > 0.25) return { bg:'rgba(255,238,88,.32)', fg:'#1a1a1a' };
-    if(val > 0.2) return { bg:'rgba(255,167,38,.35)', fg:'#fff' };
-    return { bg:'rgba(239,83,80,.40)', fg:'#fff' };
-  }
-  if(typeof mode === 'string' && mode.indexOf('GFS-') === 0) return { bg:'transparent', fg:null };
-  return { bg:'transparent', fg:null };
+  var idx = wsPaletteBucketIndex(val, mode);
+  if(idx < 0) return { bg:'transparent', fg:null };
+  var fg = (idx <= 1 || idx >= 4) ? '#fff' : '#1a1a1a';
+  return { bg: WS_UNIFIED_BG[idx], fg: fg };
 }
 
 function getWfmInterpolatedCell(wpId, fl) {
@@ -2279,37 +2306,31 @@ function renderWxCorridorLegend() {
     ttl.textContent = mode === 'company' ? 'Company' : (mode === 'b787' ? 'Ri' : 'VWS');
   }
   if(mode === 'company') {
-    grad.style.background = 'linear-gradient(to bottom,'+
-      'rgba(239,83,80,.9) 0%, rgba(255,167,38,.9) 16.66%, rgba(255,238,88,.9) 33.33%,'+
-      'rgba(174,213,129,.9) 50%, rgba(102,187,106,.9) 66.66%, rgba(100,181,246,.9) 100%)';
-    labs.innerHTML = '<div style="color:#e57373;">SEV (18+)</div>'+
-      '<div style="color:#ffb74d;">MOD (13-17)</div>'+
-      '<div style="color:#fff59d;">L+ (10-12)</div>'+
-      '<div style="color:#c5e1a5;">L (7-9)</div>'+
-      '<div style="color:#aed581;">L- (5-6)</div>'+
-      '<div style="color:#64b5f6;">SMT (0-4)</div>';
+    grad.style.background = wsLegendGradient('vws');
+    labs.innerHTML = '<div style="color:'+wsPaletteColor(20,'vws')+';">SEV (18+)</div>'+
+      '<div style="color:'+wsPaletteColor(15,'vws')+';">MOD (13-17)</div>'+
+      '<div style="color:'+wsPaletteColor(11,'vws')+';">L+ (10-12)</div>'+
+      '<div style="color:'+wsPaletteColor(8,'vws')+';">L (7-9)</div>'+
+      '<div style="color:'+wsPaletteColor(5,'vws')+';">L- (5-6)</div>'+
+      '<div style="color:'+wsPaletteColor(2,'vws')+';">SMT (0-4)</div>';
     labs.style.justifyContent = 'space-between';
   } else if(mode === 'vws') {
-    grad.style.background = 'linear-gradient(to bottom,'+
-      'rgba(239,83,80,.9) 0%, rgba(255,167,38,.9) 16.66%, rgba(255,238,88,.9) 33.33%,'+
-      'rgba(174,213,129,.9) 50%, rgba(102,187,106,.9) 66.66%, rgba(100,181,246,.9) 100%)';
-    labs.innerHTML = '<div style="color:#e57373;">SEV (18+)</div>'+
-      '<div style="color:#ffb74d;">MOD (13-17)</div>'+
-      '<div style="color:#fff59d;">L+ (10-12)</div>'+
-      '<div style="color:#c5e1a5;">L (7-9)</div>'+
-      '<div style="color:#aed581;">L- (5-6)</div>'+
-      '<div style="color:#64b5f6;">SMT (0-4)</div>';
+    grad.style.background = wsLegendGradient('vws');
+    labs.innerHTML = '<div style="color:'+wsPaletteColor(20,'vws')+';">SEV (18+)</div>'+
+      '<div style="color:'+wsPaletteColor(15,'vws')+';">MOD (13-17)</div>'+
+      '<div style="color:'+wsPaletteColor(11,'vws')+';">L+ (10-12)</div>'+
+      '<div style="color:'+wsPaletteColor(8,'vws')+';">L (7-9)</div>'+
+      '<div style="color:'+wsPaletteColor(5,'vws')+';">L- (5-6)</div>'+
+      '<div style="color:'+wsPaletteColor(2,'vws')+';">SMT (0-4)</div>';
     labs.style.justifyContent = 'space-between';
   } else {
-    grad.style.background = 'linear-gradient(to bottom,'+
-      'rgba(239,83,80,.9) 0%, rgba(255,167,38,.9) 16.66%, rgba(255,238,88,.9) 33.33%,'+
-      'rgba(174,213,129,.9) 50%, rgba(102,187,106,.9) 66.66%, rgba(100,181,246,.9) 100%)';
-    labs.innerHTML = '<div style="color:#e57373;">SEV Ri≤0.2</div>'+
-      '<div style="color:#ffb74d;">MOD &gt;0.2</div>'+
-      '<div style="color:#fff59d;">L+ &gt;0.25</div>'+
-      '<div style="color:#c5e1a5;">L &gt;0.3</div>'+
-      '<div style="color:#aed581;">L- &gt;0.5</div>'+
-      '<div style="color:#64b5f6;">SMT Ri&gt;1</div>';
+    grad.style.background = wsLegendGradient('b787ri');
+    labs.innerHTML = '<div style="color:'+wsPaletteColor(0.1,'b787ri')+';">SEV Ri≤0.2</div>'+
+      '<div style="color:'+wsPaletteColor(0.22,'b787ri')+';">MOD &gt;0.2</div>'+
+      '<div style="color:'+wsPaletteColor(0.27,'b787ri')+';">L+ &gt;0.25</div>'+
+      '<div style="color:'+wsPaletteColor(0.4,'b787ri')+';">L &gt;0.3</div>'+
+      '<div style="color:'+wsPaletteColor(0.7,'b787ri')+';">L- &gt;0.5</div>'+
+      '<div style="color:'+wsPaletteColor(1.2,'b787ri')+';">SMT Ri&gt;1</div>';
     labs.style.justifyContent = 'space-between';
   }
 
@@ -2329,15 +2350,19 @@ function renderWxCorridorLegend() {
     else if(gfsCfg.key === 'TI2') ttlG.textContent = 'Ellrod TI2';
     else ttlG.textContent = 'GFS-VWS';
   }
-  gradG.style.background = 'linear-gradient(to bottom,'+
-    'rgba(239,83,80,.9) 0%, rgba(255,167,38,.9) 16.66%, rgba(255,238,88,.9) 33.33%,'+
-    'rgba(174,213,129,.9) 50%, rgba(102,187,106,.9) 66.66%, rgba(100,181,246,.9) 100%)';
-  labsG.innerHTML = '<div style="color:#e57373;">' + gfsCfg.labels[0] + '</div>'+
-    '<div style="color:#ffb74d;">' + gfsCfg.labels[1] + '</div>'+
-    '<div style="color:#fff59d;">' + gfsCfg.labels[2] + '</div>'+
-    '<div style="color:#c5e1a5;">' + gfsCfg.labels[3] + '</div>'+
-    '<div style="color:#aed581;">' + gfsCfg.labels[4] + '</div>'+
-    '<div style="color:#64b5f6;">' + gfsCfg.labels[5] + '</div>';
+  var gm = gfsCfg.key === 'TI1' ? 'ti1' : (gfsCfg.key === 'TI2' ? 'ti2' : 'vws');
+  var samp = gm === 'ti1'
+    ? [9e-7, 7e-7, 5e-7, 3e-7, 1.5e-7, 0.5e-7]
+    : (gm === 'ti2'
+      ? [11e-7, 9e-7, 7e-7, 5e-7, 3e-7, 1e-7]
+      : [20, 15, 11, 8, 5, 2]);
+  gradG.style.background = wsLegendGradient(gm);
+  labsG.innerHTML = '<div style="color:'+wsPaletteColor(samp[0], gm)+';">' + gfsCfg.labels[0] + '</div>'+
+    '<div style="color:'+wsPaletteColor(samp[1], gm)+';">' + gfsCfg.labels[1] + '</div>'+
+    '<div style="color:'+wsPaletteColor(samp[2], gm)+';">' + gfsCfg.labels[2] + '</div>'+
+    '<div style="color:'+wsPaletteColor(samp[3], gm)+';">' + gfsCfg.labels[3] + '</div>'+
+    '<div style="color:'+wsPaletteColor(samp[4], gm)+';">' + gfsCfg.labels[4] + '</div>'+
+    '<div style="color:'+wsPaletteColor(samp[5], gm)+';">' + gfsCfg.labels[5] + '</div>';
   labsG.style.justifyContent = 'space-between';
 }
 
@@ -3560,7 +3585,7 @@ function renderGfsWsTable() {
       if(met) {
         if(dispMode === 'vws') {
           val = met.vws;
-          palRaw = met.vwsSi;
+          palRaw = met.vws;
         } else if(dispMode === 'ti1') {
           val = met.ti1;
           palRaw = met.ti1;
