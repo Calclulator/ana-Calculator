@@ -581,21 +581,18 @@
     return null;
   }
 
+  // Vertical wind shear for overlay / Ellrod: |dU| in m/s over dz in m (s^-1). Not kt/1000ft.
   function vwsFromLevelsPlusMinus2000Ft(levels, hCenterM) {
     var FT = 0.3048;
     var dzFt = 4000;
+    var dz_m = dzFt * FT;
     var halfM = 2000 * FT;
     var uvLo = interpUvAtHeightInterior(levels, hCenterM - halfM);
     var uvHi = interpUvAtHeightInterior(levels, hCenterM + halfM);
     if (!uvLo || !uvHi) return null;
-    var KT = 1.943844;
-    var fn = (typeof window !== 'undefined' && typeof window.computeVwsFromUv === 'function') ? window.computeVwsFromUv : null;
-    if (fn) {
-      return fn(uvLo.u * KT, uvLo.v * KT, uvHi.u * KT, uvHi.v * KT, dzFt);
-    }
-    var du = (uvHi.u - uvLo.u) * KT;
-    var dv = (uvHi.v - uvLo.v) * KT;
-    return Math.sqrt(du * du + dv * dv) / (dzFt / 1000);
+    var du = uvHi.u - uvLo.u;
+    var dv = uvHi.v - uvLo.v;
+    return Math.sqrt(du * du + dv * dv) / dz_m;
   }
 
   function computeAtPoint(pt, levelMb, validUtc, method, offsetNm) {

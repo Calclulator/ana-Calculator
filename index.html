@@ -2837,6 +2837,15 @@ function gfsComputeVwsFromUvMs(uvLo, uvHi, dzFt) {
   return Math.sqrt(du * du + dv * dv) / (dzFt / 1000);
 }
 
+// |dU| (m/s) / dz (m) for Ellrod; u,v on uvLo/uvHi are m/s (Open-Meteo).
+function gfsComputeVwsSiFromUvMs(uvLo, uvHi, dzFt) {
+  var FT = 0.3048;
+  var du = uvHi.u - uvLo.u;
+  var dv = uvHi.v - uvLo.v;
+  var dz_m = dzFt * FT;
+  return Math.sqrt(du * du + dv * dv) / dz_m;
+}
+
 function gfsAtWp(wpId, alt) {
   if(!window.GFS_POINT || window.GFS_POINT.status !== 'ready') return null;
   if(typeof WP === 'undefined') return null;
@@ -3307,6 +3316,7 @@ function renderGfsWsTable() {
         return {
           h: hTarget,
           vws: a.vws + f * (b.vws - a.vws),
+          vwsSi: a.vwsSi + f * (b.vwsSi - a.vwsSi),
           defm: a.defm + f * (b.defm - a.defm),
           cvgRaw: a.cvgRaw + f * (b.cvgRaw - a.cvgRaw),
           cvgClipped: a.cvgClipped + f * (b.cvgClipped - a.cvgClipped),
@@ -3318,7 +3328,7 @@ function renderGfsWsTable() {
     return null;
   }
 
-  function wsValueAtWpAlt(wpId, altFl) {
+  function wsMetricsAtWpAlt(wpId, altFl) {
     var wp = null;
     var wi;
     for(wi = 0; wi < WP.length; wi++) {
@@ -3360,6 +3370,7 @@ function renderGfsWsTable() {
           var uvAbove = gfsAtmInterpHeightColumnInterior(col, altFtRow + halfFt);
           if(!uvBelow || !uvAbove) continue;
           vws = gfsComputeVwsFromUvMs(uvBelow, uvAbove, dzFtVws);
+          var vwsSi = gfsComputeVwsSiFromUvMs(uvBelow, uvAbove, dzFtVws);
           centerMb = 250;
           if(typeof GfsRadar !== 'undefined' && GfsRadar.snapLevel && GfsRadar.flToMb) {
             centerMb = GfsRadar.snapLevel(GfsRadar.flToMb(i));
@@ -3381,11 +3392,12 @@ function renderGfsWsTable() {
             cvgRaw = -(dUdx + dVdy);
           }
           var cvgClipped = Math.max(0, cvgRaw);
-          var ti1 = vws * defm;
-          var ti2 = vws * (defm + cvgClipped);
+          var ti1 = vwsSi * defm;
+          var ti2 = vwsSi * (defm + cvgClipped);
           pts.push({
             h: altFtRow * 0.3048,
             vws: vws,
+            vwsSi: vwsSi,
             defm: defm,
             cvgRaw: cvgRaw,
             cvgClipped: cvgClipped,
@@ -3411,7 +3423,7 @@ function renderGfsWsTable() {
       if(!gfsWsEllrodLogSeen[logKey]) {
         gfsWsEllrodLogSeen[logKey] = 1;
         if(ellrodOn) {
-          var vwsObs = outMetrics.vws;
+          var vwsObs = outMetrics.vwsSi;
           var ti1Obs = outMetrics.ti1;
           var ti2Obs = outMetrics.ti2;
           var ratio = (vwsObs && vwsObs !== 0 && ti1Obs != null) ? (ti1Obs / vwsObs) : null;
@@ -3433,7 +3445,16 @@ function renderGfsWsTable() {
         }
       }
     }
-    return outVal;
+    return outMetrics;
+  }
+
+  function wsValueAtWpAlt(wpId, altFl) {
+    var outMetrics = wsMetricsAtWpAlt(wpId, altFl);
+    if(!outMetrics) return null;
+    var mode = (typeof ATM_GFS_WS === 'string') ? ATM_GFS_WS : 'vws';
+    if(mode === 'ti1') return outMetrics.ti1;
+    if(mode === 'ti2') return outMetrics.ti2;
+    return outMetrics.vws;
   }
 
   var wpIds = [];
@@ -3486,16 +3507,30 @@ function renderGfsWsTable() {
         html += '<td style="min-width:9em;width:9em;padding:3px 5px;background:transparent;color:transparent;text-align:center;border-bottom:1px solid #14202c;border-right:1px solid #1e2a38;white-space:nowrap;'+topBorder+'"></td>';
         return;
       }
-      var val = wsValueAtWpAlt(wp, alt);
+      var met = wsMetricsAtWpAlt(wp, alt);
+      var val = null;
+      var palRaw = null;
+      if(met) {
+        if(dispMode === 'vws') {
+          val = met.vws;
+          palRaw = met.vwsSi;
+        } else if(dispMode === 'ti1') {
+          val = met.ti1;
+          palRaw = met.ti1;
+        } else if(dispMode === 'ti2') {
+          val = met.ti2;
+          palRaw = met.ti2;
+        }
+      }
       var txt = '—';
       if(val !== null && !isNaN(val)) {
         if(dispMode === 'vws') {
-          txt = (val * 1000).toFixed(2);
+          txt = val.toFixed(1);
         } else {
           txt = (val * ELLROD_DISPLAY_SCALE).toFixed(2);
         }
       }
-      var pal = gfsWsPaletteCell(dispMode, val);
+      var pal = gfsWsPaletteCell(dispMode, palRaw);
       var colorAttr = '';
       if(pal.fg !== null) colorAttr = 'color:'+pal.fg+' !important;';
       var colorStyle = (pal.fg !== null) ? colorAttr : 'color:#cfd8dc;';
@@ -3658,6 +3693,7 @@ function exportCalibrationData() {
   var fl;
   var wi;
   var wpi;
+  var GFS_VWS_SI_TO_KT_PER_KFT = 1.943844 * 0.3048 * 1000;
   for(wpi = 0; wpi < wpIds.length; wpi++) {
     var wpId = wpIds[wpi];
     var wp = null;
@@ -3675,7 +3711,7 @@ function exportCalibrationData() {
       var navBand = vwsBandLabelUi(navVws);
       var gfs = gfsMetricsAtWpFl(wp, flTen);
       var gfsVws = gfs ? gfs.vws : null;
-      var gfsVwsX1000 = gfsVws === null || isNaN(gfsVws) ? null : gfsVws * 1000;
+      var gfsVwsKtPerKft = gfsVws === null || isNaN(gfsVws) ? null : gfsVws * GFS_VWS_SI_TO_KT_PER_KFT;
       var gfsTi1 = gfs ? gfs.ti1 : null;
       var gfsTi2 = gfs ? gfs.ti2 : null;
       var gfsDefm = gfs ? gfs.defm : null;
@@ -3690,8 +3726,8 @@ function exportCalibrationData() {
         navlogVws_kt_per_1000ft: navVws === null || isNaN(navVws) ? '' : navVws,
         navlogVws_band: navBand,
         gfsVws_s_inv: gfsVws === null || isNaN(gfsVws) ? '' : gfsVws,
-        gfsVws_x1000: gfsVwsX1000 === null || isNaN(gfsVwsX1000) ? '' : gfsVwsX1000,
-        gfsVws_band: vwsBandLabelUi(gfsVwsX1000),
+        gfsVws_kt_per_1000ft: gfsVwsKtPerKft === null || isNaN(gfsVwsKtPerKft) ? '' : gfsVwsKtPerKft,
+        gfsVws_band: vwsBandLabelUi(gfsVwsKtPerKft),
         gfsTi1: gfsTi1 === null || isNaN(gfsTi1) ? '' : gfsTi1,
         gfsTi1_band: gfsBandLabel('TI1', gfsTi1),
         gfsTi2: gfsTi2 === null || isNaN(gfsTi2) ? '' : gfsTi2,
@@ -3709,7 +3745,7 @@ function exportCalibrationData() {
   var hdr = [
     'wp', 'fl', 'lat', 'lon', 'validUtcISO',
     'navlogVws_kt_per_1000ft', 'navlogVws_band',
-    'gfsVws_s_inv', 'gfsVws_x1000', 'gfsVws_band',
+    'gfsVws_s_inv', 'gfsVws_kt_per_1000ft', 'gfsVws_band',
     'gfsTi1', 'gfsTi1_band', 'gfsTi2', 'gfsTi2_band',
     'defm', 'cvg', 'cvg_clipped'
   ];
@@ -3721,7 +3757,7 @@ function exportCalibrationData() {
     lines.push([
       csvEscape(r.wp), r.fl, r.lat, r.lon, csvEscape(r.validUtcISO),
       r.navlogVws_kt_per_1000ft, csvEscape(r.navlogVws_band),
-      r.gfsVws_s_inv, r.gfsVws_x1000, csvEscape(r.gfsVws_band),
+      r.gfsVws_s_inv, r.gfsVws_kt_per_1000ft, csvEscape(r.gfsVws_band),
       r.gfsTi1, csvEscape(r.gfsTi1_band), r.gfsTi2, csvEscape(r.gfsTi2_band),
       r.defm, r.cvg, r.cvg_clipped
     ].join(','));
