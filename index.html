@@ -2377,44 +2377,46 @@ function riToEdr(ri) {
   return 'EDR 5';
 }
 
+function atmWsLegendBadge(bg, label) {
+  return '<span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;margin-bottom:4px;font-size:1em;white-space:nowrap;">'+
+    '<span class="atm-ws-leg-swatch" style="flex-shrink:0;width:14px;height:14px;background:'+bg+';border:1px solid rgba(129,147,168,.55);"></span>'+
+    label+'</span>';
+}
+
+function atmWsLegendRow(parts) {
+  return '<div style="display:flex;flex-wrap:wrap;align-items:center;line-height:1.5;">'+parts.join('')+'</div>';
+}
+
 function renderAtmWsLegend() {
   var el = document.getElementById('atm-ws-legend');
   if(!el) return;
-  function badge(bg, label) {
-    return '<span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;margin-bottom:4px;font-size:1em;white-space:nowrap;">'+
-      '<span class="atm-ws-leg-swatch" style="flex-shrink:0;width:14px;height:14px;background:'+bg+';border:1px solid rgba(129,147,168,.55);"></span>'+
-      label+'</span>';
-  }
-  function row(parts) {
-    return '<div style="display:flex;flex-wrap:wrap;align-items:center;line-height:1.5;">'+parts.join('')+'</div>';
-  }
   var html = '';
   if(ATM_WS === 'company') {
-    html = row([
-      badge('rgba(100,181,246,.30)','Smooth (0-4 kt/1,000 ft)'),
-      badge('rgba(102,187,106,.32)','Light- (5-6)'),
-      badge('rgba(174,213,129,.32)','Light (7-9)'),
-      badge('rgba(255,238,88,.32)','Light+ (10-12)'),
-      badge('rgba(255,167,38,.35)','Moderate (13-17)'),
-      badge('rgba(239,83,80,.40)','Severe (18+)')
+    html = atmWsLegendRow([
+      atmWsLegendBadge('rgba(100,181,246,.30)','Smooth (0-4 kt/1,000 ft)'),
+      atmWsLegendBadge('rgba(102,187,106,.32)','Light- (5-6)'),
+      atmWsLegendBadge('rgba(174,213,129,.32)','Light (7-9)'),
+      atmWsLegendBadge('rgba(255,238,88,.32)','Light+ (10-12)'),
+      atmWsLegendBadge('rgba(255,167,38,.35)','Moderate (13-17)'),
+      atmWsLegendBadge('rgba(239,83,80,.40)','Severe (18+)')
     ]);
   } else if(ATM_WS === 'vws') {
-    html = row([
-      badge('rgba(100,181,246,.30)','Smooth (0-4 kt/1,000 ft)'),
-      badge('rgba(102,187,106,.32)','Light- (5-6)'),
-      badge('rgba(174,213,129,.32)','Light (7-9)'),
-      badge('rgba(255,238,88,.32)','Light+ (10-12)'),
-      badge('rgba(255,167,38,.35)','Moderate (13-17)'),
-      badge('rgba(239,83,80,.40)','Severe (18+)')
+    html = atmWsLegendRow([
+      atmWsLegendBadge('rgba(100,181,246,.30)','Smooth (0-4 kt/1,000 ft)'),
+      atmWsLegendBadge('rgba(102,187,106,.32)','Light- (5-6)'),
+      atmWsLegendBadge('rgba(174,213,129,.32)','Light (7-9)'),
+      atmWsLegendBadge('rgba(255,238,88,.32)','Light+ (10-12)'),
+      atmWsLegendBadge('rgba(255,167,38,.35)','Moderate (13-17)'),
+      atmWsLegendBadge('rgba(239,83,80,.40)','Severe (18+)')
     ]);
   } else {
-    html = row([
-      badge('rgba(100,181,246,.30)','Smooth Ri&gt;1 (EDR 0)'),
-      badge('rgba(102,187,106,.32)','Light- Ri&gt;0.5 (EDR 1)'),
-      badge('rgba(174,213,129,.32)','Light Ri&gt;0.3 (EDR 2)'),
-      badge('rgba(255,238,88,.32)','Light+ Ri&gt;0.25 (EDR 3)'),
-      badge('rgba(255,167,38,.35)','Moderate Ri&gt;0.2 (EDR 4)'),
-      badge('rgba(239,83,80,.40)','Severe Ri&amp;le;0.2 (EDR 5)')
+    html = atmWsLegendRow([
+      atmWsLegendBadge('rgba(100,181,246,.30)','Smooth Ri&gt;1 (EDR 0)'),
+      atmWsLegendBadge('rgba(102,187,106,.32)','Light- Ri&gt;0.5 (EDR 1)'),
+      atmWsLegendBadge('rgba(174,213,129,.32)','Light Ri&gt;0.3 (EDR 2)'),
+      atmWsLegendBadge('rgba(255,238,88,.32)','Light+ Ri&gt;0.25 (EDR 3)'),
+      atmWsLegendBadge('rgba(255,167,38,.35)','Moderate Ri&gt;0.2 (EDR 4)'),
+      atmWsLegendBadge('rgba(239,83,80,.40)','Severe Ri&amp;le;0.2 (EDR 5)')
     ]);
   }
   el.innerHTML = html;
@@ -2672,6 +2674,7 @@ function setAtmGfsWs(mode) {
     if(btn) btn.className = 'btn' + (keys[i] === mode ? ' on' : '');
   }
   renderGfsWsTable();
+  renderAtmGfsWsInlineHelp(mode);
 }
 
 function gfsAtmValidUtcForWp(wp) {
@@ -3147,81 +3150,49 @@ function renderAtmGfsWsInlineHelp(methodOpt) {
     : ((typeof ATM_GFS_WS === 'string') ? ATM_GFS_WS : 'vws');
   if(m !== 'ti1' && m !== 'ti2') m = 'vws';
 
-  function colOrFallback(methodUp, rawV) {
-    if(typeof GfsRadar === 'undefined' || !GfsRadar.getColor) return '#546e7a';
-    var c = GfsRadar.getColor(methodUp, rawV);
-    return c || '#546e7a';
-  }
-
   var html = '';
-  var i;
+  var formulaStyle = 'font-size:0.92em;color:#90a4ae;margin-top:8px;line-height:1.45;';
+
   if(m === 'vws') {
-    var vwsRaws = [0.015, 0.011, 0.0085, 0.0065, 0.0045, 0.002];
-    var vwsWscp = [
-      'Severe (18+)',
-      'Moderate (13-17)',
-      'Light+ (10-12)',
-      'Light (7-9)',
-      'Light- (5-6)',
-      'Smooth (0-4 kt/1000ft)'
-    ];
-    var vwsHint = ['赤', 'オレンジ', '黄', '緑', '水色', '青'];
-    var lblV = (typeof GfsRadar.getLabels === 'function') ? GfsRadar.getLabels('VWS') : [];
-    html += '<div style="font-size:1em;"><strong style="color:#4fc3f7;">GFS-VWS</strong></div>';
-    html += '<p style="margin:8px 0;line-height:1.55;color:#90a4ae;">計算式: VWS = &radic;((u2&minus;u1)&sup2; + (v2&minus;v1)&sup2;) / (&Delta;z/1000)。データ源: Open-Meteo の上下 1000 ft 風から計算。<br>※ 暫定 calibration (2026-05-07)、再調整予定。</p>';
-    html += '<div style="color:#90a4ae;font-size:0.92em;margin-bottom:6px;">閾値と色（色見本は <code>GfsRadar.getColor</code> とセル背景と同一）:</div>';
-    html += '<table style="width:100%;border-collapse:collapse;font-size:0.95em;">';
-    for(i = 0; i < 6; i++) {
-      var rv = vwsRaws[i];
-      var bgc = colOrFallback('VWS', rv);
-      html += '<tr><td style="padding:6px 8px;vertical-align:top;border-bottom:1px solid #1e2a38;width:44px;">';
-      html += '<span style="display:inline-block;width:28px;height:28px;border-radius:4px;background:'+bgc+';border:1px solid rgba(255,255,255,.2);"></span></td>';
-      html += '<td style="padding:6px 8px;border-bottom:1px solid #1e2a38;line-height:1.5;color:#cfd8dc;">';
-      html += '<strong>'+vwsWscp[i]+'</strong>（ANA WSCP 目安・'+vwsHint[i]+'）';
-      if(lblV[i]) html += '<br><span style="color:#78909c;font-size:0.92em;">セル帯: '+lblV[i]+'（表の数値は VWS&times;1000）</span>';
-      html += '</td></tr>';
-    }
-    html += '</table>';
-  } else if(m === 'ti1') {
-    var t1raw = [9e-7, 7e-7, 5e-7, 3e-7, 1.5e-7, 0.5e-7];
-    var t1Wscp = ['Severe (8+)', 'Heavy (6-8)', 'Moderate (4-6)', 'Light (2-4)', 'Minimal (1-2)', 'Smooth (0-1)'];
-    var t1Hint = ['濃赤', '赤', 'オレンジ', '黄', '黄緑', '緑'];
-    var lblT1 = (typeof GfsRadar.getLabels === 'function') ? GfsRadar.getLabels('TI1') : [];
-    html += '<div style="font-size:1em;"><strong style="color:#4fc3f7;">Ellrod TI1</strong></div>';
-    html += '<p style="margin:8px 0;line-height:1.55;color:#90a4ae;">計算式: TI1 = VWS &times; |DEF|。表示単位: &times;10&minus;&sup7; s&minus;&sup2;（Ellrod &amp; Knapp 1992）。DEF: WP 中心 + N/S/E/W 4 点（200 NM）サンプルから計算、表示は中心 1 点。</p>';
-    html += '<div style="color:#90a4ae;font-size:0.92em;margin-bottom:6px;">閾値と色（色見本はセル背景と同一）:</div>';
-    html += '<table style="width:100%;border-collapse:collapse;font-size:0.95em;">';
-    for(i = 0; i < 6; i++) {
-      var r1 = t1raw[i];
-      var bg1 = colOrFallback('TI1', r1);
-      html += '<tr><td style="padding:6px 8px;vertical-align:top;border-bottom:1px solid #1e2a38;width:44px;">';
-      html += '<span style="display:inline-block;width:28px;height:28px;border-radius:4px;background:'+bg1+';border:1px solid rgba(255,255,255,.2);"></span></td>';
-      html += '<td style="padding:6px 8px;border-bottom:1px solid #1e2a38;line-height:1.5;color:#cfd8dc;">';
-      html += '<strong>'+t1Wscp[i]+'</strong>（'+t1Hint[i]+'）';
-      if(lblT1[i]) html += '<br><span style="color:#78909c;font-size:0.92em;">セル帯: '+lblT1[i]+'</span>';
-      html += '</td></tr>';
-    }
-    html += '</table>';
+    html = atmWsLegendRow([
+      atmWsLegendBadge('rgba(100,181,246,.30)','Smooth (0-4 kt/1,000 ft)'),
+      atmWsLegendBadge('rgba(102,187,106,.32)','Light- (5-6)'),
+      atmWsLegendBadge('rgba(174,213,129,.32)','Light (7-9)'),
+      atmWsLegendBadge('rgba(255,238,88,.32)','Light+ (10-12)'),
+      atmWsLegendBadge('rgba(255,167,38,.35)','Moderate (13-17)'),
+      atmWsLegendBadge('rgba(239,83,80,.40)','Severe (18+)')
+    ]);
+    html += '<div style="'+formulaStyle+'">'+
+      'VWS = &radic;((u2&minus;u1)&sup2; + (v2&minus;v1)&sup2;) / (&Delta;z/1000)。Open-Meteo の上下 1000 ft 風から計算。閾値は ANA WSCP 標準。<br>'+
+      '※ 暫定 calibration (2026-05-07)、再調整予定。</div>';
   } else {
-    var t2raw = [11e-7, 9e-7, 7e-7, 5e-7, 3e-7, 1e-7];
-    var t2Wscp = ['Severe (8+)', 'Heavy (6-8)', 'Moderate (4-6)', 'Light (2-4)', 'Minimal (1-2)', 'Smooth (0-1)'];
-    var t2Hint = ['濃赤', '赤', 'オレンジ', '黄', '黄緑', '緑'];
-    var lblT2 = (typeof GfsRadar.getLabels === 'function') ? GfsRadar.getLabels('TI2') : [];
-    html += '<div style="font-size:1em;"><strong style="color:#4fc3f7;">Ellrod TI2</strong></div>';
-    html += '<p style="margin:8px 0;line-height:1.55;color:#90a4ae;">計算式: TI2 = VWS &times; (|DEF| + CVG)。CVG &le; 0（発散側）のとき clip。表示単位・閾値・色は TI1 と同じ運用で、セルは TI2 用閾値で着色。DEF / CVG: WP 中心 + N/S/E/W 4 点（200 NM）サンプルから計算、表示は中心 1 点。</p>';
-    html += '<div style="color:#90a4ae;font-size:0.92em;margin-bottom:6px;">閾値と色（TI1 と同じ凡例色、TI2 閾値でセルと一致）:</div>';
-    html += '<table style="width:100%;border-collapse:collapse;font-size:0.95em;">';
-    for(i = 0; i < 6; i++) {
-      var r2 = t2raw[i];
-      var bg2 = colOrFallback('TI2', r2);
-      html += '<tr><td style="padding:6px 8px;vertical-align:top;border-bottom:1px solid #1e2a38;width:44px;">';
-      html += '<span style="display:inline-block;width:28px;height:28px;border-radius:4px;background:'+bg2+';border:1px solid rgba(255,255,255,.2);"></span></td>';
-      html += '<td style="padding:6px 8px;border-bottom:1px solid #1e2a38;line-height:1.5;color:#cfd8dc;">';
-      html += '<strong>'+t2Wscp[i]+'</strong>（'+t2Hint[i]+'）';
-      if(lblT2[i]) html += '<br><span style="color:#78909c;font-size:0.92em;">セル帯: '+lblT2[i]+'</span>';
-      html += '</td></tr>';
+    var ellRaws = [0.5e-7, 1.5e-7, 3e-7, 5e-7, 7e-7, 9e-7];
+    var ellLabs = [
+      'Smooth (0-1)',
+      'Minimal (1-2)',
+      'Light (2-4)',
+      'Moderate (4-6)',
+      'Heavy (6-8)',
+      'Severe (8+)'
+    ];
+    var parts = [];
+    var ci;
+    for(ci = 0; ci < 6; ci++) {
+      var bgEll = '#546e7a';
+      if(typeof GfsRadar !== 'undefined' && GfsRadar.getColor) {
+        bgEll = GfsRadar.getColor('TI1', ellRaws[ci]) || bgEll;
+      }
+      parts.push(atmWsLegendBadge(bgEll, ellLabs[ci]));
     }
-    html += '</table>';
+    html = atmWsLegendRow(parts);
+    var unitLine = ' (&times;10&minus;&sup7; s&minus;&sup2;)';
+    if(m === 'ti1') {
+      html += '<div style="'+formulaStyle+'">'+
+        'TI1 = VWS &times; |DEF|' + unitLine + '（Ellrod &amp; Knapp 1992）。DEF: WP 中心 + N/S/E/W 4 点 (200 NM) サンプル、表示は中心 1 点。</div>';
+    } else {
+      html += '<div style="'+formulaStyle+'">'+
+        'TI2 = VWS &times; (|DEF| + CVG)。CVG &le; 0（発散側）のとき clip。閾値・色は TI1 と共通' + unitLine + '。DEF: WP 中心 + N/S/E/W 4 点 (200 NM) サンプル、表示は中心 1 点。</div>';
+    }
   }
   el.innerHTML = html;
 }
@@ -5108,6 +5079,7 @@ function toggleMode() {
     #atm-ws-explain{color:#546e7a!important;}
     #atm-ws-legend{color:#546e7a!important;border-bottom-color:#d0d8e4!important;}
     #atm-ws-legend .atm-ws-leg-swatch{border-color:rgba(84,110,122,.45)!important;}
+    #atm-gfs-ws-inline-help .atm-ws-leg-swatch{border-color:rgba(84,110,122,.45)!important;}
     #ws-method-help-overlay{background:rgba(0,0,0,.35)!important;}
     #ws-method-help-panel{background:#ffffff!important;border-color:#c8d0da!important;box-shadow:0 8px 32px rgba(0,0,0,.12)!important;}
     #ws-method-help-panel .wsm-hdr{background:#f0f4f8!important;border-bottom-color:#d0d8e4!important;}
