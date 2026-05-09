@@ -3140,34 +3140,103 @@ function renderGfsAtmTable() {
   wrap.innerHTML = html;
 }
 
-function renderAtmGfsWsInlineHelp() {
+function renderAtmGfsWsInlineHelp(methodOpt) {
   var el = document.getElementById('atm-gfs-ws-inline-help');
   if(!el) return;
-  el.innerHTML =
-    '<div style="font-size:1em;"><strong style="color:#4fc3f7;">Heat map</strong><br>' +
-    'Temp: 気温による色分け（寒色=低温、暖色=高温）。実装は <code>tempColor</code> と同じく概ね &minus;80&deg;C〜+30&deg;C を色相（青=冷・赤=暖）に線形マップ（<code>hsla(hue,65%,55%,0.30)</code>）。<br>' +
-    'Wind: 風速による色分け。実装は <code>windColor</code> と同じく 0〜127 kt を緑→黄→赤に線形マップ（<code>hsla(hue,60%,55%,0.35)</code>）。<br>' +
-    'Off: 色分けなし。</div>' +
-    '<div style="font-size:1em;margin-top:10px;"><strong style="color:#4fc3f7;">Cell shows</strong><br>' +
-    'Wind &amp; temp: セル内に風向・風速・気温を表示。<br>' +
-    'ISA deviation: セル内に ISA からの気温偏差（ISA dev）を表示。背景は <code>isaDevColor</code>（&minus;20&deg;C〜+20&deg;C を <code>hsla(hue,65%,55%,0.30)</code>）。</div>' +
-    '<div style="font-size:1em;margin-top:10px;"><strong style="color:#4fc3f7;">WIND SHEAR Method</strong><br>' +
-    '<strong>GFS-VWS</strong>: VWS = &radic;((u2&minus;u1)&sup2; + (v2&minus;v1)&sup2;) / (&Delta;z/1000)。Open-Meteo の上下 1000 ft 風から計算。閾値は ANA WSCP 標準（Smooth 0&ndash;4 / Light&minus; 5&ndash;6 / Light 7&ndash;9 / Light+ 10&ndash;12 / Moderate 13&ndash;17 / Severe 18+）。※ 暫定 calibration（2026-05-07）、再調整予定。<br>' +
-    '<strong>Ellrod TI1</strong>: VWS &times; |DEF|。表示単位 &times;10&minus;&sup7; s&minus;&sup2;（Ellrod &amp; Knapp 1992）。閾値 Smooth 0&ndash;1 / Minimal 1&ndash;2 / Light 2&ndash;4 / Moderate 4&ndash;6 / Heavy 6&ndash;8 / Severe 8+。<br>' +
-    '<strong>Ellrod TI2</strong>: VWS &times; (|DEF| + CVG)。CVG &le; 0（発散側）のとき clip。表示単位・閾値は TI1 と同じ。<br>' +
-    'DEF / CVG は WP 中心 + N/S/E/W 4 点（200 NM）サンプルから計算。表示は中心 1 点。</div>';
+  var m = (methodOpt != null && methodOpt !== '') ? String(methodOpt).toLowerCase()
+    : ((typeof ATM_GFS_WS === 'string') ? ATM_GFS_WS : 'vws');
+  if(m !== 'ti1' && m !== 'ti2') m = 'vws';
+
+  function colOrFallback(methodUp, rawV) {
+    if(typeof GfsRadar === 'undefined' || !GfsRadar.getColor) return '#546e7a';
+    var c = GfsRadar.getColor(methodUp, rawV);
+    return c || '#546e7a';
+  }
+
+  var html = '';
+  var i;
+  if(m === 'vws') {
+    var vwsRaws = [0.015, 0.011, 0.0085, 0.0065, 0.0045, 0.002];
+    var vwsWscp = [
+      'Severe (18+)',
+      'Moderate (13-17)',
+      'Light+ (10-12)',
+      'Light (7-9)',
+      'Light- (5-6)',
+      'Smooth (0-4 kt/1000ft)'
+    ];
+    var vwsHint = ['赤', 'オレンジ', '黄', '緑', '水色', '青'];
+    var lblV = (typeof GfsRadar.getLabels === 'function') ? GfsRadar.getLabels('VWS') : [];
+    html += '<div style="font-size:1em;"><strong style="color:#4fc3f7;">GFS-VWS</strong></div>';
+    html += '<p style="margin:8px 0;line-height:1.55;color:#90a4ae;">計算式: VWS = &radic;((u2&minus;u1)&sup2; + (v2&minus;v1)&sup2;) / (&Delta;z/1000)。データ源: Open-Meteo の上下 1000 ft 風から計算。<br>※ 暫定 calibration (2026-05-07)、再調整予定。</p>';
+    html += '<div style="color:#90a4ae;font-size:0.92em;margin-bottom:6px;">閾値と色（色見本は <code>GfsRadar.getColor</code> とセル背景と同一）:</div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.95em;">';
+    for(i = 0; i < 6; i++) {
+      var rv = vwsRaws[i];
+      var bgc = colOrFallback('VWS', rv);
+      html += '<tr><td style="padding:6px 8px;vertical-align:top;border-bottom:1px solid #1e2a38;width:44px;">';
+      html += '<span style="display:inline-block;width:28px;height:28px;border-radius:4px;background:'+bgc+';border:1px solid rgba(255,255,255,.2);"></span></td>';
+      html += '<td style="padding:6px 8px;border-bottom:1px solid #1e2a38;line-height:1.5;color:#cfd8dc;">';
+      html += '<strong>'+vwsWscp[i]+'</strong>（ANA WSCP 目安・'+vwsHint[i]+'）';
+      if(lblV[i]) html += '<br><span style="color:#78909c;font-size:0.92em;">セル帯: '+lblV[i]+'（表の数値は VWS&times;1000）</span>';
+      html += '</td></tr>';
+    }
+    html += '</table>';
+  } else if(m === 'ti1') {
+    var t1raw = [9e-7, 7e-7, 5e-7, 3e-7, 1.5e-7, 0.5e-7];
+    var t1Wscp = ['Severe (8+)', 'Heavy (6-8)', 'Moderate (4-6)', 'Light (2-4)', 'Minimal (1-2)', 'Smooth (0-1)'];
+    var t1Hint = ['濃赤', '赤', 'オレンジ', '黄', '黄緑', '緑'];
+    var lblT1 = (typeof GfsRadar.getLabels === 'function') ? GfsRadar.getLabels('TI1') : [];
+    html += '<div style="font-size:1em;"><strong style="color:#4fc3f7;">Ellrod TI1</strong></div>';
+    html += '<p style="margin:8px 0;line-height:1.55;color:#90a4ae;">計算式: TI1 = VWS &times; |DEF|。表示単位: &times;10&minus;&sup7; s&minus;&sup2;（Ellrod &amp; Knapp 1992）。DEF: WP 中心 + N/S/E/W 4 点（200 NM）サンプルから計算、表示は中心 1 点。</p>';
+    html += '<div style="color:#90a4ae;font-size:0.92em;margin-bottom:6px;">閾値と色（色見本はセル背景と同一）:</div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.95em;">';
+    for(i = 0; i < 6; i++) {
+      var r1 = t1raw[i];
+      var bg1 = colOrFallback('TI1', r1);
+      html += '<tr><td style="padding:6px 8px;vertical-align:top;border-bottom:1px solid #1e2a38;width:44px;">';
+      html += '<span style="display:inline-block;width:28px;height:28px;border-radius:4px;background:'+bg1+';border:1px solid rgba(255,255,255,.2);"></span></td>';
+      html += '<td style="padding:6px 8px;border-bottom:1px solid #1e2a38;line-height:1.5;color:#cfd8dc;">';
+      html += '<strong>'+t1Wscp[i]+'</strong>（'+t1Hint[i]+'）';
+      if(lblT1[i]) html += '<br><span style="color:#78909c;font-size:0.92em;">セル帯: '+lblT1[i]+'</span>';
+      html += '</td></tr>';
+    }
+    html += '</table>';
+  } else {
+    var t2raw = [11e-7, 9e-7, 7e-7, 5e-7, 3e-7, 1e-7];
+    var t2Wscp = ['Severe (8+)', 'Heavy (6-8)', 'Moderate (4-6)', 'Light (2-4)', 'Minimal (1-2)', 'Smooth (0-1)'];
+    var t2Hint = ['濃赤', '赤', 'オレンジ', '黄', '黄緑', '緑'];
+    var lblT2 = (typeof GfsRadar.getLabels === 'function') ? GfsRadar.getLabels('TI2') : [];
+    html += '<div style="font-size:1em;"><strong style="color:#4fc3f7;">Ellrod TI2</strong></div>';
+    html += '<p style="margin:8px 0;line-height:1.55;color:#90a4ae;">計算式: TI2 = VWS &times; (|DEF| + CVG)。CVG &le; 0（発散側）のとき clip。表示単位・閾値・色は TI1 と同じ運用で、セルは TI2 用閾値で着色。DEF / CVG: WP 中心 + N/S/E/W 4 点（200 NM）サンプルから計算、表示は中心 1 点。</p>';
+    html += '<div style="color:#90a4ae;font-size:0.92em;margin-bottom:6px;">閾値と色（TI1 と同じ凡例色、TI2 閾値でセルと一致）:</div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.95em;">';
+    for(i = 0; i < 6; i++) {
+      var r2 = t2raw[i];
+      var bg2 = colOrFallback('TI2', r2);
+      html += '<tr><td style="padding:6px 8px;vertical-align:top;border-bottom:1px solid #1e2a38;width:44px;">';
+      html += '<span style="display:inline-block;width:28px;height:28px;border-radius:4px;background:'+bg2+';border:1px solid rgba(255,255,255,.2);"></span></td>';
+      html += '<td style="padding:6px 8px;border-bottom:1px solid #1e2a38;line-height:1.5;color:#cfd8dc;">';
+      html += '<strong>'+t2Wscp[i]+'</strong>（'+t2Hint[i]+'）';
+      if(lblT2[i]) html += '<br><span style="color:#78909c;font-size:0.92em;">セル帯: '+lblT2[i]+'</span>';
+      html += '</td></tr>';
+    }
+    html += '</table>';
+  }
+  el.innerHTML = html;
 }
 
 function renderGfsWsTable() {
+  var wsModeHelp = (typeof ATM_GFS_WS === 'string') ? ATM_GFS_WS : 'vws';
   var wrap = document.getElementById('atm-gfs-ws-wrap');
   if(!wrap) {
-    renderAtmGfsWsInlineHelp();
+    renderAtmGfsWsInlineHelp(wsModeHelp);
     return;
   }
   if(typeof WP === 'undefined' || !WP || !WP.length) {
     wrap.innerHTML = '<div style="color:#546e7a;padding:24px;text-align:center;font-size:1em;">'+
       'Flight Plan で NAV LOG を Apply すると、ここに GFS の Wind Shear / Turbulence が表示されます</div>';
-    renderAtmGfsWsInlineHelp();
+    renderAtmGfsWsInlineHelp(wsModeHelp);
     return;
   }
   if(!window.GFS_POINT || window.GFS_POINT.status !== 'ready') {
@@ -3178,7 +3247,7 @@ function renderGfsWsTable() {
         '<span>GFS Point データをロード中...</span>' +
         '<span class="gfs-atm-progress" style="font-size:12px;color:#4fc3f7;white-space:nowrap;"></span></div>';
     }
-    renderAtmGfsWsInlineHelp();
+    renderAtmGfsWsInlineHelp(wsModeHelp);
     return;
   }
   GFS_WS_PT_CACHE = {};
@@ -3427,7 +3496,7 @@ function renderGfsWsTable() {
   });
   html += '</tbody></table>';
   wrap.innerHTML = html;
-  renderAtmGfsWsInlineHelp();
+  renderAtmGfsWsInlineHelp((typeof ATM_GFS_WS === 'string') ? ATM_GFS_WS : 'vws');
 }
 
 function exportCalibrationData() {
@@ -4745,6 +4814,18 @@ function preloadGfsRadarPoints(routePts, options, done) {
   GFS_RADAR_PRELOAD_STATE.inflight = true;
   GFS_RADAR_PRELOAD_STATE.key = preloadQueueKey;
   GFS_RADAR_PRELOAD_STATE.callbacks = [done];
+
+  if(typeof window !== 'undefined' && window.GFS_DEBUG_PRELOAD === true) {
+    var st = '';
+    try {
+      st = String(new Error('preload trigger').stack || '');
+    } catch(stEx) {
+      st = '';
+    }
+    if(typeof console.debug === 'function') {
+      console.debug('[GfsRadar] preload trigger stack', st);
+    }
+  }
 
   var jobs = plan.missingJobs;
   var t0 = Date.now();
