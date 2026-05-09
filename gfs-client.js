@@ -4,6 +4,14 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
 (function(global) {
   if (!global) global = window;
 
+  function normalizeLonClient(lon) {
+    if (global.GeoHelpers && typeof global.GeoHelpers.normalizeLon === 'function') {
+      return global.GeoHelpers.normalizeLon(lon);
+    }
+    if (typeof lon !== 'number' || isNaN(lon)) return lon;
+    return ((lon + 540) % 360) - 180;
+  }
+
   var LEVELS_MB = [300, 275, 250, 225, 200, 175, 150];
   var VARS_DEFAULT = 'UGRD,VGRD,TMP,HGT';
   var POINT_CACHE = {};
@@ -245,6 +253,7 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
       if (typeof done === 'function') done(new Error('invalid coords'));
       return;
     }
+    lon = normalizeLonClient(lon);
     if (!(validUtc instanceof Date) || isNaN(validUtc.getTime())) {
       if (typeof done === 'function') done(new Error('invalid validUtc'));
       return;
@@ -301,6 +310,7 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
 
   function gfsPointCached(lat, lon, validUtc) {
     if (typeof lat !== 'number' || isNaN(lat) || typeof lon !== 'number' || isNaN(lon)) return null;
+    lon = normalizeLonClient(lon);
     if (!(validUtc instanceof Date) || isNaN(validUtc.getTime())) return null;
     var meta = pointMetaFromValid(validUtc);
     var key = pointKey(lat, lon, meta.cycle, meta.fhr);
@@ -643,6 +653,7 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
   global.gfsPointCached = gfsPointCached;
   global.gfsPointCacheKey = function (lat, lon, validUtc) {
     if (typeof lat !== 'number' || isNaN(lat) || typeof lon !== 'number' || isNaN(lon)) return '';
+    lon = normalizeLonClient(lon);
     if (!(validUtc instanceof Date) || isNaN(validUtc.getTime())) return '';
     var meta = pointMetaFromValid(validUtc);
     return pointKey(lat, lon, meta.cycle, meta.fhr);

@@ -412,12 +412,9 @@
     <button class="btn on" id="atm-gfs-ws-vws" onclick="setAtmGfsWs('vws')">GFS-VWS</button>
     <button class="btn" id="atm-gfs-ws-ti1" onclick="setAtmGfsWs('ti1')">Ellrod TI1</button>
     <button class="btn" id="atm-gfs-ws-ti2" onclick="setAtmGfsWs('ti2')">Ellrod TI2</button>
-    <button type="button" class="btn ws-method-help-btn" onclick="openWsMethodHelpFromAtmGfs()" aria-label="WIND SHEAR Method の解説"><span class="ws-method-help-ico">i</span></button>
   </div>
   <div id="atm-gfs-ws-wrap" style="flex:1;min-height:0;overflow:auto;padding:6px;"></div>
-  <div id="atm-gfs-ws-caveat" style="font-size:0.92em;color:#90a4ae;padding:0 12px 10px;line-height:1.5;">
-    ※ GFS-VWS は暫定 calibration（2026-05-07）、再調整予定。手法の詳細・閾値の注意・共通補足は横の Method 解説（ⓘ）を参照。
-  </div>
+  <div id="atm-gfs-ws-inline-help" style="color:#546e7a;padding:6px 12px;border-top:1px solid #1e2a38;line-height:1.5;"></div>
 </div><!-- atm-gfs-panel -->
 <!-- ===== CREW REST CALCULATOR ===== -->
 <div id="crew-rest-panel" class="panel">
@@ -476,9 +473,9 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="geo-helpers.js"></script>
 <script src="gfs-client.js"></script>
 <script src="gfs-radar-layer.js"></script>
-<script src="geo-helpers.js"></script>
 <script>
 // =====================================================================
 // PDF.js
@@ -2927,6 +2924,9 @@ function gfsPointAtRetry(lat, lon, validUtc, done) {
     if(typeof done === 'function') done(new Error('invalid coords'));
     return;
   }
+  if(window.GeoHelpers && typeof window.GeoHelpers.normalizeLon === 'function') {
+    lon = window.GeoHelpers.normalizeLon(lon);
+  }
   var url = gfsPointDebugUrl(lat, lon, validUtc);
   gfsPointAt(lat, lon, validUtc, function(err, data){
     if(!err) { done(null, data, url); return; }
@@ -3140,12 +3140,34 @@ function renderGfsAtmTable() {
   wrap.innerHTML = html;
 }
 
+function renderAtmGfsWsInlineHelp() {
+  var el = document.getElementById('atm-gfs-ws-inline-help');
+  if(!el) return;
+  el.innerHTML =
+    '<div style="font-size:1em;"><strong style="color:#4fc3f7;">Heat map</strong><br>' +
+    'Temp: 気温による色分け（寒色=低温、暖色=高温）。実装は <code>tempColor</code> と同じく概ね &minus;80&deg;C〜+30&deg;C を色相（青=冷・赤=暖）に線形マップ（<code>hsla(hue,65%,55%,0.30)</code>）。<br>' +
+    'Wind: 風速による色分け。実装は <code>windColor</code> と同じく 0〜127 kt を緑→黄→赤に線形マップ（<code>hsla(hue,60%,55%,0.35)</code>）。<br>' +
+    'Off: 色分けなし。</div>' +
+    '<div style="font-size:1em;margin-top:10px;"><strong style="color:#4fc3f7;">Cell shows</strong><br>' +
+    'Wind &amp; temp: セル内に風向・風速・気温を表示。<br>' +
+    'ISA deviation: セル内に ISA からの気温偏差（ISA dev）を表示。背景は <code>isaDevColor</code>（&minus;20&deg;C〜+20&deg;C を <code>hsla(hue,65%,55%,0.30)</code>）。</div>' +
+    '<div style="font-size:1em;margin-top:10px;"><strong style="color:#4fc3f7;">WIND SHEAR Method</strong><br>' +
+    '<strong>GFS-VWS</strong>: VWS = &radic;((u2&minus;u1)&sup2; + (v2&minus;v1)&sup2;) / (&Delta;z/1000)。Open-Meteo の上下 1000 ft 風から計算。閾値は ANA WSCP 標準（Smooth 0&ndash;4 / Light&minus; 5&ndash;6 / Light 7&ndash;9 / Light+ 10&ndash;12 / Moderate 13&ndash;17 / Severe 18+）。※ 暫定 calibration（2026-05-07）、再調整予定。<br>' +
+    '<strong>Ellrod TI1</strong>: VWS &times; |DEF|。表示単位 &times;10&minus;&sup7; s&minus;&sup2;（Ellrod &amp; Knapp 1992）。閾値 Smooth 0&ndash;1 / Minimal 1&ndash;2 / Light 2&ndash;4 / Moderate 4&ndash;6 / Heavy 6&ndash;8 / Severe 8+。<br>' +
+    '<strong>Ellrod TI2</strong>: VWS &times; (|DEF| + CVG)。CVG &le; 0（発散側）のとき clip。表示単位・閾値は TI1 と同じ。<br>' +
+    'DEF / CVG は WP 中心 + N/S/E/W 4 点（200 NM）サンプルから計算。表示は中心 1 点。</div>';
+}
+
 function renderGfsWsTable() {
   var wrap = document.getElementById('atm-gfs-ws-wrap');
-  if(!wrap) return;
+  if(!wrap) {
+    renderAtmGfsWsInlineHelp();
+    return;
+  }
   if(typeof WP === 'undefined' || !WP || !WP.length) {
     wrap.innerHTML = '<div style="color:#546e7a;padding:24px;text-align:center;font-size:1em;">'+
       'Flight Plan で NAV LOG を Apply すると、ここに GFS の Wind Shear / Turbulence が表示されます</div>';
+    renderAtmGfsWsInlineHelp();
     return;
   }
   if(!window.GFS_POINT || window.GFS_POINT.status !== 'ready') {
@@ -3156,6 +3178,7 @@ function renderGfsWsTable() {
         '<span>GFS Point データをロード中...</span>' +
         '<span class="gfs-atm-progress" style="font-size:12px;color:#4fc3f7;white-space:nowrap;"></span></div>';
     }
+    renderAtmGfsWsInlineHelp();
     return;
   }
   GFS_WS_PT_CACHE = {};
@@ -3404,6 +3427,7 @@ function renderGfsWsTable() {
   });
   html += '</tbody></table>';
   wrap.innerHTML = html;
+  renderAtmGfsWsInlineHelp();
 }
 
 function exportCalibrationData() {
@@ -4660,6 +4684,7 @@ function preloadGfsRadarPoints(routePts, done) {
     }
   }
   if(jobs.length === 0) {
+    window.__gfsPreloadKeys = new Set();
     GFS_RADAR_PRELOAD_STATE.inflight = false;
     GFS_RADAR_PRELOAD_STATE.lastDoneKey = preloadKey;
     GFS_RADAR_PRELOAD_STATE.lastStatus = 'ready';
@@ -4670,8 +4695,14 @@ function preloadGfsRadarPoints(routePts, done) {
   }
   var t0 = Date.now();
   var okCount = 0, ngCount = 0;
+  var preloadKeyAcc = {};
   console.log('[GfsRadar] preload start wp=' + wpTotal + ' skipped=' + wpSkip + ' jobs=' + jobs.length);
   gfsRunThrottledJobs(jobs, 3, function(j, next){
+    var pCacheKey = (typeof gfsPointCacheKey === 'function') ? gfsPointCacheKey(j.lat, j.lon, j.vu) : '';
+    if(pCacheKey) preloadKeyAcc[pCacheKey] = 1;
+    if(typeof window !== 'undefined' && window.GFS_DEBUG_PRELOAD_KEYS === true) {
+      console.log('[GfsRadar preload key]', pCacheKey);
+    }
     gfsPointAtRetry(j.lat, j.lon, j.vu, function(err, data, url){
       if(err) {
         ngCount++;
@@ -4685,6 +4716,9 @@ function preloadGfsRadarPoints(routePts, done) {
       next(null, { ok: true });
     });
   }, function(_ignoredErr){
+    var pkList = Object.keys(preloadKeyAcc);
+    var pkSet = new Set(pkList);
+    window.__gfsPreloadKeys = pkSet;
     console.log('[GfsRadar] preload done wp=' + wpTotal + ' skipped=' + wpSkip +
       ' jobs=' + jobs.length + ' ok=' + okCount + ' ng=' + ngCount +
       ' cache=' + Object.keys(seen).length + ' elapsedMs=' + (Date.now() - t0));
@@ -5093,6 +5127,24 @@ function drawFir() {
 }
 drawFir();
 
+function formatSigmetRawForDisplay(text) {
+  if (!text) return text;
+  var s = String(text);
+  s = s.replace(/([^\n])\s+(?=VALID\s+\d{6}\/\d{6})/gi, '$1\n');
+  s = s.replace(/([^\n])\s+(?=\bWI\b)/g, '$1\n');
+  s = s.replace(/([^\n])\s+(?=\bTOP\b)/g, '$1\n');
+  s = s.replace(/\n{2,}/g, '\n');
+  return s.replace(/^\n+/, '');
+}
+
+function formatTafDisplayRaw(raw) {
+  if (!raw) return raw;
+  var s = String(raw).trim();
+  s = s.replace(/^TAF\s+([A-Z]{4})\s+/i, 'TAF $1\n');
+  s = s.replace(/\s+(BECMG|INTER|TEMPO)\b/g, '\n$1');
+  return s;
+}
+
 // =====================================================================
 // SIGMETs
 // =====================================================================
@@ -5119,9 +5171,10 @@ function loadSigmets() {
           var firLabel = props.firName || props.firId || props.icaoId || '';
           var title = hazard + (firLabel ? ' - ' + firLabel : '');
           var raw = props.rawAirSigmet || props.rawSigmet || '(本文なし)';
-          var html = '<div style="font-family:monospace;font-size:13px;min-width:400px;max-width:400px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">'
+          var rawFmt = formatSigmetRawForDisplay(raw);
+          var html = '<div style="font-family:monospace;font-size:13px;min-width:400px;max-width:400px;background:#fff;color:#1a1a1a;padding:5px;border-radius:4px;">'
             + '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;font-size:13px;">' + sigPopupEsc(title) + '</div>'
-            + '<pre style="white-space:pre-wrap;margin:0;color:#263238;font-size:13px;">' + sigPopupEsc(raw) + '</pre>'
+            + '<pre style="white-space:pre-wrap;margin:0;color:#263238;font-size:13px;">' + sigPopupEsc(rawFmt) + '</pre>'
             + '</div>';
           l.bindPopup(html, {maxWidth: 500, minWidth: 420});
           l.bindTooltip(sigPopupEsc(title), {className: 'sgx', sticky: true, direction: 'auto'});
@@ -5170,6 +5223,8 @@ function loadMetars() {
       });
   }
   var CAT = {VFR:'#43a047',MVFR:'#1565c0',IFR:'#e53935',LIFR:'#ab47bc'};
+  var apCircRenderer = L.svg({ padding: 0.5 });
+  var apCircRadiusM = 3 * NM;
   var limitMeters = 400*1852;
   var near = [];
   for(var id in APT) {
@@ -5203,7 +5258,23 @@ function loadMetars() {
         var worldLngOffsets = [-360, 0, 360];
         for(var wi=0; wi<worldLngOffsets.length; wi++) {
           var off = worldLngOffsets[wi];
-          var mk=L.marker(L.latLng(lat,lon + off),{icon:ic}).addTo(map);
+          var llAp = L.latLng(lat, lon + off);
+          var apCirc = L.circle(llAp, {
+            radius: apCircRadiusM,
+            color: col,
+            weight: 1,
+            fillColor: col,
+            fillOpacity: 0.15,
+            opacity: 0.85,
+            interactive: false,
+            pane: 'overlayPane',
+            renderer: apCircRenderer
+          }).addTo(map);
+          if(window.AP_DEBUG === true) {
+            console.log('[AP-debug] circle', { lat: lat, lon: lon + off, radius: apCircRadiusM });
+          }
+          LY.metar.push(apCirc);
+          var mk=L.marker(llAp,{icon:ic}).addTo(map);
           mk.bindTooltip(m.icao+'\n'+(m.flight_category||'')+'\n'+(m.raw_text||''),{className:'wxt',sticky:true});
           // ICAO 4-letter label (always visible)
           mk.bindTooltip('<span style="font-size:12px;font-weight:bold;">'+escH(m.icao||'')+'</span>',{
@@ -5212,7 +5283,7 @@ function loadMetars() {
             direction:'top',
             offset:[0,-16]
           });
-          mk.on('click',(function(metar){
+          mk.on('click', (function(metar) {
             return function(e) {
               var ll = e && e.latlng ? e.latlng : (metar.station&&metar.station.geometry
                 ? L.latLng(metar.station.geometry.coordinates[1], metar.station.geometry.coordinates[0])
@@ -5231,16 +5302,15 @@ function loadMetars() {
                   var t = tafRes && tafRes.json ? tafRes.json : null;
                   var tafObj = t && t.data && t.data[0] ? t.data[0] : null;
                   var tafRaw = tafObj && tafObj.raw_text ? tafObj.raw_text : '';
-                  var metObs = metar.observed ? String(metar.observed).replace('T',' ').replace('Z',' Z') : '';
+                  var tafDisp = formatTafDisplayRaw(tafRaw);
                   var html =
                     '<div class="wx-radar-popup-metar" style="font-family:monospace;font-size:13px;min-width:400px;max-width:400px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
                     '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;font-size:13px;">' + escH(metar.icao||'') + ' <span style="font-weight:normal;color:#546e7a;">' + escH(metar.flight_category||'') + '</span></div>' +
-                    '<div style="color:#546e7a;font-size:13px;margin-bottom:6px;">METAR Observed: ' + escH(metObs) + '</div>' +
                     '<div style="color:#546e7a;font-size:13px;">RAW METAR</div>' +
                     '<pre style="white-space:pre-wrap;margin:0;color:#263238;font-size:13px;">' + escH(metar.raw_text||'N/A') + '</pre>' +
                     '<div style="height:8px;"></div>' +
                     '<div style="color:#546e7a;font-size:13px;">RAW TAF</div>' +
-                    '<pre style="white-space:pre-wrap;margin:0;color:#263238;font-size:13px;">' + escH(tafRaw||'N/A') + '</pre>' +
+                    '<pre style="white-space:pre-wrap;margin:0;color:#263238;font-size:13px;">' + escH(tafDisp||'N/A') + '</pre>' +
                     '</div>';
                   pop.setContent(html);
                 })
@@ -5299,11 +5369,6 @@ function openWsMethodHelp(initialTab) {
   ov.style.display = 'block';
   pan.style.display = 'flex';
   showWsMethodHelpTab(tab);
-}
-
-function openWsMethodHelpFromAtmGfs() {
-  var m = (typeof ATM_GFS_WS === 'string') ? ATM_GFS_WS : 'vws';
-  openWsMethodHelp(m);
 }
 
 function closeWsMethodHelp() {
@@ -5421,7 +5486,7 @@ function showMetarPanel(m,taf){
   }
   L+='<div class="mp-lbl" style="margin-top:2px;">TAF</div>';
   if(taf){
-    if(taf.raw_text) L+='<div class="mp-raw" style="border-color:#1e2a38;color:#90caf9;font-size:11px;margin-bottom:6px;">'+escH(taf.raw_text)+'</div>';
+    if(taf.raw_text) L+='<div class="mp-raw" style="border-color:#1e2a38;color:#90caf9;font-size:11px;margin-bottom:6px;">'+escH(formatTafDisplayRaw(taf.raw_text))+'</div>';
     if(taf.forecast&&taf.forecast.length){
       L+='<div>';
       taf.forecast.forEach(function(f){

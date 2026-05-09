@@ -1,3 +1,8 @@
+function normalizeLon(lon) {
+  if (typeof lon !== 'number' || isNaN(lon)) return lon;
+  return ((lon + 540) % 360) - 180;
+}
+
 function normalizePoint(pt) {
   if (!pt) return null;
   var lon = (typeof pt.lon === 'number' && isFinite(pt.lon)) ? pt.lon
@@ -5,6 +10,7 @@ function normalizePoint(pt) {
           : (typeof pt.lngU === 'number' && isFinite(pt.lngU)) ? pt.lngU
           : null;
   if (typeof pt.lat !== 'number' || !isFinite(pt.lat) || lon === null) return null;
+  lon = normalizeLon(lon);
   return { lat: pt.lat, lon: lon };
 }
 
@@ -21,6 +27,18 @@ function gfsRadarNeighborPt(pt, dir, nm) {
   return { lat: lat, lon: lon - dLon };
 }
 
+if (typeof window !== 'undefined') {
+  window.GeoHelpers = {
+    normalizeLon: normalizeLon,
+    normalizePoint: normalizePoint,
+    gfsRadarNeighborPt: gfsRadarNeighborPt
+  };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { gfsRadarNeighborPt: gfsRadarNeighborPt, normalizePoint: normalizePoint };
+  module.exports = {
+    gfsRadarNeighborPt: gfsRadarNeighborPt,
+    normalizePoint: normalizePoint,
+    normalizeLon: normalizeLon
+  };
 }

@@ -819,10 +819,16 @@
             if (typeof window.gfsPointCacheKey === 'function') {
               kDbg = window.gfsPointCacheKey(aPt.lat, aPt.lon, vuA);
             }
+            var hm = '';
+            if (window.GFS_DEBUG_PRELOAD_KEYS === true && kDbg &&
+                window.__gfsPreloadKeys && typeof window.__gfsPreloadKeys.has === 'function') {
+              hm = window.__gfsPreloadKeys.has(kDbg) ? ' [hit]' : ' [miss]';
+            }
             console.log('[GfsRadar nodata] segIdx=' + si
               + ' lat=' + aPt.lat.toFixed(6)
               + ' lon=' + aPt.lon.toFixed(6)
-              + ' key=' + kDbg);
+              + ' key=' + kDbg
+              + hm);
           }
           continue;
         }

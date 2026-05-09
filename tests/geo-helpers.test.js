@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { gfsRadarNeighborPt, normalizePoint } from '../geo-helpers.js';
+import { gfsRadarNeighborPt, normalizePoint, normalizeLon } from '../geo-helpers.js';
 
 describe('normalizePoint', () => {
   it('passes through { lat, lon }', () => {
@@ -47,6 +47,36 @@ describe('normalizePoint', () => {
     expect(normalizePoint({ lat: NaN, lon: 0 })).toBeNull();
     expect(normalizePoint({ lat: 0, lon: NaN })).toBeNull();
     expect(normalizePoint({ lat: 0, lng: NaN })).toBeNull();
+  });
+
+  it('normalizes longitude past dateline on point', () => {
+    const r = normalizePoint({ lat: 43, lon: 184.5 });
+    expect(r).not.toBeNull();
+    expect(r.lon).toBeCloseTo(-175.5, 3);
+  });
+});
+
+describe('normalizeLon', () => {
+  it('maps 184.557 to -175.443', () => {
+    expect(normalizeLon(184.557)).toBeCloseTo(-175.443, 3);
+  });
+  it('maps 200 to -160', () => {
+    expect(normalizeLon(200)).toBeCloseTo(-160, 6);
+  });
+  it('maps -200 to 160', () => {
+    expect(normalizeLon(-200)).toBeCloseTo(160, 6);
+  });
+  it('maps 180 to -180', () => {
+    expect(normalizeLon(180)).toBeCloseTo(-180, 6);
+  });
+  it('maps -180 to -180', () => {
+    expect(normalizeLon(-180)).toBeCloseTo(-180, 6);
+  });
+  it('maps 0 to 0', () => {
+    expect(normalizeLon(0)).toBe(0);
+  });
+  it('returns NaN for NaN', () => {
+    expect(Number.isNaN(normalizeLon(NaN))).toBe(true);
   });
 });
 
