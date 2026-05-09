@@ -73,12 +73,12 @@
   function labelsForMethod(method) {
     var m = normalizeMethod(method);
     if (m === 'VWS') {
-      return ['Severe (13+)', 'Moderate (10-12)', 'Light+ (8-9)', 'Light (6-7)', 'Light- (4-5)', 'Smooth (0-3)'];
+      return ['SEV (13+)', 'MOD (10-12)', 'L+ (8-9)', 'L (6-7)', 'L- (4-5)', 'SMT (0-3)'];
     }
     if (m === 'TI1') {
-      return ['Severe (8+)', 'Heavy (6-8)', 'Moderate (4-6)', 'Light (2-4)', 'Minimal (1-2)', 'Smooth (<1)'];
+      return ['SEV (8+)', 'HVY (6-8)', 'MOD (4-6)', 'L (2-4)', 'MIN (1-2)', 'SMT (<1)'];
     }
-    return ['Severe (10+)', 'Heavy (8-10)', 'Moderate (6-8)', 'Light (4-6)', 'Minimal (2-4)', 'Smooth (<2)'];
+    return ['SEV (10+)', 'HVY (8-10)', 'MOD (6-8)', 'L (4-6)', 'MIN (2-4)', 'SMT (<2)'];
   }
 
   function flToMb(fl) {

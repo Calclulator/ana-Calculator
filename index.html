@@ -2156,7 +2156,7 @@ function wsPaletteCell(val, mode) {
     return { bg:'transparent', fg:null };
   }
   if(m === 'b787') {
-    // Ri: 大きいほど安定。Smooth >1, Light- 0.5-1, Light 0.3-0.5, Light+ 0.25-0.3, Mod 0.2-0.25, Severe ≤0.2
+  // Ri: 大きいほど安定。SMT >1, L- 0.5-1, L 0.3-0.5, L+ 0.25-0.3, MOD 0.2-0.25, SEV ≤0.2
     if(val > 1) return { bg:'rgba(100,181,246,.30)', fg:'#fff' };
     if(val > 0.5) return { bg:'rgba(102,187,106,.32)', fg:'#1a1a1a' };
     if(val > 0.3) return { bg:'rgba(174,213,129,.32)', fg:'#1a1a1a' };
@@ -2282,34 +2282,34 @@ function renderWxCorridorLegend() {
     grad.style.background = 'linear-gradient(to bottom,'+
       'rgba(239,83,80,.9) 0%, rgba(255,167,38,.9) 16.66%, rgba(255,238,88,.9) 33.33%,'+
       'rgba(174,213,129,.9) 50%, rgba(102,187,106,.9) 66.66%, rgba(100,181,246,.9) 100%)';
-    labs.innerHTML = '<div style="color:#e57373;">Severe (18+)</div>'+
-      '<div style="color:#ffb74d;">Moderate (13-17)</div>'+
-      '<div style="color:#fff59d;">Light+ (10-12)</div>'+
-      '<div style="color:#c5e1a5;">Light (7-9)</div>'+
-      '<div style="color:#aed581;">Light- (5-6)</div>'+
-      '<div style="color:#64b5f6;">Smooth (0-4)</div>';
+    labs.innerHTML = '<div style="color:#e57373;">SEV (18+)</div>'+
+      '<div style="color:#ffb74d;">MOD (13-17)</div>'+
+      '<div style="color:#fff59d;">L+ (10-12)</div>'+
+      '<div style="color:#c5e1a5;">L (7-9)</div>'+
+      '<div style="color:#aed581;">L- (5-6)</div>'+
+      '<div style="color:#64b5f6;">SMT (0-4)</div>';
     labs.style.justifyContent = 'space-between';
   } else if(mode === 'vws') {
     grad.style.background = 'linear-gradient(to bottom,'+
       'rgba(239,83,80,.9) 0%, rgba(255,167,38,.9) 16.66%, rgba(255,238,88,.9) 33.33%,'+
       'rgba(174,213,129,.9) 50%, rgba(102,187,106,.9) 66.66%, rgba(100,181,246,.9) 100%)';
-    labs.innerHTML = '<div style="color:#e57373;">Severe (18+)</div>'+
-      '<div style="color:#ffb74d;">Moderate (13-17)</div>'+
-      '<div style="color:#fff59d;">Light+ (10-12)</div>'+
-      '<div style="color:#c5e1a5;">Light (7-9)</div>'+
-      '<div style="color:#aed581;">Light- (5-6)</div>'+
-      '<div style="color:#64b5f6;">Smooth (0-4)</div>';
+    labs.innerHTML = '<div style="color:#e57373;">SEV (18+)</div>'+
+      '<div style="color:#ffb74d;">MOD (13-17)</div>'+
+      '<div style="color:#fff59d;">L+ (10-12)</div>'+
+      '<div style="color:#c5e1a5;">L (7-9)</div>'+
+      '<div style="color:#aed581;">L- (5-6)</div>'+
+      '<div style="color:#64b5f6;">SMT (0-4)</div>';
     labs.style.justifyContent = 'space-between';
   } else {
     grad.style.background = 'linear-gradient(to bottom,'+
       'rgba(239,83,80,.9) 0%, rgba(255,167,38,.9) 16.66%, rgba(255,238,88,.9) 33.33%,'+
       'rgba(174,213,129,.9) 50%, rgba(102,187,106,.9) 66.66%, rgba(100,181,246,.9) 100%)';
-    labs.innerHTML = '<div style="color:#e57373;">Severe Ri≤0.2</div>'+
-      '<div style="color:#ffb74d;">Moderate &gt;0.2</div>'+
-      '<div style="color:#fff59d;">Light+ &gt;0.25</div>'+
-      '<div style="color:#c5e1a5;">Light &gt;0.3</div>'+
-      '<div style="color:#aed581;">Light- &gt;0.5</div>'+
-      '<div style="color:#64b5f6;">Smooth Ri&gt;1</div>';
+    labs.innerHTML = '<div style="color:#e57373;">SEV Ri≤0.2</div>'+
+      '<div style="color:#ffb74d;">MOD &gt;0.2</div>'+
+      '<div style="color:#fff59d;">L+ &gt;0.25</div>'+
+      '<div style="color:#c5e1a5;">L &gt;0.3</div>'+
+      '<div style="color:#aed581;">L- &gt;0.5</div>'+
+      '<div style="color:#64b5f6;">SMT Ri&gt;1</div>';
     labs.style.justifyContent = 'space-between';
   }
 
@@ -2464,18 +2464,18 @@ function atmWsLegendRow(parts) {
 
 function wsLegendVwsParts() {
   return [
-    atmWsLegendBadge(wsPaletteCell(2, 'vws').bg, 'Smooth (0-4)'),
-    atmWsLegendBadge(wsPaletteCell(5, 'vws').bg, 'Light- (5-6)'),
-    atmWsLegendBadge(wsPaletteCell(8, 'vws').bg, 'Light (7-9)'),
-    atmWsLegendBadge(wsPaletteCell(11, 'vws').bg, 'Light+ (10-12)'),
-    atmWsLegendBadge(wsPaletteCell(15, 'vws').bg, 'Moderate (13-17)'),
-    atmWsLegendBadge(wsPaletteCell(20, 'vws').bg, 'Severe (18+)')
+    atmWsLegendBadge(wsPaletteCell(2, 'vws').bg, 'SMT (0-4 kt/1,000 ft)'),
+    atmWsLegendBadge(wsPaletteCell(5, 'vws').bg, 'L- (5-6)'),
+    atmWsLegendBadge(wsPaletteCell(8, 'vws').bg, 'L (7-9)'),
+    atmWsLegendBadge(wsPaletteCell(11, 'vws').bg, 'L+ (10-12)'),
+    atmWsLegendBadge(wsPaletteCell(15, 'vws').bg, 'MOD (13-17)'),
+    atmWsLegendBadge(wsPaletteCell(20, 'vws').bg, 'SEV (18+)')
   ];
 }
 
 function wsLegendTiParts(methodKey) {
   var rawVals = [0.5e-7, 1.5e-7, 3e-7, 5e-7, 7e-7, 9e-7];
-  var labs = ['Smooth (0-1)', 'Minimal (1-2)', 'Light (2-4)', 'Moderate (4-6)', 'Heavy (6-8)', 'Severe (8+)'];
+  var labs = ['SMT (0-1)', 'MIN (1-2)', 'L (2-4)', 'MOD (4-6)', 'HVY (6-8)', 'SEV (8+)'];
   var out = [];
   var i;
   for(i = 0; i < labs.length; i++) {
@@ -2494,12 +2494,12 @@ function renderAtmWsLegend() {
     html = atmWsLegendRow(wsLegendVwsParts());
   } else {
     html = atmWsLegendRow([
-      atmWsLegendBadge('rgba(100,181,246,.30)','Smooth Ri&gt;1 (EDR 0)'),
-      atmWsLegendBadge('rgba(102,187,106,.32)','Light- Ri&gt;0.5 (EDR 1)'),
-      atmWsLegendBadge('rgba(174,213,129,.32)','Light Ri&gt;0.3 (EDR 2)'),
-      atmWsLegendBadge('rgba(255,238,88,.32)','Light+ Ri&gt;0.25 (EDR 3)'),
-      atmWsLegendBadge('rgba(255,167,38,.35)','Moderate Ri&gt;0.2 (EDR 4)'),
-      atmWsLegendBadge('rgba(239,83,80,.40)','Severe Ri&amp;le;0.2 (EDR 5)')
+      atmWsLegendBadge('rgba(100,181,246,.30)','SMT Ri&gt;1 (EDR 0)'),
+      atmWsLegendBadge('rgba(102,187,106,.32)','L- Ri&gt;0.5 (EDR 1)'),
+      atmWsLegendBadge('rgba(174,213,129,.32)','L Ri&gt;0.3 (EDR 2)'),
+      atmWsLegendBadge('rgba(255,238,88,.32)','L+ Ri&gt;0.25 (EDR 3)'),
+      atmWsLegendBadge('rgba(255,167,38,.35)','MOD Ri&gt;0.2 (EDR 4)'),
+      atmWsLegendBadge('rgba(239,83,80,.40)','SEV Ri&amp;le;0.2 (EDR 5)')
     ]);
   }
   el.innerHTML = html;
@@ -2654,11 +2654,11 @@ function renderWsTable() {
   if(explain) {
     if(ATM_WS === 'company') {
       explain.innerHTML = 'Company 方式: VWS = √((u2-u1)²+(v2-v1)²)/(Δz/1000ft)。巡航FLの上下2000ft(計4000ft)で計算し、ANA NAVLOG WSCP と同一です。' +
-        '閾値は Smooth 0-4、Light- 5-6、Light 7-9、Light+ 10-12、Moderate 13-17、Severe 18+。' +
+        '閾値は SMT 0-4、L- 5-6、L 7-9、L+ 10-12、MOD 13-17、SEV 18+。' +
         '<br>※ これは予測値です。実際の揺れ (EDR) は気象状況により変動します。';
     } else if(ATM_WS === 'vws') {
       explain.innerHTML = 'VWS (Vector Wind Shear): 上下層の風ベクトル差(東西成分・南北成分の差)のノルムを高度差で割った値です。' +
-        '計算式: √((u2-u1)²+(v2-v1)²)/(Δz/1000ft)。閾値 Smooth 0-4、Light- 5-6、Light 7-9、Light+ 10-12、Moderate 13-17、Severe 18+。' +
+        '計算式: √((u2-u1)²+(v2-v1)²)/(Δz/1000ft)。閾値 SMT 0-4、L- 5-6、L 7-9、L+ 10-12、MOD 13-17、SEV 18+。' +
         '<br>※ これは予測値です。実際の揺れ (EDR) は気象状況により変動します。';
     } else {
       explain.innerHTML = 'B787 Richardson Number: Ri = (g/T)(dθ/dz) / ((du/dz)²+(dv/dz)²)。' +
@@ -6388,8 +6388,8 @@ applyGfsRadarForCurrentMethod();
     <div class="wsm-h3">GFS-VWS (Vertical Wind Shear)</div>
     <p class="wsm-p">GFS の風データ (u, v) から巡航 FL ± 2000ft の風ベクトル差を計算し、1000ft あたりの風シアー強度を kt/1000ft で表示。</p>
     <p class="wsm-p">ANA WSCP の VWS 公式 (NAV LOG Appendix 4) と整合するよう 1 便分の実測値で calibration 済 (回帰: gfs ≈ 0.56 × navlog + 3.08)。</p>
-    <p class="wsm-p">カテゴリ: Smooth (0-3) / Light- (4-5) / Light (6-7) / Light+ (8-9) / Moderate (10-12) / Severe (13+) kt/1000ft</p>
-    <p class="wsm-note">注意: Light+ 以上の閾値は外挿で信頼度低、参考値として利用。</p>
+    <p class="wsm-p">カテゴリ: SMT (0-3) / L- (4-5) / L (6-7) / L+ (8-9) / MOD (10-12) / SEV (13+) kt/1000ft</p>
+    <p class="wsm-note">注意: L+ 以上の閾値は外挿で信頼度低、参考値として利用。</p>
     <p class="wsm-p" style="font-size:12px;color:#78909c;">※ 閾値の暫定調整日: 2026-05-07。今後のデータ蓄積で再調整予定。</p>
   </div>
   <div id="wsm-pane-ti1" class="wsm-body" style="display:none;">
