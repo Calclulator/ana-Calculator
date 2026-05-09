@@ -2725,7 +2725,7 @@ var ATM_GFS_WS = 'vws';
 /* Ellrod TI: display matches literature (Mod ~4-8 x10^-7 s^-2); raw physics unchanged */
 var ELLROD_DISPLAY_SCALE = 1e7;
 // GFS isobaric levels (mb) used for atmosphere / WS vertical interpolation
-var GFS_ATM_LEVELS_MB = [300, 275, 250, 225, 200, 175, 150];
+var GFS_ATM_LEVELS_MB = [400, 300, 275, 250, 225, 200, 175, 150];
 var GFS_ATM_COLUMN_CACHE = {};
 var GFS_WS_PT_CACHE = {};
 var GFS_POINT_STATE = { status: 'idle', error: null, key: null };
@@ -2794,7 +2794,7 @@ function gfsAtWpIsaFallback(wp, alt, validUtc) {
       if(mb <= GFS_LV[ii] && mb >= GFS_LV[ii+1]) { lo = GFS_LV[ii]; hi = GFS_LV[ii+1]; break; }
     }
     if(lo === null) {
-      if(mb > 300) { lo = hi = 300; }
+      if(mb > 400) { lo = hi = 400; }
       else if(mb < 150) { lo = hi = 150; }
       else return null;
     }
@@ -3217,7 +3217,7 @@ function renderGfsAtmTable() {
     wpPhaseMap = null;
   }
 
-  // 高度カラム: GFS は mb 300-150 (FL280-FL450) のみカバー。1000ft 刻み
+  // 高度カラム: GFS は mb 400-150 (FL280-FL450) をカバー。1000ft 刻み
   var altRows = [];
   for(var fl=450; fl>=280; fl-=10) altRows.push(fl);
 
@@ -3384,7 +3384,7 @@ function renderGfsWsTable() {
     if(!wp) return null;
     var wpNorm = normalizePoint(wp);
     if(!wpNorm) return null;
-    if(altFl <= 280 || altFl >= 450) return null;
+    if(altFl < 280 || altFl >= 450) return null;
     var vu = validUtcForWp(wp);
     var mode = (typeof ATM_GFS_WS === 'string') ? ATM_GFS_WS : 'vws';
     var cacheKey = wp.id + '|' + vu.getTime() + '|' + mode;

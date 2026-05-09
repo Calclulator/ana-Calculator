@@ -13,7 +13,7 @@
   var R_EARTH_M = 6371008.8;
 
   // Approximate ICAO standard atmosphere FL -> mb.
-  // Used to map cockpit-friendly FLs to the 4 GFS pressure levels we have.
+  // Used to map cockpit-friendly FLs to the GFS pressure levels we have.
   var FL_TABLE = [
     [250, 376], [270, 344], [290, 315], [300, 301],
     [310, 287], [320, 274], [330, 261], [340, 250],
@@ -21,7 +21,7 @@
     [390, 197], [400, 188], [410, 179], [420, 170],
     [430, 162], [440, 154], [450, 147]
   ];
-  var GFS_LEVELS = [300, 250, 200, 150];
+  var GFS_LEVELS = [400, 300, 250, 200, 150];
 
   // Default 6-bucket palette (Severe -> Smooth)
   var PALETTE = [
