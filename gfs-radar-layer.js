@@ -562,6 +562,42 @@
     return window.gfsPointCached(lat, lon, validUtc);
   }
 
+  function interpUvAtHeightInterior(levels, hTargetM) {
+    if (!levels || levels.length < 2) return null;
+    var sorted = levels.slice().sort(function (a, b) { return a.hgt - b.hgt; });
+    if (hTargetM <= sorted[0].hgt || hTargetM >= sorted[sorted.length - 1].hgt) return null;
+    var i, h0, h1, f;
+    for (i = 0; i < sorted.length - 1; i++) {
+      if (sorted[i].hgt <= hTargetM && hTargetM <= sorted[i + 1].hgt) {
+        h0 = sorted[i].hgt;
+        h1 = sorted[i + 1].hgt;
+        f = (hTargetM - h0) / (h1 - h0);
+        return {
+          u: sorted[i].u + f * (sorted[i + 1].u - sorted[i].u),
+          v: sorted[i].v + f * (sorted[i + 1].v - sorted[i].v)
+        };
+      }
+    }
+    return null;
+  }
+
+  function vwsFromLevelsPlusMinus2000Ft(levels, hCenterM) {
+    var FT = 0.3048;
+    var dzFt = 4000;
+    var halfM = 2000 * FT;
+    var uvLo = interpUvAtHeightInterior(levels, hCenterM - halfM);
+    var uvHi = interpUvAtHeightInterior(levels, hCenterM + halfM);
+    if (!uvLo || !uvHi) return null;
+    var KT = 1.943844;
+    var fn = (typeof window !== 'undefined' && typeof window.computeVwsFromUv === 'function') ? window.computeVwsFromUv : null;
+    if (fn) {
+      return fn(uvLo.u * KT, uvLo.v * KT, uvHi.u * KT, uvHi.v * KT, dzFt);
+    }
+    var du = (uvHi.u - uvLo.u) * KT;
+    var dv = (uvHi.v - uvLo.v) * KT;
+    return Math.sqrt(du * du + dv * dv) / (dzFt / 1000);
+  }
+
   function computeAtPoint(pt, levelMb, validUtc, method, offsetNm) {
     var p0 = pointProfileAt(pt.lat, pt.lon, validUtc);
     if (!p0 || !p0.levels || !p0.levels.length) return null;
@@ -570,26 +606,8 @@
     var c0 = p0.levels[li];
     if (!c0) return null;
 
-    // Vertical shear from adjacent pressure levels
-    var uA, vA, hA, uB, vB, hB;
-    var up = (li > 0) ? p0.levels[li - 1] : null;
-    var dn = (li < p0.levels.length - 1) ? p0.levels[li + 1] : null;
-    if (up && dn) {
-      uA = up.u; vA = up.v; hA = up.hgt;
-      uB = dn.u; vB = dn.v; hB = dn.hgt;
-    } else if (up) {
-      uA = up.u; vA = up.v; hA = up.hgt;
-      uB = c0.u; vB = c0.v; hB = c0.hgt;
-    } else if (dn) {
-      uA = c0.u; vA = c0.v; hA = c0.hgt;
-      uB = dn.u; vB = dn.v; hB = dn.hgt;
-    } else {
-      return null;
-    }
-    var dz = hA - hB;
-    if (Math.abs(dz) < 1) return null;
-    var duv = uA - uB, dvv = vA - vB;
-    var vws = Math.sqrt(duv * duv + dvv * dvv) / Math.abs(dz);
+    var vws = vwsFromLevelsPlusMinus2000Ft(p0.levels, c0.hgt);
+    if (vws === null) return null;
 
     var defm = 0, cvg = 0;
     if (method === 'TI1' || method === 'TI2') {

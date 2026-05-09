@@ -475,6 +475,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="geo-helpers.js"></script>
 <script src="gfs-client.js"></script>
+<script src="gfs-vws.js"></script>
 <script src="gfs-radar-layer.js"></script>
 <script>
 // =====================================================================
@@ -2802,6 +2803,40 @@ function gfsAtmInterpHeightColumn(col, altFt, dbg) {
   return null;
 }
 
+// Strictly inside [minH,maxH] geometric column (no endpoint clamp); used for +/-2000ft VWS samples.
+function gfsAtmInterpHeightColumnInterior(col, altFt) {
+  var hTarget = altFt * 0.3048;
+  if(!col || col.length < 2) return null;
+  if(hTarget <= col[0].hgt || hTarget >= col[col.length - 1].hgt) return null;
+  var i, h0, h1, f;
+  for(i = 0; i < col.length - 1; i++) {
+    if(col[i].hgt <= hTarget && hTarget <= col[i + 1].hgt) {
+      h0 = col[i].hgt;
+      h1 = col[i + 1].hgt;
+      f = (hTarget - h0) / (h1 - h0);
+      return {
+        u: col[i].u + f * (col[i + 1].u - col[i].u),
+        v: col[i].v + f * (col[i + 1].v - col[i].v),
+        t: col[i].t + f * (col[i + 1].t - col[i].t)
+      };
+    }
+  }
+  return null;
+}
+
+function gfsComputeVwsFromUvMs(uvLo, uvHi, dzFt) {
+  var KT = 1.943844;
+  var fn = (typeof window !== 'undefined' && typeof window.computeVwsFromUv === 'function')
+    ? window.computeVwsFromUv
+    : null;
+  if(fn) {
+    return fn(uvLo.u * KT, uvLo.v * KT, uvHi.u * KT, uvHi.v * KT, dzFt);
+  }
+  var du = (uvHi.u - uvLo.u) * KT;
+  var dv = (uvHi.v - uvLo.v) * KT;
+  return Math.sqrt(du * du + dv * dv) / (dzFt / 1000);
+}
+
 function gfsAtWp(wpId, alt) {
   if(!window.GFS_POINT || window.GFS_POINT.status !== 'ready') return null;
   if(typeof WP === 'undefined') return null;
@@ -3163,7 +3198,7 @@ function renderAtmGfsWsInlineHelp(methodOpt) {
       atmWsLegendBadge('rgba(239,83,80,.40)','Severe (18+)')
     ]);
     html += '<div style="'+formulaStyle+'">'+
-      'VWS = &radic;((u2&minus;u1)&sup2; + (v2&minus;v1)&sup2;) / (&Delta;z/1000)。Open-Meteo の上下 1000 ft 風から計算。閾値は ANA WSCP 標準。<br>'+
+      'VWS = &radic;((u2&minus;u1)&sup2; + (v2&minus;v1)&sup2;) / (&Delta;z/1000)。Open-Meteo 気圧層から線形補間した上下 &plusmn;2000 ft（計 4000 ft）風。閾値は ANA WSCP 標準。<br>'+
       '※ 暫定 calibration (2026-05-07)、再調整予定。</div>';
   } else {
     var ellRaws = [0.5e-7, 1.5e-7, 3e-7, 5e-7, 7e-7, 9e-7];
@@ -3292,6 +3327,7 @@ function renderGfsWsTable() {
     if(!wp) return null;
     var wpNorm = normalizePoint(wp);
     if(!wpNorm) return null;
+    if(altFl <= 280 || altFl >= 450) return null;
     var vu = validUtcForWp(wp);
     var mode = (typeof ATM_GFS_WS === 'string') ? ATM_GFS_WS : 'vws';
     var cacheKey = wp.id + '|' + vu.getTime() + '|' + mode;
@@ -3300,7 +3336,7 @@ function renderGfsWsTable() {
       pts = [];
       var col = gfsAtmBuildVerticalColumn(wp, false);
       if(col && col.length >= 2) {
-        var i, lo, hi, dz, du, dv, vws;
+        var i, vws, centerMb, nL, sL, eL, wL;
         var nPt = gfsRadarNeighborPt(wpNorm, 'N', 200);
         var sPt = gfsRadarNeighborPt(wpNorm, 'S', 200);
         var ePt = gfsRadarNeighborPt(wpNorm, 'E', 200);
@@ -3316,16 +3352,19 @@ function renderGfsWsTable() {
           }
           return null;
         }
-        for(i = 0; i < col.length - 1; i++) {
-          lo = col[i];
-          hi = col[i + 1];
-          dz = hi.hgt - lo.hgt;
-          if(Math.abs(dz) < 1) continue;
-          du = hi.u - lo.u;
-          dv = hi.v - lo.v;
-          vws = Math.sqrt(du * du + dv * dv) / Math.abs(dz);
-          var centerMb = lo.lev;
-          var nL = levAt(pN, centerMb), sL = levAt(pS, centerMb), eL = levAt(pE, centerMb), wL = levAt(pW, centerMb);
+        var dzFtVws = 4000;
+        var halfFt = 2000;
+        for(i = 290; i < 450; i += 10) {
+          var altFtRow = i * 100;
+          var uvBelow = gfsAtmInterpHeightColumnInterior(col, altFtRow - halfFt);
+          var uvAbove = gfsAtmInterpHeightColumnInterior(col, altFtRow + halfFt);
+          if(!uvBelow || !uvAbove) continue;
+          vws = gfsComputeVwsFromUvMs(uvBelow, uvAbove, dzFtVws);
+          centerMb = 250;
+          if(typeof GfsRadar !== 'undefined' && GfsRadar.snapLevel && GfsRadar.flToMb) {
+            centerMb = GfsRadar.snapLevel(GfsRadar.flToMb(i));
+          }
+          nL = levAt(pN, centerMb); sL = levAt(pS, centerMb); eL = levAt(pE, centerMb); wL = levAt(pW, centerMb);
           var defm = 0;
           var cvgRaw = 0;
           if(nL && sL && eL && wL) {
@@ -3345,7 +3384,7 @@ function renderGfsWsTable() {
           var ti1 = vws * defm;
           var ti2 = vws * (defm + cvgClipped);
           pts.push({
-            h: (lo.hgt + hi.hgt) / 2,
+            h: altFtRow * 0.3048,
             vws: vws,
             defm: defm,
             cvgRaw: cvgRaw,
