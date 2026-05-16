@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { gfsRadarNeighborPt, normalizePoint, normalizeLon } from '../geo-helpers.js';
+import { gfsRadarNeighborPt, normalizePoint, normalizeLon, floorUtcHour, wpValidUtcHour } from '../geo-helpers.js';
 
 describe('normalizePoint', () => {
   it('passes through { lat, lon }', () => {
@@ -77,6 +77,49 @@ describe('normalizeLon', () => {
   });
   it('returns NaN for NaN', () => {
     expect(Number.isNaN(normalizeLon(NaN))).toBe(true);
+  });
+});
+
+describe('floorUtcHour', () => {
+  it('floors 2026-05-09T10:00:00Z to hour boundary', () => {
+    const r = floorUtcHour(new Date(Date.UTC(2026, 4, 9, 10, 0, 0, 0)));
+    expect(r.toISOString()).toBe('2026-05-09T10:00:00.000Z');
+  });
+  it('floors 2026-05-09T10:00:01Z to 10:00Z', () => {
+    const r = floorUtcHour(new Date(Date.UTC(2026, 4, 9, 10, 0, 1, 0)));
+    expect(r.toISOString()).toBe('2026-05-09T10:00:00.000Z');
+  });
+  it('floors 2026-05-09T10:59:59Z to 10:00Z', () => {
+    const r = floorUtcHour(new Date(Date.UTC(2026, 4, 9, 10, 59, 59, 999)));
+    expect(r.toISOString()).toBe('2026-05-09T10:00:00.000Z');
+  });
+  it('keeps 2026-05-09T11:00:00Z at 11:00Z', () => {
+    const r = floorUtcHour(new Date(Date.UTC(2026, 4, 9, 11, 0, 0, 0)));
+    expect(r.toISOString()).toBe('2026-05-09T11:00:00.000Z');
+  });
+  it('uses UTC fields only (not local TZ)', () => {
+    const r = floorUtcHour(new Date('2026-05-09T10:42:33.000Z'));
+    expect(r.toISOString()).toBe('2026-05-09T10:00:00.000Z');
+  });
+});
+
+describe('wpValidUtcHour', () => {
+  it('prefers wp.etoUtc when it is a valid Date', () => {
+    const eto = new Date(Date.UTC(2026, 4, 9, 10, 42, 0, 0));
+    const fb = new Date(Date.UTC(2026, 4, 9, 15, 0, 0, 0));
+    const r = wpValidUtcHour({ etoUtc: eto }, fb);
+    expect(r.toISOString()).toBe('2026-05-09T10:00:00.000Z');
+  });
+  it('uses floored fallback when etoUtc is absent', () => {
+    const fb = new Date(Date.UTC(2026, 4, 9, 10, 15, 30, 500));
+    const r = wpValidUtcHour({}, fb);
+    expect(r.toISOString()).toBe('2026-05-09T10:00:00.000Z');
+  });
+  it('uses floored new Date when wp has no etoUtc and fallback is null', () => {
+    const r = wpValidUtcHour(null, null);
+    expect(r.getUTCMinutes()).toBe(0);
+    expect(r.getUTCSeconds()).toBe(0);
+    expect(r.getUTCMilliseconds()).toBe(0);
   });
 });
 

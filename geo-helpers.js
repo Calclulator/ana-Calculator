@@ -1,3 +1,26 @@
+function floorUtcHour(date) {
+  var d = date;
+  if (!(d instanceof Date) || isNaN(d.getTime())) {
+    d = new Date();
+  }
+  var y = d.getUTCFullYear();
+  var mo = d.getUTCMonth();
+  var da = d.getUTCDate();
+  var h = d.getUTCHours();
+  return new Date(Date.UTC(y, mo, da, h, 0, 0, 0));
+}
+
+function wpValidUtcHour(wp, fallbackDate) {
+  if (wp && wp.etoUtc instanceof Date && !isNaN(wp.etoUtc.getTime())) {
+    return floorUtcHour(wp.etoUtc);
+  }
+  var fb = fallbackDate;
+  if (fb === null || fb === undefined || !(fb instanceof Date) || isNaN(fb.getTime())) {
+    fb = new Date();
+  }
+  return floorUtcHour(fb);
+}
+
 function normalizeLon(lon) {
   if (typeof lon !== 'number' || isNaN(lon)) return lon;
   return ((lon + 540) % 360) - 180;
@@ -31,7 +54,9 @@ if (typeof window !== 'undefined') {
   window.GeoHelpers = {
     normalizeLon: normalizeLon,
     normalizePoint: normalizePoint,
-    gfsRadarNeighborPt: gfsRadarNeighborPt
+    gfsRadarNeighborPt: gfsRadarNeighborPt,
+    floorUtcHour: floorUtcHour,
+    wpValidUtcHour: wpValidUtcHour
   };
 }
 
@@ -39,6 +64,8 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     gfsRadarNeighborPt: gfsRadarNeighborPt,
     normalizePoint: normalizePoint,
-    normalizeLon: normalizeLon
+    normalizeLon: normalizeLon,
+    floorUtcHour: floorUtcHour,
+    wpValidUtcHour: wpValidUtcHour
   };
 }
