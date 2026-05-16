@@ -415,6 +415,9 @@
     <button class="btn" id="atm-gfs-heat-temp" onclick="setAtmGfsHeat('temp')">Temp</button>
     <button class="btn on" id="atm-gfs-heat-wind" onclick="setAtmGfsHeat('wind')">Wind</button>
     <button class="btn" id="atm-gfs-heat-off" onclick="setAtmGfsHeat('off')">Off</button>
+    <button type="button" class="atm-gfs-refetch-btn" id="atm-gfs-refetch" onclick="atmGfsRefetchClicked(this)"
+      onmouseenter="this.style.background='#dfe3e6'" onmouseleave="this.style.background='#eceff1'"
+      style="margin-left:24px;font-size:1em;line-height:1.25;padding:4px 10px;background:#eceff1;color:#37474f;border:1px solid #90a4ae;border-radius:4px;cursor:pointer;">GFS 再取得</button>
     <span style="font-size:1em;color:#90a4ae;margin-left:8px;">Cell shows:</span>
     <button class="btn on" id="atm-gfs-show-wt" onclick="setAtmGfsShow('wt')">Wind &amp; temp</button>
     <button class="btn" id="atm-gfs-show-isa" onclick="setAtmGfsShow('isa')">ISA deviation</button>
@@ -3061,6 +3064,37 @@ function updateGfsAtmProgressDone(total, ng) {
       n2[i].textContent = '';
     }
   }, 2000);
+}
+
+function atmGfsRefetchClicked(btn) {
+  if(typeof window.gfsPointClearCache === 'function') {
+    window.gfsPointClearCache();
+  }
+  if(window.__gfsPreloadKeys && typeof window.__gfsPreloadKeys.clear === 'function') {
+    window.__gfsPreloadKeys.clear();
+  } else {
+    window.__gfsPreloadKeys = new Set();
+  }
+  if(typeof gfsRadarInvalidateRoutePointsMemo === 'function') {
+    gfsRadarInvalidateRoutePointsMemo();
+  }
+  if(typeof GFS_RADAR_PRELOAD_STATE !== 'undefined') {
+    GFS_RADAR_PRELOAD_STATE.inflight = false;
+    GFS_RADAR_PRELOAD_STATE.key = '';
+    GFS_RADAR_PRELOAD_STATE.callbacks = [];
+  }
+  window.GFS_POINT = { status: 'idle', error: null, key: null };
+  GFS_POINT_STATE = window.GFS_POINT;
+  if(btn) {
+    btn.disabled = true;
+    setTimeout(function() {
+      btn.disabled = false;
+    }, 2000);
+  }
+  ensureGfsLoadedForAtm();
+  if(typeof WX_GFS_CORR_ON !== 'undefined' && WX_GFS_CORR_ON && typeof applyGfsRadarForCurrentMethod === 'function') {
+    applyGfsRadarForCurrentMethod();
+  }
 }
 
 function gfsRunThrottledJobs(jobs, concurrency, worker, done, onProgress) {
