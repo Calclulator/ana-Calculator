@@ -1673,6 +1673,7 @@ function runParse() {
   } else {
     maybeAutoFillFirstWpAtoFromStd();
   }
+  if(typeof syncWpEtoUtcFromSchedule === 'function') syncWpEtoUtcFromSchedule();
 
   if (fplParseOk) {
     try {
@@ -1956,6 +1957,7 @@ function onAtoChange(idx,val) {
     if(document.getElementById('dep').checked) {
       console.log('DEP_ATO_MIN updated:', DEP_ATO_MIN, '→ calcRoutePos:', calcRoutePos());
     }
+    if(typeof syncWpEtoUtcFromSchedule === 'function') syncWpEtoUtcFromSchedule();
   }
   renderFpTable();
   if(document.getElementById('dep') && document.getElementById('dep').checked) {
@@ -2802,6 +2804,19 @@ function gfsAtmValidUtcForWp(wp) {
   return new Date(ato.getTime() + (wp.ctme || 0) * 60000);
 }
 
+function getFallbackUtc(wp) {
+  return gfsAtmValidUtcForWp(wp || {});
+}
+
+function syncWpEtoUtcFromSchedule() {
+  if(typeof WP === 'undefined' || !WP || !WP.length) return;
+  var i, w;
+  for(i = 0; i < WP.length; i++) {
+    w = WP[i];
+    w.etoUtc = gfsAtmValidUtcForWp(w);
+  }
+}
+
 function gfsAtWpIsaFallback(wp, alt, validUtc) {
   var altFt = alt * 100;
   var mb;
@@ -2845,7 +2860,9 @@ function gfsAtWpIsaFallback(wp, alt, validUtc) {
 }
 
 function gfsAtmBuildVerticalColumn(wp, dbgCol) {
-  var validUtc = gfsAtmValidUtcForWp(wp);
+  var validUtc = (window.GeoHelpers && typeof window.GeoHelpers.wpValidUtcHour === 'function')
+    ? window.GeoHelpers.wpValidUtcHour(wp, getFallbackUtc(wp))
+    : gfsAtmValidUtcForWp(wp);
   var pCol = normalizePoint(wp);
   if(!pCol) return null;
   var cacheKey = wp.id + '|' + validUtc.getTime();
@@ -2962,7 +2979,9 @@ function gfsAtWp(wpId, alt) {
     if(WP[i].id === wpId) { wp = WP[i]; break; }
   }
   if(!wp) return null;
-  var validUtc = gfsAtmValidUtcForWp(wp);
+  var validUtc = (window.GeoHelpers && typeof window.GeoHelpers.wpValidUtcHour === 'function')
+    ? window.GeoHelpers.wpValidUtcHour(wp, getFallbackUtc(wp))
+    : gfsAtmValidUtcForWp(wp);
   var altFt = alt * 100;
   var dbg = !!window.GFS_ATM_DEBUG || (wpId === 'BEMLO' && alt === 400);
   var dbgCol = !!window.GFS_ATM_DEBUG || wpId === 'BEMLO';
@@ -3105,7 +3124,10 @@ function ensureGfsLoadedForAtm() {
     w = WP[i];
     p = normalizePoint(w);
     if(p) {
-      sig.push(w.id + ':' + p.lat + ':' + p.lon + ':' + (w.ctme || 0));
+      var vuSig = (window.GeoHelpers && typeof window.GeoHelpers.wpValidUtcHour === 'function')
+        ? String(window.GeoHelpers.wpValidUtcHour(w, getFallbackUtc(w)).getTime())
+        : String(gfsAtmValidUtcForWp(w).getTime());
+      sig.push(w.id + ':' + p.lat + ':' + p.lon + ':' + (w.ctme || 0) + ':' + vuSig);
     } else {
       sig.push(w.id + ':NOCOORD:' + (w.ctme || 0));
     }
@@ -3125,7 +3147,9 @@ function ensureGfsLoadedForAtm() {
       console.warn('[GFS-ATM] skip WP, no lat/lon:', w);
       continue;
     }
-    var vu = gfsAtmValidUtcForWp(w);
+    var vu = (window.GeoHelpers && typeof window.GeoHelpers.wpValidUtcHour === 'function')
+      ? window.GeoHelpers.wpValidUtcHour(w, getFallbackUtc(w))
+      : gfsAtmValidUtcForWp(w);
     if(!gfsAtmCoordsOk(p.lat, p.lon)) {
       console.warn('[GFS-ATM] skip WP center invalid:', w, p);
       continue;
@@ -3356,6 +3380,9 @@ function renderGfsWsTable() {
   }
 
   function validUtcForWp(wp) {
+    if(window.GeoHelpers && typeof window.GeoHelpers.wpValidUtcHour === 'function') {
+      return window.GeoHelpers.wpValidUtcHour(wp, getFallbackUtc(wp));
+    }
     return gfsAtmValidUtcForWp(wp);
   }
 
