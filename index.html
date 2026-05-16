@@ -34,6 +34,8 @@
   #wx-panel .wx-ctrl-bar #satTimeLbl{font-size:13px!important;}
   #wx-panel .wx-ctrl-bar #sat-lbl{font-size:12px!important;}
   #wx-panel .wx-ctrl-bar #avoidNm{font-size:14px!important;}
+  #wx-panel .wx-ctrl-bar #ap-metar-refresh{font-size:13px;padding:2px 8px;line-height:1.2;margin-left:6px;}
+  #wx-panel .wx-ctrl-bar #ap-metar-refresh:disabled{opacity:0.45;cursor:not-allowed;}
   .legend-row{display:flex;flex-wrap:wrap;align-items:center;line-height:1.5;}
   .legend-chip{display:inline-flex;align-items:center;gap:4px;margin-right:10px;margin-bottom:4px;font-size:1em;white-space:nowrap;}
   .legend-chip-swatch{flex-shrink:0;width:14px;height:14px;border:1px solid rgba(129,147,168,.55);}
@@ -255,6 +257,7 @@
     <label class="ck"><input type="checkbox" id="oFir" checked onchange="drawFir()"> FIR</label>
     <label class="ck"><input type="checkbox" id="oSig" checked onchange="loadSigmets()"> SIGMETs</label>
     <label class="ck"><input type="checkbox" id="oMetar" onchange="onApOverlayToggle()" oninput="onApOverlayToggle()" onclick="onApOverlayToggle()"> A/P</label>
+    <button type="button" class="btn" id="ap-metar-refresh" onclick="onApMetarRefreshClicked()" disabled title="METAR/TAF を再取得">(METAR更新)</button>
     <label class="ck" style="display:none;"><input type="checkbox" id="oLightning" onchange="toggleLightning()"> Lightning</label>
     <span class="wx-ovl-break"></span>
     <label class="ck"><input type="checkbox" id="oTurb" checked onchange="onWxTurbCorrToggle()"> Turbulence corridor</label>
@@ -2447,7 +2450,15 @@ function onCorridorNmChange() {
 function onApOverlayToggle() {
   var cb = document.getElementById('oMetar');
   console.log('[A/P] toggle fired. checked=', !!(cb && cb.checked), 'ua=', navigator.userAgent);
+  syncApMetarRefreshButtonState();
   drawAlt();
+}
+
+function syncApMetarRefreshButtonState() {
+  var b = document.getElementById('ap-metar-refresh');
+  var ap = document.getElementById('oMetar');
+  if(!b) return;
+  b.disabled = !(ap && ap.checked);
 }
 
 function toggleEtopsOpts() {
@@ -5595,156 +5606,243 @@ loadSigmets();
 // =====================================================================
 // METAR
 // =====================================================================
-function loadMetars() {
-  LY.metar.forEach(function(m){map.removeLayer(m);}); LY.metar=[];
-  if(!document.getElementById('oMetar').checked) return;
-  function apDebugFetchJson(url, opt, tag) {
-    var pfx = '[A/P-fetch] ' + tag + ' ';
-    console.log(pfx + 'url=', url);
-    return fetch(url, opt || {})
-      .then(function(r){
-        var hdrs = {};
+var AP_CHECKWX_HEADERS = { headers: { 'X-API-Key': 'eb52e4c6ca254584842adb8dc574b4f8' } };
+
+function apFetchCheckwxJson(url, opt, tag) {
+  var pfx = '[A/P-fetch] ' + tag + ' ';
+  console.log(pfx + 'url=', url);
+  return fetch(url, opt || {})
+    .then(function(r) {
+      var hdrs = {};
+      try {
+        if(r.headers && r.headers.forEach) {
+          r.headers.forEach(function(v, k) { hdrs[k] = v; });
+        }
+      } catch(e) {}
+      console.log(pfx + 'status=', r.status, 'ok=', r.ok, 'content-type=', hdrs['content-type'] || '(none)');
+      console.log(pfx + 'headers=', hdrs);
+      return r.text().then(function(txt) {
+        var raw = String(txt || '');
+        var preview = raw.length > 4000 ? raw.slice(0, 4000) + ' ...(truncated)' : raw;
+        console.log(pfx + 'raw=', preview);
+        var parsed = null;
         try {
-          if(r.headers && r.headers.forEach) {
-            r.headers.forEach(function(v, k){ hdrs[k] = v; });
-          }
-        } catch(e) {}
-        console.log(pfx + 'status=', r.status, 'ok=', r.ok, 'content-type=', hdrs['content-type'] || '(none)');
-        console.log(pfx + 'headers=', hdrs);
-        return r.text().then(function(txt){
-          var raw = String(txt || '');
-          var preview = raw.length > 4000 ? raw.slice(0, 4000) + ' ...(truncated)' : raw;
-          console.log(pfx + 'raw=', preview);
-          var parsed = null;
-          try {
-            parsed = raw ? JSON.parse(raw) : null;
-          } catch(pe) {
-            console.error(pfx + 'JSON parse error name=', pe && pe.name, 'message=', pe && pe.message, 'stack=', pe && pe.stack);
-          }
-          return { ok: r.ok, status: r.status, headers: hdrs, text: raw, json: parsed };
-        });
-      })
-      .catch(function(err){
-        console.error(pfx + 'fetch error name=', err && err.name, 'message=', err && err.message, 'stack=', err && err.stack);
-        throw err;
+          parsed = raw ? JSON.parse(raw) : null;
+        } catch(pe) {
+          console.error(pfx + 'JSON parse error name=', pe && pe.name, 'message=', pe && pe.message, 'stack=', pe && pe.stack);
+        }
+        return { ok: r.ok, status: r.status, headers: hdrs, text: raw, json: parsed };
       });
+    })
+    .catch(function(err) {
+      console.error(pfx + 'fetch error name=', err && err.name, 'message=', err && err.message, 'stack=', err && err.stack);
+      throw err;
+    });
+}
+
+function ensureApWxCache() {
+  if(!window.__apWxCache) window.__apWxCache = { metarByIcao: {}, tafByIcao: {} };
+}
+
+function clearApMetarTafCache() {
+  ensureApWxCache();
+  window.__apWxCache.metarByIcao = {};
+  window.__apWxCache.tafByIcao = {};
+}
+
+function apChunkIcaos(arr, size) {
+  var out = [];
+  var i;
+  for(i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+function collectApNearIcaos() {
+  var seen = {};
+  var list = [];
+  function addIcao(id) {
+    if(!id || typeof id !== 'string' || id.length !== 4) return;
+    var u = id.toUpperCase();
+    if(seen[u]) return;
+    if(typeof APT === 'undefined' || !APT[u]) return;
+    seen[u] = 1;
+    list.push(u);
   }
-  var CAT = {VFR:'#43a047',MVFR:'#1565c0',IFR:'#e53935',LIFR:'#ab47bc'};
-  var apCircRenderer = L.svg({ padding: 0.5 });
-  var apCircRadiusM = 3 * NM;
-  var limitMeters = 400*1852;
-  var near = [];
-  for(var id in APT) {
-    var a = APT[id];
-    if(WP.length>=2) {
-      var found = false;
-      for(var i=0;i<WP.length;i++){
-        if(L.latLng(a.lat,a.lon).distanceTo(L.latLng(WP[i].lat,WP[i].lng))<limitMeters){found=true;break;}
-      }
-      if(found) near.push(id);
+  if(typeof NAV_DEP === 'string' && NAV_DEP) addIcao(NAV_DEP);
+  if(typeof NAV_DEST === 'string' && NAV_DEST) addIcao(NAV_DEST);
+  if(typeof ALTS !== 'undefined' && ALTS && ALTS.length) {
+    var ax;
+    for(ax = 0; ax < ALTS.length; ax++) {
+      if(ALTS[ax] && ALTS[ax].id) addIcao(ALTS[ax].id);
     }
   }
-  if(!near.length) return;
-  function chunkIcaos(arr, size) {
-    var out = [];
-    var i;
-    for(i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-    return out;
-  }
-  function renderMetarMarkers(metarList) {
-    metarList.forEach(function(m){
-        if(!m.station||!m.station.geometry) return;
-        var lat=m.station.geometry.coordinates[1];
-        var lon=m.station.geometry.coordinates[0];
-        var col=CAT[m.flight_category]||'#546e7a';
-        var ic=L.divIcon({
-          html:'<div style="width:28px;height:28px;border-radius:50%;background:'+col+';border:2px solid white;box-shadow:0 0 4px '+col+'88;"></div>',
-          className:'',iconSize:[28,28],iconAnchor:[14,14]
-        });
-        var worldLngOffsets = [-360, 0, 360];
-        for(var wi=0; wi<worldLngOffsets.length; wi++) {
-          var off = worldLngOffsets[wi];
-          var llAp = L.latLng(lat, lon + off);
-          var apCirc = L.circle(llAp, {
-            radius: apCircRadiusM,
-            color: col,
-            weight: 1,
-            fillColor: col,
-            fillOpacity: 0.15,
-            opacity: 0.85,
-            interactive: false,
-            pane: 'overlayPane',
-            renderer: apCircRenderer
-          }).addTo(map);
-          if(window.AP_DEBUG === true) {
-            console.log('[AP-debug] circle', { lat: lat, lon: lon + off, radius: apCircRadiusM });
-          }
-          LY.metar.push(apCirc);
-          var mk=L.marker(llAp,{icon:ic}).addTo(map);
-          mk.bindTooltip(m.icao+'\n'+(m.flight_category||'')+'\n'+(m.raw_text||''),{className:'wxt',sticky:true});
-          // ICAO 4-letter label (always visible)
-          mk.bindTooltip('<span style="font-size:12px;font-weight:bold;">'+escH(m.icao||'')+'</span>',{
-            className:'wxt-wp',
-            permanent:true,
-            direction:'top',
-            offset:[0,-16]
-          });
-          mk.on('click', (function(metar) {
-            return function(e) {
-              var ll = e && e.latlng ? e.latlng : (metar.station&&metar.station.geometry
-                ? L.latLng(metar.station.geometry.coordinates[1], metar.station.geometry.coordinates[0])
-                : null);
-              var pop = L.popup({maxWidth:500,minWidth:420});
-              pop.setLatLng(ll).setContent(
-                '<div class="wx-radar-popup-metar" style="font-family:monospace;font-size:13px;min-width:400px;max-width:400px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
-                '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;font-size:13px;">' + escH(metar.icao||'') + '</div>' +
-                '<div style="color:#546e7a;font-size:13px;">TAF 読込中...</div>' +
-                '</div>'
-              ).openOn(map);
-
-              var tafUrl = 'https://api.checkwx.com/v2/taf/'+metar.icao+'/decoded';
-              apDebugFetchJson(tafUrl, {headers:{'X-API-Key':'eb52e4c6ca254584842adb8dc574b4f8'}}, 'TAF-click-'+(metar.icao||'----'))
-                .then(function(tafRes){
-                  var t = tafRes && tafRes.json ? tafRes.json : null;
-                  var tafObj = t && t.data && t.data[0] ? t.data[0] : null;
-                  var tafRaw = tafObj && tafObj.raw_text ? tafObj.raw_text : '';
-                  var tafDisp = formatTafDisplayRaw(tafRaw);
-                  var html =
-                    '<div class="wx-radar-popup-metar" style="font-family:monospace;font-size:13px;min-width:400px;max-width:400px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
-                    '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;font-size:13px;">' + escH(metar.icao||'') + ' <span style="font-weight:normal;color:#546e7a;">' + escH(metar.flight_category||'') + '</span></div>' +
-                    '<div style="color:#546e7a;font-size:13px;">RAW METAR</div>' +
-                    '<pre style="white-space:pre-wrap;margin:0;color:#263238;font-size:13px;">' + escH(metar.raw_text||'N/A') + '</pre>' +
-                    '<div style="height:8px;"></div>' +
-                    '<div style="color:#546e7a;font-size:13px;">RAW TAF</div>' +
-                    '<pre style="white-space:pre-wrap;margin:0;color:#263238;font-size:13px;">' + escH(tafDisp||'N/A') + '</pre>' +
-                    '</div>';
-                  pop.setContent(html);
-                })
-                .catch(function(){
-                  pop.setContent(
-                    '<div class="wx-radar-popup-metar" style="font-family:monospace;font-size:13px;min-width:400px;max-width:400px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
-                    '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;font-size:13px;">' + escH(metar.icao||'') + '</div>' +
-                    '<div style="color:#ef5350;font-size:13px;margin-bottom:8px;">TAF 取得に失敗しました</div>' +
-                    '</div>'
-                  );
-                });
-            };
-          })(m));
-          LY.metar.push(mk);
+  if(typeof WP !== 'undefined' && WP && WP.length >= 2) {
+    var limitMeters = 400 * 1852;
+    var id;
+    for(id in APT) {
+      if(!Object.prototype.hasOwnProperty.call(APT, id)) continue;
+      var a = APT[id];
+      var found = false;
+      var i;
+      for(i = 0; i < WP.length; i++) {
+        if(L.latLng(a.lat, a.lon).distanceTo(L.latLng(WP[i].lat, WP[i].lng)) < limitMeters) {
+          found = true;
+          break;
         }
+      }
+      if(found) addIcao(id);
+    }
+  }
+  list.sort();
+  return list;
+}
+
+function apPopupMetarTafHtml(metar, tafRaw) {
+  var tafDisp = formatTafDisplayRaw(tafRaw || '');
+  return '<div class="wx-radar-popup-metar" style="font-family:monospace;font-size:13px;min-width:400px;max-width:400px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
+    '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;font-size:13px;">' + escH(metar.icao || '') + ' <span style="font-weight:normal;color:#546e7a;">' + escH(metar.flight_category || '') + '</span></div>' +
+    '<div style="color:#546e7a;font-size:13px;">RAW METAR</div>' +
+    '<pre style="white-space:pre-wrap;margin:0;color:#263238;font-size:13px;">' + escH(metar.raw_text || 'N/A') + '</pre>' +
+    '<div style="height:8px;"></div>' +
+    '<div style="color:#546e7a;font-size:13px;">RAW TAF</div>' +
+    '<pre style="white-space:pre-wrap;margin:0;color:#263238;font-size:13px;">' + escH(tafDisp || 'N/A') + '</pre>' +
+    '</div>';
+}
+
+function prefetchApTafBatchesPromise(icaos, headers) {
+  ensureApWxCache();
+  var chunks = apChunkIcaos(icaos, 25);
+  if(!chunks.length) return Promise.resolve();
+  var reqs = chunks.map(function(chunk, idx) {
+    var tafUrl = 'https://api.checkwx.com/v2/taf/' + chunk.join(',') + '/decoded';
+    return apFetchCheckwxJson(tafUrl, headers, 'TAF-batch-' + (idx + 1))
+      .then(function(res) { return { ok: true, res: res, idx: idx }; })
+      .catch(function(err) { return { ok: false, err: err, idx: idx }; });
+  });
+  return Promise.all(reqs).then(function(results) {
+    var i, d, j, row, icao;
+    for(i = 0; i < results.length; i++) {
+      if(!results[i].ok) {
+        console.warn('[A/P-fetch] TAF batch failed idx=' + results[i].idx, results[i].err);
+        continue;
+      }
+      d = results[i].res && results[i].res.json ? results[i].res.json : null;
+      if(d && d.data && d.data.length) {
+        for(j = 0; j < d.data.length; j++) {
+          row = d.data[j];
+          icao = row && row.icao ? String(row.icao).toUpperCase() : '';
+          if(icao) window.__apWxCache.tafByIcao[icao] = row;
+        }
+      }
+    }
+  });
+}
+
+function loadMetarsForIcaosList(near) {
+  if(typeof map === 'undefined' || !map) return Promise.resolve();
+  LY.metar.forEach(function(m) { try { map.removeLayer(m); } catch(e) {} });
+  LY.metar = [];
+  if(!near || !near.length) return Promise.resolve();
+  var CAT = { VFR: '#43a047', MVFR: '#1565c0', IFR: '#e53935', LIFR: '#ab47bc' };
+  var apCircRenderer = L.svg({ padding: 0.5 });
+  var apCircRadiusM = 3 * NM;
+  var headers = AP_CHECKWX_HEADERS;
+
+  function renderMetarMarkers(metarList) {
+    metarList.forEach(function(m) {
+      if(!m.station || !m.station.geometry) return;
+      var lat = m.station.geometry.coordinates[1];
+      var lon = m.station.geometry.coordinates[0];
+      var col = CAT[m.flight_category] || '#546e7a';
+      var ic = L.divIcon({
+        html: '<div style="width:28px;height:28px;border-radius:50%;background:' + col + ';border:2px solid white;box-shadow:0 0 4px ' + col + '88;"></div>',
+        className: '', iconSize: [28, 28], iconAnchor: [14, 14]
+      });
+      var worldLngOffsets = [-360, 0, 360];
+      var wi;
+      for(wi = 0; wi < worldLngOffsets.length; wi++) {
+        var off = worldLngOffsets[wi];
+        var llAp = L.latLng(lat, lon + off);
+        var apCirc = L.circle(llAp, {
+          radius: apCircRadiusM,
+          color: col,
+          weight: 1,
+          fillColor: col,
+          fillOpacity: 0.15,
+          opacity: 0.85,
+          interactive: false,
+          pane: 'overlayPane',
+          renderer: apCircRenderer
+        }).addTo(map);
+        if(window.AP_DEBUG === true) {
+          console.log('[AP-debug] circle', { lat: lat, lon: lon + off, radius: apCircRadiusM });
+        }
+        LY.metar.push(apCirc);
+        var mk = L.marker(llAp, { icon: ic }).addTo(map);
+        mk.bindTooltip(m.icao + '\n' + (m.flight_category || '') + '\n' + (m.raw_text || ''), { className: 'wxt', sticky: true });
+        mk.bindTooltip('<span style="font-size:12px;font-weight:bold;">' + escH(m.icao || '') + '</span>', {
+          className: 'wxt-wp',
+          permanent: true,
+          direction: 'top',
+          offset: [0, -16]
+        });
+        mk.on('click', (function(metar) {
+          return function(e) {
+            var ll = e && e.latlng ? e.latlng : (metar.station && metar.station.geometry
+              ? L.latLng(metar.station.geometry.coordinates[1], metar.station.geometry.coordinates[0])
+              : null);
+            var pop = L.popup({ maxWidth: 500, minWidth: 420 });
+            var ic2 = String(metar.icao || '').toUpperCase();
+            ensureApWxCache();
+            var cached = window.__apWxCache.tafByIcao[ic2];
+            if(cached && cached.raw_text != null && String(cached.raw_text).length > 0) {
+              pop.setLatLng(ll).setContent(apPopupMetarTafHtml(metar, cached.raw_text)).openOn(map);
+              return;
+            }
+            pop.setLatLng(ll).setContent(
+              '<div class="wx-radar-popup-metar" style="font-family:monospace;font-size:13px;min-width:400px;max-width:400px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
+              '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;font-size:13px;">' + escH(metar.icao || '') + '</div>' +
+              '<div style="color:#546e7a;font-size:13px;">TAF 読込中...</div>' +
+              '</div>'
+            ).openOn(map);
+
+            var tafUrl = 'https://api.checkwx.com/v2/taf/' + metar.icao + '/decoded';
+            apFetchCheckwxJson(tafUrl, headers, 'TAF-click-' + (metar.icao || '----'))
+              .then(function(tafRes) {
+                var t = tafRes && tafRes.json ? tafRes.json : null;
+                var tafObj = t && t.data && t.data[0] ? t.data[0] : null;
+                var tafRaw = tafObj && tafObj.raw_text ? tafObj.raw_text : '';
+                if(tafObj && ic2) {
+                  ensureApWxCache();
+                  window.__apWxCache.tafByIcao[ic2] = tafObj;
+                }
+                pop.setContent(apPopupMetarTafHtml(metar, tafRaw));
+              })
+              .catch(function() {
+                pop.setContent(
+                  '<div class="wx-radar-popup-metar" style="font-family:monospace;font-size:13px;min-width:400px;max-width:400px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
+                  '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;font-size:13px;">' + escH(metar.icao || '') + '</div>' +
+                  '<div style="color:#ef5350;font-size:13px;margin-bottom:8px;">TAF 取得に失敗しました</div>' +
+                  '</div>'
+                );
+              });
+          };
+        })(m));
+        LY.metar.push(mk);
+      }
     });
     bringTop();
   }
-  var chunks = chunkIcaos(near, 25);
+
+  var chunks = apChunkIcaos(near, 25);
   console.log('[A/P-fetch] METAR-batches', chunks.length);
-  var headers = {headers:{'X-API-Key':'eb52e4c6ca254584842adb8dc574b4f8'}};
-  var reqs = chunks.map(function(chunk, idx){
+  var reqs = chunks.map(function(chunk, idx) {
     var metarUrl = 'https://api.checkwx.com/v2/metar/' + chunk.join(',') + '/decoded';
-    return apDebugFetchJson(metarUrl, headers, 'METAR-batch-' + (idx + 1))
-      .then(function(res){ return { ok:true, res:res, idx:idx }; })
-      .catch(function(err){ return { ok:false, err:err, idx:idx }; });
+    return apFetchCheckwxJson(metarUrl, headers, 'METAR-batch-' + (idx + 1))
+      .then(function(res) { return { ok: true, res: res, idx: idx }; })
+      .catch(function(err) { return { ok: false, err: err, idx: idx }; });
   });
-  Promise.all(reqs).then(function(results){
+  return Promise.all(reqs).then(function(results) {
     var merged = [];
     var i;
     for(i = 0; i < results.length; i++) {
@@ -5759,10 +5857,55 @@ function loadMetars() {
       console.warn('[A/P-fetch] METAR all batches empty or failed');
       return;
     }
+    merged.forEach(function(row) {
+      if(row && row.icao) {
+        ensureApWxCache();
+        window.__apWxCache.metarByIcao[String(row.icao).toUpperCase()] = row;
+      }
+    });
     renderMetarMarkers(merged);
-  }).catch(function(err){
+  }).catch(function(err) {
     console.error('[A/P-fetch] loadMetars failed name=', err && err.name, 'message=', err && err.message, 'stack=', err && err.stack);
   });
+}
+
+function loadMetars() {
+  if(typeof map === 'undefined' || !map) return Promise.resolve();
+  LY.metar.forEach(function(m) { try { map.removeLayer(m); } catch(e) {} });
+  LY.metar = [];
+  var om = document.getElementById('oMetar');
+  if(!om || !om.checked) return Promise.resolve();
+  return loadMetarsForIcaosList(collectApNearIcaos());
+}
+
+function onApMetarRefreshClicked() {
+  var ap = document.getElementById('oMetar');
+  if(!ap || !ap.checked) return;
+  var btn = document.getElementById('ap-metar-refresh');
+  var t0 = Date.now();
+  if(btn) btn.disabled = true;
+  clearApMetarTafCache();
+  var icaos = collectApNearIcaos();
+  function finishRefresh() {
+    var wait = Math.max(0, 2000 - (Date.now() - t0));
+    setTimeout(function() {
+      syncApMetarRefreshButtonState();
+    }, wait);
+  }
+  if(!icaos.length) {
+    if(typeof map !== 'undefined' && map) {
+      LY.metar.forEach(function(m) { try { map.removeLayer(m); } catch(e) {} });
+    }
+    LY.metar = [];
+    finishRefresh();
+    return;
+  }
+  Promise.all([
+    loadMetarsForIcaosList(icaos),
+    prefetchApTafBatchesPromise(icaos, AP_CHECKWX_HEADERS)
+  ]).catch(function(e) {
+    console.warn('[A/P-refresh]', e);
+  }).then(finishRefresh);
 }
 
 // =====================================================================
@@ -6442,6 +6585,7 @@ renderAtmWsLegend();
   if(cn) cn.value = String(WX_CORRIDOR_NM);
 })();
 renderWxCorridorLegend();
+syncApMetarRefreshButtonState();
 updateWxFlPanel();
 applyGfsRadarForCurrentMethod();
 
