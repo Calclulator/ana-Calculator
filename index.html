@@ -1615,8 +1615,16 @@ function runParse() {
       newVWS[wid] = Math.abs(ws2-ws1)/2;
     }
 
+    // 行B 先頭列 = MC (Mag Course): 次 WP 行の MC は「前 WP → 当該 WP」レグの磁方位
+    var tokB = lineB.trim().split(/\s+/);
+    var navMc = null;
+    if(tokB.length && /^\d{1,3}$/.test(tokB[0])) {
+      var mcNum = parseInt(tokB[0], 10);
+      if(mcNum >= 1 && mcNum <= 360) navMc = mcNum;
+    }
+
     console.log('[parse] WP found:', wid, c.lat.toFixed(2), c.lng.toFixed(2), 'ctme:', ctmeMin);
-    newWP.push({id:wid,lat:c.lat,lng:c.lng,t:false,ctme:ctmeMin,fuel:wfuel,alt:walt,phase:phaseForNextWp});
+    newWP.push({id:wid,lat:c.lat,lng:c.lng,t:false,ctme:ctmeMin,fuel:wfuel,alt:walt,phase:phaseForNextWp,navMc:navMc});
   }
   console.log('[parse] newWP total:', newWP.length, '| newAlts:', newAlts.length, '| newEtps:', newEtps.length);
 
@@ -1640,6 +1648,14 @@ function runParse() {
       if(i===0||i===finalWP.length-1) return true;
       return !altIdMap[w.id];
     });
+    // レグ始点 WP の mc = 次 WP の NAVLOG 行に記載の inbound MC (磁方位・整数)
+    var wi;
+    for(wi = 0; wi < finalWP.length - 1; wi++) {
+      var nm = finalWP[wi + 1].navMc;
+      finalWP[wi].mc = (nm != null && !isNaN(nm)) ? Math.round(Number(nm)) : null;
+    }
+    finalWP[finalWP.length - 1].mc = null;
+
     WP = finalWP;
     if(typeof gfsRadarInvalidateRoutePointsMemo === 'function') gfsRadarInvalidateRoutePointsMemo();
     VWS = newVWS;
@@ -6113,6 +6129,88 @@ function showMetarPanel(m,taf){
 // =====================================================================
 // AIRCRAFT TRACKING (OpenSky)
 // =====================================================================
+// 航路表示位置に最も近いレグの NAVLOG MC を TRK ラベル用に求める (レグ始点 WP の .mc)
+function formatTrkMcLabel(mc) {
+  if(mc == null || typeof mc !== 'number' || isNaN(mc)) return 'TRK ---';
+  var v = Math.round(Number(mc)) % 360;
+  if(v < 0) v += 360;
+  return 'TRK ' + String(v).padStart(3, '0');
+}
+
+function apBeyondLastWpSegment(lat, lng, pts) {
+  var n = pts.length;
+  if(n < 2) return false;
+  var la = pts[n - 2], lb = pts[n - 1];
+  var latM = (la.lat + lb.lat + lat) / 3 * Math.PI / 180;
+  var k = Math.cos(latM);
+  var Ux = (lb.lngU - la.lngU) * k, Uy = lb.lat - la.lat;
+  var Vx = (lng - lb.lngU) * k, Vy = lat - lb.lat;
+  var u2 = Ux * Ux + Uy * Uy;
+  if(u2 < 1e-14) return false;
+  return (Vx * Ux + Vy * Uy) > 0;
+}
+
+function trkMcForPosition(lat, lng, pts) {
+  var n = pts.length;
+  if(n < 2) return null;
+  if(apBeyondLastWpSegment(lat, lng, pts)) {
+    var mLast = pts[n - 2].mc;
+    return (mLast != null && !isNaN(mLast)) ? mLast : null;
+  }
+  var TIE = 0.0005;
+  var bestD = Infinity;
+  var bestI = 0;
+  var bestT = 0;
+  var ii, latM, k, ax, ay, bx, by, px, py, abx, aby, apx, apy, ab2, t, cx, cy, dxx, dyy, d2;
+  for(ii = 0; ii < n - 1; ii++) {
+    var a = pts[ii], b = pts[ii + 1];
+    latM = (a.lat + b.lat + lat) / 3 * Math.PI / 180;
+    k = Math.cos(latM);
+    ax = a.lngU * k;
+    ay = a.lat;
+    bx = b.lngU * k;
+    by = b.lat;
+    px = lng * k;
+    py = lat;
+    abx = bx - ax;
+    aby = by - ay;
+    apx = px - ax;
+    apy = py - ay;
+    ab2 = abx * abx + aby * aby;
+    t = ab2 < 1e-14 ? 0 : (apx * abx + apy * aby) / ab2;
+    if(t < 0) t = 0;
+    if(t > 1) t = 1;
+    cx = ax + t * abx;
+    cy = ay + t * aby;
+    dxx = px - cx;
+    dyy = py - cy;
+    d2 = dxx * dxx + dyy * dyy;
+    if(d2 < bestD) {
+      bestD = d2;
+      bestI = ii;
+      bestT = t;
+    }
+  }
+  var ls;
+  if(bestT >= 1 - TIE) {
+    if(bestI + 1 < n - 1) ls = bestI + 1;
+    else ls = n - 2;
+  } else {
+    ls = bestI;
+  }
+  var mcUse = pts[ls] ? pts[ls].mc : null;
+  return (mcUse != null && !isNaN(mcUse)) ? mcUse : null;
+}
+
+function enrichRoutePosTrkLabel(rpos, vwp) {
+  if(!rpos) return;
+  if(!vwp || vwp.length < 2) {
+    rpos.trkLabel = 'TRK ---';
+    return;
+  }
+  rpos.trkLabel = formatTrkMcLabel(trkMcForPosition(rpos.lat, rpos.lng, vwp));
+}
+
 function calcRoutePos() {
   if(WP.length < 2 || DEP_ATO_MIN === null) return null;
   if(WP[0].lngU === undefined) unwrapWPs(WP);
@@ -6121,26 +6219,33 @@ function calcRoutePos() {
   var now = new Date();
   var elapsed = now.getUTCHours()*60 + now.getUTCMinutes() - DEP_ATO_MIN;
   if(elapsed < 0) elapsed += 1440;
+  var rpos;
   if(elapsed <= vwp[0].ctme) {
     var brg0 = bearing(vwp[0].lat,vwp[0].lngU,vwp[1].lat,vwp[1].lngU);
-    return {lat:vwp[0].lat, lng:vwp[0].lngU, hdg:(brg0*180/Math.PI+360)%360};
+    rpos = {lat:vwp[0].lat, lng:vwp[0].lngU, hdg:(brg0*180/Math.PI+360)%360};
+    enrichRoutePosTrkLabel(rpos, vwp);
+    return rpos;
   }
   var last = vwp[vwp.length-1];
   if(elapsed >= last.ctme) {
     var prev = vwp[vwp.length-2];
     var brgL = bearing(prev.lat,prev.lngU,last.lat,last.lngU);
-    return {lat:last.lat, lng:last.lngU, hdg:(brgL*180/Math.PI+360)%360};
+    rpos = {lat:last.lat, lng:last.lngU, hdg:(brgL*180/Math.PI+360)%360};
+    enrichRoutePosTrkLabel(rpos, vwp);
+    return rpos;
   }
   for(var i=0;i<vwp.length-1;i++) {
     var a=vwp[i], b=vwp[i+1];
     if(elapsed >= a.ctme && elapsed < b.ctme) {
       var t = (elapsed-a.ctme)/(b.ctme-a.ctme);
       var brg = bearing(a.lat,a.lngU,b.lat,b.lngU);
-      return {
+      rpos = {
         lat: a.lat + t*(b.lat-a.lat),
         lng: a.lngU + t*(b.lngU-a.lngU),
         hdg: (brg*180/Math.PI+360)%360
       };
+      enrichRoutePosTrkLabel(rpos, vwp);
+      return rpos;
     }
   }
   return null;
@@ -6159,7 +6264,7 @@ function fetchAc() {
     className:'',iconSize:[24,24],iconAnchor:[12,12]
   });
   LY.ac = L.marker(L.latLng(rpos.lat,rpos.lng).wrap(),{icon:ic,zIndexOffset:1000}).addTo(map);
-  LY.ac.bindTooltip(acReg+'\nHDG '+Math.round(rpos.hdg)+'°',{className:'wxt',permanent:true,direction:'right',offset:[14,0]});
+  LY.ac.bindTooltip(acReg+'\n'+(rpos.trkLabel || 'TRK ---'),{className:'wxt',permanent:true,direction:'right',offset:[14,0]});
   document.getElementById('ac-lbl').textContent = acReg+' 航路上位置表示中';
   updateGlide();
   bringTop();
