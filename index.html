@@ -4704,12 +4704,17 @@ function gfsRadarInterpPoint(a, b, t) {
 function buildGfsRadarRoutePoints() {
   if(typeof WP === 'undefined' || !WP || WP.length < 2) return [];
   var base = [];
-  var i, w, np;
+  var i, w, np, etoUtc;
   for(i=0;i<WP.length;i++) {
     w = WP[i];
     np = normalizePoint(w);
     if(!np) continue;
-    base.push({ id: w.id || ('WP' + i), lat: np.lat, lon: np.lon, ctme: w.ctme || 0, type: 'real' });
+    if(w.etoUtc instanceof Date && !isNaN(w.etoUtc.getTime())) {
+      etoUtc = w.etoUtc;
+    } else {
+      etoUtc = gfsAtmValidUtcForWp(w);
+    }
+    base.push({ id: w.id || ('WP' + i), lat: np.lat, lon: np.lon, ctme: w.ctme || 0, type: 'real', etoUtc: etoUtc });
   }
   if(base.length < 2) return base;
   var out = [];
@@ -4723,7 +4728,18 @@ function buildGfsRadarRoutePoints() {
       if(nSeg < 2) nSeg = 2;
       var k;
       for(k = 1; k < nSeg; k++) {
-        out.push(gfsRadarInterpPoint(a, b, k / nSeg));
+        var tParam = k / nSeg;
+        var pt = gfsRadarInterpPoint(a, b, tParam);
+        var hasEtoA = a.etoUtc instanceof Date && !isNaN(a.etoUtc.getTime());
+        var hasEtoB = b.etoUtc instanceof Date && !isNaN(b.etoUtc.getTime());
+        if(hasEtoA && hasEtoB && dNm > 0.001) {
+          var distFromA = gfsRadarApproxDistNm(a, pt);
+          var tNm = distFromA / dNm;
+          if(tNm < 0) tNm = 0;
+          if(tNm > 1) tNm = 1;
+          pt.etoUtc = new Date(Math.round(a.etoUtc.getTime() + tNm * (b.etoUtc.getTime() - a.etoUtc.getTime())));
+        }
+        out.push(pt);
       }
     }
   }
@@ -4773,8 +4789,19 @@ function gfsRadarEstimateCtmeAtIndex(routePts, idx) {
 }
 
 function gfsRadarValidUtcForRoutePoint(routePts, idx) {
+  var p = routePts[idx];
+  if(p && p.etoUtc instanceof Date && !isNaN(p.etoUtc.getTime())) {
+    if(window.GeoHelpers && typeof window.GeoHelpers.floorUtcHour === 'function') {
+      return window.GeoHelpers.floorUtcHour(p.etoUtc);
+    }
+    return p.etoUtc;
+  }
   var ctme = gfsRadarEstimateCtmeAtIndex(routePts, idx);
-  return gfsAtmValidUtcForWp({ ctme: ctme });
+  var fb = gfsAtmValidUtcForWp({ ctme: ctme });
+  if(window.GeoHelpers && typeof window.GeoHelpers.floorUtcHour === 'function') {
+    return window.GeoHelpers.floorUtcHour(fb);
+  }
+  return fb;
 }
 
 var GFS_RADAR_PRELOAD_STATE = {
@@ -4847,13 +4874,17 @@ function gfsRadarSanitizeRoutePoints(pts) {
   for(i = 0; i < pts.length; i++) {
     q = pts[i];
     if(!q || typeof q.lat !== 'number' || typeof q.lon !== 'number') continue;
-    out.push({
+    var row = {
       id: q.id,
       lat: Number(q.lat.toFixed(6)),
       lon: Number(q.lon.toFixed(6)),
       ctme: q.ctme || 0,
       type: q.type || 'real'
-    });
+    };
+    if(q.etoUtc instanceof Date && !isNaN(q.etoUtc.getTime())) {
+      row.etoUtc = q.etoUtc;
+    }
+    out.push(row);
   }
   return out;
 }
