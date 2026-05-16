@@ -2135,6 +2135,9 @@ function wsPaletteBucketIndex(val, mode) {
   if(val === null || val === undefined || isNaN(val)) return -1;
   var m = String(mode || 'vws').toLowerCase();
   if(m === 'company' || m === 'vws' || m === 'gfs-vws') {
+    if(typeof window !== 'undefined' && typeof window.wscpVwsUiBucketFromKtPerKft === 'function') {
+      return window.wscpVwsUiBucketFromKtPerKft(val);
+    }
     if(val <= 4) return 0;
     if(val <= 6) return 1;
     if(val <= 9) return 2;
@@ -3774,14 +3777,14 @@ function exportCalibrationData() {
 
   function vwsBandLabelUi(val) {
     if(val === null || isNaN(val)) return '';
+    if(typeof window !== 'undefined' && typeof window.wscpVwsBandLabelFromKtPerKft === 'function') {
+      return window.wscpVwsBandLabelFromKtPerKft(val);
+    }
     var labels = getGfsRadarSharedConfig('VWS').labels;
     if(!labels || labels.length < 6) return '';
-    if(val <= 3) return labels[5];
-    if(val <= 5) return labels[4];
-    if(val <= 7) return labels[3];
-    if(val <= 9) return labels[2];
-    if(val <= 12) return labels[1];
-    return labels[0];
+    var b = wsPaletteBucketIndex(val, 'vws');
+    if(b < 0) return '';
+    return labels[5 - b];
   }
 
   function navlogVwsAtWpFl(wp, wpId, flTen) {
@@ -3826,7 +3829,9 @@ function exportCalibrationData() {
   var fl;
   var wi;
   var wpi;
-  var GFS_VWS_SI_TO_KT_PER_KFT = 1.943844 * 0.3048 * 1000;
+  var GFS_VWS_SI_TO_KT_PER_KFT = (typeof window !== 'undefined' && window.WSCP_VWS_SHEAR_SI_TO_KT_PER_KFT)
+    ? window.WSCP_VWS_SHEAR_SI_TO_KT_PER_KFT
+    : (1.943844 * 0.3048 * 1000);
   for(wpi = 0; wpi < wpIds.length; wpi++) {
     var wpId = wpIds[wpi];
     var wp = null;
@@ -6505,7 +6510,7 @@ applyGfsRadarForCurrentMethod();
     <div class="wsm-h3">GFS-VWS (Vertical Wind Shear)</div>
     <p class="wsm-p">GFS の風データ (u, v) から巡航 FL ± 2000ft の風ベクトル差を計算し、1000ft あたりの風シアー強度を kt/1000ft で表示。</p>
     <p class="wsm-p">ANA WSCP の VWS 公式 (NAV LOG Appendix 4) と整合するよう 1 便分の実測値で calibration 済 (回帰: gfs ≈ 0.56 × navlog + 3.08)。</p>
-    <p class="wsm-p">カテゴリ: SMT (0-3) / L- (4-5) / L (6-7) / L+ (8-9) / MOD (10-12) / SEV (13+) kt/1000ft</p>
+    <p class="wsm-p">カテゴリ: SMT (0-4) / L- (5-6) / L (7-9) / L+ (10-12) / MOD (13-17) / SEV (18+) kt/1000ft（ANA WSCP 標準、NAVLOG VWS と同一）</p>
     <p class="wsm-note">注意: L+ 以上の閾値は外挿で信頼度低、参考値として利用。</p>
     <p class="wsm-p" style="font-size:12px;color:#78909c;">※ 閾値の暫定調整日: 2026-05-07。今後のデータ蓄積で再調整予定。</p>
   </div>

@@ -33,10 +33,17 @@
     '#3a78f0'  // 5 Smooth
   ];
 
-  // Thresholds: bucket 0 if v >= thr[0], 1 if >= thr[1], ..., 5 if v < thr[4].
-  // GFS-VWS calibrated thresholds in s^-1:
-  // Smooth <0.004, Light- <0.006, Light <0.008, Light+ <0.010, Moderate <0.013, Severe >=0.013
-  var VWS_THRESH = [0.013, 0.010, 0.008, 0.006, 0.004];
+  // VWS overlay: shear in s^-1; thresholds match ANA WSCP kt/1000ft via WSCP_VWS_SHEAR_SI_TO_KT_PER_KFT (gfs-vws.js).
+  function initVwsThrSi() {
+    if (typeof window !== 'undefined' && window.WSCP_VWS_THRESHOLDS_SI && window.WSCP_VWS_THRESHOLDS_SI.length === 5) {
+      return window.WSCP_VWS_THRESHOLDS_SI.slice();
+    }
+    var K = (typeof window !== 'undefined' && window.WSCP_VWS_SHEAR_SI_TO_KT_PER_KFT)
+      ? window.WSCP_VWS_SHEAR_SI_TO_KT_PER_KFT
+      : (1.943844 * 0.3048 * 1000);
+    return [18 / K, 13 / K, 10 / K, 7 / K, 5 / K];
+  }
+  var VWS_THRESH = initVwsThrSi();
   // Ellrod (TI x10^-7 s^-2): literature bands Severe 8+, Moderate 6-8, Light 4-6, Smooth 0-4
   var ELLROD_DISPLAY_SCALE = 1e7;
   var TI1_THRESH = [8, 6, 4, 2, 1];
@@ -73,7 +80,10 @@
   function labelsForMethod(method) {
     var m = normalizeMethod(method);
     if (m === 'VWS') {
-      return ['SEV (13+)', 'MOD (10-12)', 'L+ (8-9)', 'L (6-7)', 'L- (4-5)', 'SMT (0-3)'];
+      if (typeof window !== 'undefined' && window.WSCP_VWS_LABELS_GFS_ORDER && window.WSCP_VWS_LABELS_GFS_ORDER.length === 6) {
+        return window.WSCP_VWS_LABELS_GFS_ORDER.slice();
+      }
+      return ['SEV (18+)', 'MOD (13-17)', 'L+ (10-12)', 'L (7-9)', 'L- (5-6)', 'SMT (0-4)'];
     }
     if (m === 'TI1') {
       return ['SEV (8+)', 'HVY (6-8)', 'MOD (4-6)', 'L (2-4)', 'MIN (1-2)', 'SMT (<1)'];
@@ -967,7 +977,7 @@
     setThresholds: function (m, arr) {
       if (!arr || arr.length !== 5) return;
       var mm = normalizeMethod(m);
-      if (mm === 'VWS') VWS_THRESH = arr;
+      if (mm === 'VWS') VWS_THRESH = arr.slice();
       else if (mm === 'TI1') TI1_THRESH = arr;
       else if (mm === 'TI2') TI2_THRESH = arr;
     },
