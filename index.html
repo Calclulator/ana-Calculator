@@ -36,6 +36,7 @@
   #wx-panel .wx-ctrl-bar #avoidNm{font-size:14px!important;}
   #wx-panel .wx-ctrl-bar #ap-metar-refresh{font-size:13px;padding:2px 8px;line-height:1.2;margin-left:6px;}
   #wx-panel .wx-ctrl-bar #ap-metar-refresh:disabled{opacity:0.45;cursor:not-allowed;}
+  #wx-panel .wx-ctrl-bar .landmark-coord-inp.landmark-invalid{border-color:#ef5350!important;box-shadow:0 0 0 1px #ef5350;}
   .legend-row{display:flex;flex-wrap:wrap;align-items:center;line-height:1.5;}
   .legend-chip{display:inline-flex;align-items:center;gap:4px;margin-right:10px;margin-bottom:4px;font-size:1em;white-space:nowrap;}
   .legend-chip-swatch{flex-shrink:0;width:14px;height:14px;border:1px solid rgba(129,147,168,.55);}
@@ -278,6 +279,12 @@
     <input type="number" id="avoidNm" min="1" max="200" placeholder="NM"
            style="width:52px;background:transparent;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:inherit;font-size:11px;padding:2px 4px;"
            oninput="drawAvoidLine()">
+    <span class="lbl" style="margin-left:8px;">Landmark:</span>
+    <input type="text" id="landmark-coord" class="landmark-coord-inp" placeholder="3536N13942E"
+           style="width:118px;background:transparent;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:inherit;font-size:11px;padding:2px 4px;"
+           onkeydown="if(event.key==='Enter'){applyLandmarkFromInput();}"
+           onblur="applyLandmarkFromInput()">
+    <button type="button" class="btn" onclick="clearLandmark()" style="padding:2px 6px;">(削除)</button>
     <span id="sat-lbl" style="margin-left:auto;font-size:10px;color:#546e7a;"></span>
     <span id="wxr-gfs-progress-mobile"></span>
   </div>
@@ -424,6 +431,10 @@
     <span style="font-size:1em;color:#90a4ae;margin-left:8px;">Cell shows:</span>
     <button class="btn on" id="atm-gfs-show-wt" onclick="setAtmGfsShow('wt')">Wind &amp; temp</button>
     <button class="btn" id="atm-gfs-show-isa" onclick="setAtmGfsShow('isa')">ISA deviation</button>
+  </div>
+  <div id="atm-gfs-validutc-row" style="display:none;padding:6px 12px;align-items:center;gap:8px;border-bottom:1px solid #1e2a38;overflow-x:auto;white-space:nowrap;flex-wrap:nowrap;font-size:0.92em;line-height:1.35;color:#90a4ae;">
+    <span style="flex-shrink:0;">validUtc:</span>
+    <span id="atm-gfs-validutc-text" style="color:#cfd8dc;"></span>
   </div>
   <div id="atm-gfs-scroll-top" style="flex:1;min-height:0;overflow:auto;padding:6px;">
     <div id="atm-gfs-tbody-wrap"></div>
@@ -921,6 +932,7 @@ function navTo(tab){
   if(tab === 'atm-gfs') {
     renderGfsAtmTable();
     renderGfsWsTable();
+    if(typeof renderAtmGfsValidUtcRow === 'function') renderAtmGfsValidUtcRow();
     ensureGfsLoadedForAtm();
     if(window.GFS_POINT && window.GFS_POINT.status === 'loading' &&
         typeof window.GFS_ATM_PRELOAD_TOTAL === 'number' && window.GFS_ATM_PRELOAD_TOTAL > 0) {
@@ -1761,6 +1773,31 @@ function calcEto(ctmeMin) {
   return minsToHHMM(ref+ctmeMin);
 }
 
+// ATO - ETO (min) at the rearmost WP with ATO entered; 0 if none
+function computeTimeDeltaMin() {
+  if(typeof FP_ROWS === 'undefined' || !FP_ROWS || !FP_ROWS.length) return 0;
+  var ref = DEP_ATO_MIN !== null ? DEP_ATO_MIN : (DEP_STD_MIN !== null ? DEP_STD_MIN : null);
+  if(ref === null) return 0;
+  var lastDelta = 0;
+  var found = false;
+  var i, row, etoMin, atoMin, diff;
+  for(i = 0; i < FP_ROWS.length; i++) {
+    row = FP_ROWS[i];
+    if(!row || (typeof row.id === 'string' && row.id.charAt(0) === '-')) continue;
+    if(!row.ato || String(row.ato).trim() === '') continue;
+    if(row.ctme === null || row.ctme === undefined) continue;
+    etoMin = ref + row.ctme;
+    atoMin = hhmmToMins(String(row.ato).trim());
+    if(atoMin === null) continue;
+    diff = atoMin - etoMin;
+    if(diff > 720) diff -= 1440;
+    if(diff < -720) diff += 1440;
+    lastDelta = diff;
+    found = true;
+  }
+  return found ? lastDelta : 0;
+}
+
 // =====================================================================
 // FIR GEOGRAPHIC DETECTION (point-in-polygon, ray casting)
 // =====================================================================
@@ -1984,6 +2021,7 @@ function onAtoChange(idx,val) {
   if(document.getElementById('dep') && document.getElementById('dep').checked) {
     if(typeof fetchAc === 'function') fetchAc();
   }
+  if(typeof renderAtmGfsValidUtcRow === 'function') renderAtmGfsValidUtcRow();
 }
 function onFuelChange(idx,val)  { FP_ROWS[idx].actualFuel=val.trim(); renderFpTable(); }
 function onCrossChange(idx,val) {
@@ -2891,6 +2929,73 @@ function syncWpEtoUtcFromSchedule() {
     w = WP[i];
     w.etoUtc = gfsAtmValidUtcForWp(w);
   }
+  if(typeof renderAtmGfsValidUtcRow === 'function') renderAtmGfsValidUtcRow();
+}
+
+function atmGfsValidUtcWpIdList() {
+  var wpIds = [];
+  var i, r, wi, hasWp;
+  if(typeof FP_ROWS !== 'undefined' && FP_ROWS && FP_ROWS.length) {
+    FP_ROWS.forEach(function(row) {
+      if(typeof row.id !== 'string') return;
+      if(row.id.charAt(0) === '-') return;
+      hasWp = false;
+      for(wi = 0; wi < WP.length; wi++) {
+        if(WP[wi].id === row.id) { hasWp = true; break; }
+      }
+      if(hasWp) wpIds.push(row.id);
+    });
+  }
+  if(wpIds.length === 0 && typeof WP !== 'undefined' && WP && WP.length) {
+    for(i = 0; i < WP.length; i++) wpIds.push(WP[i].id);
+  }
+  return wpIds;
+}
+
+function renderAtmGfsValidUtcRow() {
+  var rowEl = document.getElementById('atm-gfs-validutc-row');
+  var txtEl = document.getElementById('atm-gfs-validutc-text');
+  if(!rowEl || !txtEl) return;
+  if(typeof WP === 'undefined' || !WP || !WP.length) {
+    rowEl.style.display = 'none';
+    return;
+  }
+  var wpIds = atmGfsValidUtcWpIdList();
+  if(!wpIds.length) {
+    rowEl.style.display = 'none';
+    return;
+  }
+  var items = [];
+  var ii, wi, wpObj, vu, zLbl;
+  for(ii = 0; ii < wpIds.length; ii++) {
+    wpObj = null;
+    for(wi = 0; wi < WP.length; wi++) {
+      if(WP[wi].id === wpIds[ii]) { wpObj = WP[wi]; break; }
+    }
+    if(!wpObj) continue;
+    vu = gfsSharedValidUtcForWp(wpObj);
+    zLbl = vu.getUTCHours() + 'Z';
+    items.push({ id: wpIds[ii], z: zLbl });
+  }
+  if(!items.length) {
+    rowEl.style.display = 'none';
+    return;
+  }
+  var parts = [];
+  var segStart = 0;
+  var jj;
+  for(jj = 1; jj <= items.length; jj++) {
+    if(jj === items.length || items[jj].z !== items[segStart].z) {
+      if(segStart === jj - 1) {
+        parts.push(items[segStart].id + ' ' + items[segStart].z);
+      } else {
+        parts.push(items[segStart].id + '-' + items[jj - 1].id + ' ' + items[segStart].z);
+      }
+      segStart = jj;
+    }
+  }
+  txtEl.textContent = parts.join(' / ');
+  rowEl.style.display = 'flex';
 }
 
 function gfsAtWpIsaFallback(wp, alt, validUtc) {
@@ -3423,6 +3528,7 @@ function renderGfsAtmTable() {
   });
   html += '</tbody></table>';
   wrap.innerHTML = html;
+  if(typeof renderAtmGfsValidUtcRow === 'function') renderAtmGfsValidUtcRow();
 }
 
 function renderAtmGfsWsInlineHelp(methodOpt) {
@@ -5725,6 +5831,64 @@ fetchSigmetGeojsonBypassCache().then(function() {
 }).catch(function() {});
 
 // =====================================================================
+// LANDMARK (☆)
+// =====================================================================
+var LANDMARK_MARKER = null;
+
+function parseLandmarkCoord(s) {
+  var m = String(s || '').trim().match(/^(\d{2})(\d{2})([NSns])(\d{3})(\d{2})([EWew])$/);
+  if(!m) return null;
+  var lat = parseInt(m[1], 10) + parseInt(m[2], 10) / 60;
+  if(m[3].toUpperCase() === 'S') lat = -lat;
+  var lon = parseInt(m[4], 10) + parseInt(m[5], 10) / 60;
+  if(m[6].toUpperCase() === 'W') lon = -lon;
+  return { lat: lat, lon: lon };
+}
+
+function clearLandmarkMarkerOnly() {
+  if(LANDMARK_MARKER && map) {
+    try { map.removeLayer(LANDMARK_MARKER); } catch(_e) {}
+  }
+  LANDMARK_MARKER = null;
+}
+
+function clearLandmark() {
+  var inp = document.getElementById('landmark-coord');
+  if(inp) {
+    inp.value = '';
+    inp.classList.remove('landmark-invalid');
+  }
+  clearLandmarkMarkerOnly();
+}
+
+function applyLandmarkFromInput() {
+  var inp = document.getElementById('landmark-coord');
+  if(!inp || typeof map === 'undefined' || !map) return;
+  var raw = inp.value.trim();
+  if(!raw) {
+    inp.classList.remove('landmark-invalid');
+    clearLandmarkMarkerOnly();
+    return;
+  }
+  var p = parseLandmarkCoord(raw);
+  if(!p) {
+    inp.classList.add('landmark-invalid');
+    return;
+  }
+  inp.classList.remove('landmark-invalid');
+  clearLandmarkMarkerOnly();
+  var ic = L.divIcon({
+    html: '<div style="font-size:24px;line-height:1;color:gold;-webkit-text-stroke:1px #000;text-shadow:0 0 1px #000,0 0 1px #000;">★</div>',
+    className: '',
+    iconSize: [24, 24],
+    iconAnchor: [12, 12]
+  });
+  LANDMARK_MARKER = L.marker([p.lat, p.lon], { icon: ic, zIndexOffset: 900 }).addTo(map);
+  LANDMARK_MARKER.bindTooltip(raw, { className: 'wxt', direction: 'top', offset: [0, -10] });
+  if(typeof bringTop === 'function') bringTop();
+}
+
+// =====================================================================
 // METAR
 // =====================================================================
 var AP_CHECKWX_HEADERS = { headers: { 'X-API-Key': 'eb52e4c6ca254584842adb8dc574b4f8' } };
@@ -6317,12 +6481,16 @@ function enrichRoutePosTrkLabel(rpos, vwp) {
 }
 
 function calcRoutePos() {
-  if(WP.length < 2 || DEP_ATO_MIN === null) return null;
+  if(WP.length < 2) return null;
+  var ref = DEP_ATO_MIN !== null ? DEP_ATO_MIN : DEP_STD_MIN;
+  if(ref === null) return null;
   if(WP[0].lngU === undefined) unwrapWPs(WP);
   var vwp = WP.filter(function(w){ return w.ctme !== null; });
   if(vwp.length < 2) return null;
   var now = new Date();
-  var elapsed = now.getUTCHours()*60 + now.getUTCMinutes() - DEP_ATO_MIN;
+  var nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  var delta = computeTimeDeltaMin();
+  var elapsed = nowMin - delta - ref;
   if(elapsed < 0) elapsed += 1440;
   var rpos;
   if(elapsed <= vwp[0].ctme) {
