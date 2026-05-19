@@ -37,6 +37,7 @@
   #wx-panel .wx-ctrl-bar #ap-metar-refresh{font-size:13px;padding:2px 8px;line-height:1.2;margin-left:6px;}
   #wx-panel .wx-ctrl-bar #ap-metar-refresh:disabled{opacity:0.45;cursor:not-allowed;}
   #wx-panel .wx-ctrl-bar .landmark-coord-inp.landmark-invalid{border-color:#ef5350!important;box-shadow:0 0 0 1px #ef5350;}
+  #wx-panel .wx-ctrl-bar .wx-landmark-wrap{display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px;margin-left:20px;}
   .legend-row{display:flex;flex-wrap:wrap;align-items:center;line-height:1.5;}
   .legend-chip{display:inline-flex;align-items:center;gap:4px;margin-right:10px;margin-bottom:4px;font-size:1em;white-space:nowrap;}
   .legend-chip-swatch{flex-shrink:0;width:14px;height:14px;border:1px solid rgba(129,147,168,.55);}
@@ -259,6 +260,14 @@
     <label class="ck"><input type="checkbox" id="oSig" checked onchange="loadSigmets()"> SIGMETs</label>
     <label class="ck"><input type="checkbox" id="oMetar" onchange="onApOverlayToggle()" oninput="onApOverlayToggle()" onclick="onApOverlayToggle()"> A/P</label>
     <button type="button" class="btn" id="ap-metar-refresh" onclick="onApMetarRefreshClicked()" disabled title="METAR/TAF を再取得">(METAR更新)</button>
+    <span class="wx-landmark-wrap">
+      <span class="lbl">Landmark:</span>
+      <input type="text" id="landmark-coord" class="landmark-coord-inp" placeholder="3536N13942E"
+             style="width:118px;background:transparent;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:inherit;font-size:11px;padding:2px 4px;"
+             onkeydown="if(event.key==='Enter'){applyLandmarkFromInput();}"
+             onblur="applyLandmarkFromInput()">
+      <button type="button" class="btn" onclick="clearLandmark()" style="padding:2px 6px;">(削除)</button>
+    </span>
     <label class="ck" style="display:none;"><input type="checkbox" id="oLightning" onchange="toggleLightning()"> Lightning</label>
     <span class="wx-ovl-break"></span>
     <label class="ck"><input type="checkbox" id="oTurb" checked onchange="onWxTurbCorrToggle()"> Turbulence corridor</label>
@@ -279,12 +288,6 @@
     <input type="number" id="avoidNm" min="1" max="200" placeholder="NM"
            style="width:52px;background:transparent;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:inherit;font-size:11px;padding:2px 4px;"
            oninput="drawAvoidLine()">
-    <span class="lbl" style="margin-left:8px;">Landmark:</span>
-    <input type="text" id="landmark-coord" class="landmark-coord-inp" placeholder="3536N13942E"
-           style="width:118px;background:transparent;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:inherit;font-size:11px;padding:2px 4px;"
-           onkeydown="if(event.key==='Enter'){applyLandmarkFromInput();}"
-           onblur="applyLandmarkFromInput()">
-    <button type="button" class="btn" onclick="clearLandmark()" style="padding:2px 6px;">(削除)</button>
     <span id="sat-lbl" style="margin-left:auto;font-size:10px;color:#546e7a;"></span>
     <span id="wxr-gfs-progress-mobile"></span>
   </div>
