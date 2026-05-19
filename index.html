@@ -5622,6 +5622,35 @@ function toggleMode() {
     #crew-rest-panel .cr-summary{color:#e65100!important;border-top-color:#d0d8e4!important;}
     #crew-rest-panel .cr-box h3{color:#1565c0!important;}
     #crew-rest-panel .cr-crew-note{color:#546e7a!important;}
+    /* Step P: Day mode contrast — Landmark, 回避, METAR更新, validUtc */
+    body.day-mode #wx-panel .wx-ctrl-bar .lbl{color:#333!important;}
+    body.day-mode #wx-panel .wx-ctrl-bar .ck{color:#333!important;}
+    body.day-mode #wx-panel .wx-ctrl-bar #avoidNm,
+    body.day-mode #wx-panel .wx-ctrl-bar .landmark-coord-inp{
+      color:#222!important;background:#fff!important;border:1px solid #999!important;
+    }
+    body.day-mode #wx-panel .wx-ctrl-bar #avoidNm::placeholder,
+    body.day-mode #wx-panel .wx-ctrl-bar .landmark-coord-inp::placeholder{color:#666!important;}
+    body.day-mode #wx-panel .wx-ctrl-bar #avoidL,
+    body.day-mode #wx-panel .wx-ctrl-bar #avoidR,
+    body.day-mode #wx-panel .wx-ctrl-bar #ap-metar-refresh,
+    body.day-mode #wx-panel .wx-ctrl-bar button[onclick="clearLandmark()"]{
+      color:#222!important;background:#fff!important;border:1px solid #999!important;
+    }
+    body.day-mode #wx-panel .wx-ctrl-bar #avoidL.on,
+    body.day-mode #wx-panel .wx-ctrl-bar #avoidR.on{
+      color:#1565c0!important;border-color:#1565c0!important;background:#e3f2fd!important;
+    }
+    body.day-mode #wx-panel .wx-ctrl-bar #ap-metar-refresh:disabled{
+      color:#757575!important;background:#eceff1!important;border-color:#bbb!important;
+      opacity:1!important;cursor:not-allowed!important;
+    }
+    body.day-mode #atm-gfs-validutc-row{color:#546e7a!important;border-bottom-color:#d0d8e4!important;}
+    body.day-mode #atm-gfs-validutc-text{color:#222!important;}
+    body.day-mode .leaflet-tooltip.wxt-landmark{
+      color:#222!important;background:#fff!important;border:1px solid #999!important;
+      box-shadow:0 1px 4px rgba(0,0,0,.15)!important;
+    }
   ` : '';
   applyMapTheme();
   if(LY.sat) LY.sat.bringToFront();
@@ -5884,7 +5913,7 @@ function applyLandmarkFromInput() {
     iconAnchor: [12, 12]
   });
   LANDMARK_MARKER = L.marker([p.lat, p.lon], { icon: ic, zIndexOffset: 900 }).addTo(map);
-  LANDMARK_MARKER.bindTooltip(raw, { className: 'wxt', direction: 'top', offset: [0, -10] });
+  LANDMARK_MARKER.bindTooltip(raw, { className: 'wxt wxt-landmark', direction: 'top', offset: [0, -10] });
   if(typeof bringTop === 'function') bringTop();
 }
 
