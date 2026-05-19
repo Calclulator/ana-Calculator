@@ -1654,6 +1654,7 @@ function runParse() {
     finalWP[finalWP.length - 1].tc = null;
 
     WP = finalWP;
+    gfsAtmInvalidateDerivedCache();
     if(typeof gfsRadarInvalidateRoutePointsMemo === 'function') gfsRadarInvalidateRoutePointsMemo();
     VWS = newVWS;
     var hasWindFcst = Object.keys(newVWS_BY_FL).length > 0;
@@ -2785,6 +2786,50 @@ var ELLROD_DISPLAY_SCALE = 1e7;
 var GFS_ATM_LEVELS_MB = [400, 300, 275, 250, 225, 200, 175, 150];
 var GFS_ATM_COLUMN_CACHE = {};
 var GFS_WS_PT_CACHE = {};
+var GFS_ATM_DERIVED_CACHE_ROUTE_KEY = '';
+
+function gfsAtmRouteCacheKey() {
+  if(typeof WP === 'undefined' || !WP || !WP.length) return '';
+  var sig = [];
+  var i, w, p;
+  for(i = 0; i < WP.length; i++) {
+    w = WP[i];
+    p = normalizePoint(w);
+    if(p) {
+      var vuSig = (window.GeoHelpers && typeof window.GeoHelpers.wpValidUtcHour === 'function')
+        ? String(window.GeoHelpers.wpValidUtcHour(w, getFallbackUtc(w)).getTime())
+        : String(gfsAtmValidUtcForWp(w).getTime());
+      sig.push(w.id + ':' + p.lat + ':' + p.lon + ':' + (w.ctme || 0) + ':' + vuSig);
+    } else {
+      sig.push(w.id + ':NOCOORD:' + (w.ctme || 0));
+    }
+  }
+  var dep = (typeof DEP_ATO_MIN === 'number' ? DEP_ATO_MIN : (typeof DEP_STD_MIN === 'number' ? DEP_STD_MIN : -1));
+  return dep + '|' + sig.join('|');
+}
+
+function gfsAtmInvalidateDerivedCache() {
+  GFS_ATM_COLUMN_CACHE = {};
+  GFS_WS_PT_CACHE = {};
+  GFS_ATM_DERIVED_CACHE_ROUTE_KEY = '';
+}
+
+function gfsAtmEnsureDerivedCacheRoute() {
+  var k = gfsAtmRouteCacheKey();
+  if(k !== GFS_ATM_DERIVED_CACHE_ROUTE_KEY) {
+    GFS_ATM_COLUMN_CACHE = {};
+    GFS_WS_PT_CACHE = {};
+    GFS_ATM_DERIVED_CACHE_ROUTE_KEY = k;
+  }
+}
+
+function gfsSharedValidUtcForWp(wp) {
+  if(!wp) return gfsAtmValidUtcForWp({});
+  if(window.GeoHelpers && typeof window.GeoHelpers.wpValidUtcHour === 'function') {
+    return window.GeoHelpers.wpValidUtcHour(wp, getFallbackUtc(wp));
+  }
+  return gfsAtmValidUtcForWp(wp);
+}
 var GFS_POINT_STATE = { status: 'idle', error: null, key: null };
 
 function setAtmGfsHeat(mode) {
@@ -2890,9 +2935,7 @@ function gfsAtWpIsaFallback(wp, alt, validUtc) {
 }
 
 function gfsAtmBuildVerticalColumn(wp, dbgCol) {
-  var validUtc = (window.GeoHelpers && typeof window.GeoHelpers.wpValidUtcHour === 'function')
-    ? window.GeoHelpers.wpValidUtcHour(wp, getFallbackUtc(wp))
-    : gfsAtmValidUtcForWp(wp);
+  var validUtc = gfsSharedValidUtcForWp(wp);
   var pCol = normalizePoint(wp);
   if(!pCol) return null;
   var cacheKey = wp.id + '|' + validUtc.getTime();
@@ -3102,6 +3145,7 @@ function atmGfsRefetchClicked(btn) {
   } else {
     window.__gfsPreloadKeys = new Set();
   }
+  gfsAtmInvalidateDerivedCache();
   if(typeof gfsRadarInvalidateRoutePointsMemo === 'function') {
     gfsRadarInvalidateRoutePointsMemo();
   }
@@ -3302,7 +3346,7 @@ function renderGfsAtmTable() {
     return;
   }
 
-  GFS_ATM_COLUMN_CACHE = {};
+  gfsAtmEnsureDerivedCacheRoute();
 
   // WP順 (FP_ROWS の順を尊重、FIR境界行は除外。WP 配列に存在するもののみ)
   var wpIds = [];
@@ -3433,7 +3477,7 @@ function renderGfsWsTable() {
     renderAtmGfsWsInlineHelp(wsModeHelp);
     return;
   }
-  GFS_WS_PT_CACHE = {};
+  gfsAtmEnsureDerivedCacheRoute();
   var gfsWsEllrodLogSeen = {};
 
   function gfsWsPaletteCell(mode, value) {
@@ -4683,13 +4727,28 @@ function drawRoute() {
   updateWxFlPanel();
 }
 
+function destroyGfsRadarLayer() {
+  if(!gfsRadarLayer) return;
+  if(typeof map !== 'undefined' && map) {
+    try {
+      if(typeof gfsRadarLayer.eachLayer === 'function') {
+        var childLayers = [];
+        gfsRadarLayer.eachLayer(function(ly) { childLayers.push(ly); });
+        var ci;
+        for(ci = 0; ci < childLayers.length; ci++) {
+          try { map.removeLayer(childLayers[ci]); } catch(_eChild) {}
+        }
+      }
+      map.removeLayer(gfsRadarLayer);
+    } catch(_eRm) {}
+    try { map.invalidateSize(true); } catch(_eInv) {}
+  }
+  gfsRadarLayer = null;
+}
+
 function applyGfsRadarForCurrentMethod() {
   if(typeof map === 'undefined' || !map) return;
-  if(gfsRadarLayer) {
-    try { map.removeLayer(gfsRadarLayer); } catch(e) {}
-    gfsRadarLayer = null;
-    try { map.invalidateSize(); } catch(_eInv) {}
-  }
+  destroyGfsRadarLayer();
   if(!WX_GFS_CORR_ON) {
     setWxrGfsProgressText('');
     wxrLogGfsLayerState('off');
@@ -4700,8 +4759,14 @@ function applyGfsRadarForCurrentMethod() {
   if(typeof gfsPointAt !== 'function') return;
   var routePts = getOrBuildGfsRadarRoutePoints();
   if(!routePts || !routePts.length) return;
+  var tiOffsetNm = 200;
+  var overlayPlan = gfsRadarBuildOverlayPreloadPlan(routePts, methodKey, tiOffsetNm);
   var renderReady = function(){
-    window.GFS_POINT.status = 'ready';
+    if(!window.GFS_POINT) window.GFS_POINT = {};
+    if(window.GFS_POINT.status !== 'error') {
+      window.GFS_POINT.status = 'ready';
+      window.GFS_POINT.error = null;
+    }
     gfsRadarLayer = GfsRadar.render(map, {
       method: methodKey,
       fl: CURRENT_FL,
@@ -4709,18 +4774,26 @@ function applyGfsRadarForCurrentMethod() {
       validUtc: new Date(),
       routePoints: routePts,
       fhr: (window.GFS_POINT && typeof window.GFS_POINT.fhr === 'number') ? window.GFS_POINT.fhr : null,
-      tiOffsetNm: 200
+      tiOffsetNm: tiOffsetNm
     });
     bringTop();
     wxrLogGfsLayerState('render');
     clearWxrGfsProgressDelayed(0, 0);
+    try { map.invalidateSize(true); } catch(_eInv2) {}
   };
+  if(overlayPlan.mMissing === 0) {
+    gfsRadarSeedGfsPointMetaFromPlan(routePts);
+    renderReady();
+    return;
+  }
   if(!window.GFS_POINT) window.GFS_POINT = {};
-  window.GFS_POINT.status = 'loading';
-  window.GFS_POINT.error = null;
+  if(window.GFS_POINT.status !== 'ready') {
+    window.GFS_POINT.status = 'loading';
+    window.GFS_POINT.error = null;
+  }
   preloadGfsRadarPoints(routePts, {
     method: methodKey,
-    tiOffsetNm: 200,
+    tiOffsetNm: tiOffsetNm,
     onProgress: function(finished, total, ngCount){
       updateWxrGfsProgress(finished, total, ngCount);
     },
@@ -4853,6 +4926,12 @@ function gfsRadarEstimateCtmeAtIndex(routePts, idx) {
 
 function gfsRadarValidUtcForRoutePoint(routePts, idx) {
   var p = routePts[idx];
+  if(p && p.type === 'real' && p.id && typeof WP !== 'undefined' && WP && WP.length) {
+    var wi;
+    for(wi = 0; wi < WP.length; wi++) {
+      if(WP[wi].id === p.id) return gfsSharedValidUtcForWp(WP[wi]);
+    }
+  }
   if(p && p.etoUtc instanceof Date && !isNaN(p.etoUtc.getTime())) {
     if(window.GeoHelpers && typeof window.GeoHelpers.floorUtcHour === 'function') {
       return window.GeoHelpers.floorUtcHour(p.etoUtc);
@@ -5000,8 +5079,10 @@ function gfsRadarBuildOverlayPreloadPlan(routePts, methodKey, tiOffsetNm) {
   function hasNum(v) { return typeof v === 'number' && isFinite(v); }
   function consider(lat, lon, vu) {
     if(!hasNum(lat) || !hasNum(lon) || !vu || !(vu instanceof Date) || isNaN(vu.getTime())) return;
-    if(typeof gfsPointCacheKey !== 'function') return;
-    var k = gfsPointCacheKey(lat, lon, vu);
+    var k = (typeof window.makeGfsCacheKey === 'function')
+      ? window.makeGfsCacheKey(lat, lon, null, vu)
+      : ((typeof gfsPointCacheKey === 'function') ? gfsPointCacheKey(lat, lon, vu) : '');
+    if(!k) return;
     if(!k) return;
     allKeyObj[k] = 1;
     if(typeof gfsPointCached === 'function' && gfsPointCached(lat, lon, vu)) return;

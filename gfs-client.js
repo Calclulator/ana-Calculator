@@ -214,6 +214,15 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
     return roundCoordForKey(lat) + '|' + roundCoordForKey(lon) + '|' + cycle + '|' + fhr;
   }
 
+  /** Shared POINT_CACHE key: lat/lon toFixed(3), validUtc → cycle|fhr. mb ignored (point API returns full profile). */
+  function makeGfsCacheKey(lat, lon, mb, validUtc) {
+    if (typeof lat !== 'number' || isNaN(lat) || typeof lon !== 'number' || isNaN(lon)) return '';
+    lon = normalizeLonClient(lon);
+    if (!(validUtc instanceof Date) || isNaN(validUtc.getTime())) return '';
+    var meta = pointMetaFromValid(validUtc);
+    return pointKey(lat, lon, meta.cycle, meta.fhr);
+  }
+
   function pointUrl(lat, lon, cycle, fhr) {
     var base = GFS_PROXY.replace(/\/$/, '');
     return base + '/api/point?lat=' + encodeURIComponent(lat) +
@@ -259,7 +268,7 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
       return;
     }
     var meta = pointMetaFromValid(validUtc);
-    var key = pointKey(lat, lon, meta.cycle, meta.fhr);
+    var key = makeGfsCacheKey(lat, lon, null, validUtc);
     var cached = POINT_CACHE[key];
     if (cached && cached.status === 'ready') {
       if (typeof done === 'function') done(null, cached.data);
@@ -312,8 +321,7 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
     if (typeof lat !== 'number' || isNaN(lat) || typeof lon !== 'number' || isNaN(lon)) return null;
     lon = normalizeLonClient(lon);
     if (!(validUtc instanceof Date) || isNaN(validUtc.getTime())) return null;
-    var meta = pointMetaFromValid(validUtc);
-    var key = pointKey(lat, lon, meta.cycle, meta.fhr);
+    var key = makeGfsCacheKey(lat, lon, null, validUtc);
     var rec = POINT_CACHE[key];
     return (rec && rec.status === 'ready') ? rec.data : null;
   }
@@ -651,12 +659,9 @@ var GFS_PROXY = 'https://ana-calculator-gfs-proxy.vercel.app';
   global.gfsValueAt = gfsValueAt;
   global.gfsPointAt = gfsPointAt;
   global.gfsPointCached = gfsPointCached;
+  global.makeGfsCacheKey = makeGfsCacheKey;
   global.gfsPointCacheKey = function (lat, lon, validUtc) {
-    if (typeof lat !== 'number' || isNaN(lat) || typeof lon !== 'number' || isNaN(lon)) return '';
-    lon = normalizeLonClient(lon);
-    if (!(validUtc instanceof Date) || isNaN(validUtc.getTime())) return '';
-    var meta = pointMetaFromValid(validUtc);
-    return pointKey(lat, lon, meta.cycle, meta.fhr);
+    return makeGfsCacheKey(lat, lon, null, validUtc);
   };
   global.gfsPointMetaFromValid = pointMetaFromValid;
   global.gfsPointClearCache = gfsPointClearCache;
