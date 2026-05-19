@@ -1596,10 +1596,15 @@ function runParse() {
     if(seen[wid]) continue;
     seen[wid] = true;
 
-    // CTME
+    // CTME / TC (行A 先頭列 = True Course)
     var tokA = lineA.trim().split(/\s+/);
     var ctmeMin = null;
     if(tokA[2]&&/^\d{1,2}\.\d{2}$/.test(tokA[2])) ctmeMin=parseCTME(tokA[2]);
+    var navTc = null;
+    if(tokA.length && /^\d{1,3}$/.test(tokA[0])) {
+      var tcNum = parseInt(tokA[0], 10);
+      if(tcNum >= 1 && tcNum <= 360) navTc = tcNum;
+    }
 
     // Fuel & Alt
     var afterCoord = lineA.slice(cpos+cm[1].length);
@@ -1615,16 +1620,8 @@ function runParse() {
       newVWS[wid] = Math.abs(ws2-ws1)/2;
     }
 
-    // 行B 先頭列 = MC (Mag Course): 次 WP 行の MC は「前 WP → 当該 WP」レグの磁方位
-    var tokB = lineB.trim().split(/\s+/);
-    var navMc = null;
-    if(tokB.length && /^\d{1,3}$/.test(tokB[0])) {
-      var mcNum = parseInt(tokB[0], 10);
-      if(mcNum >= 1 && mcNum <= 360) navMc = mcNum;
-    }
-
     console.log('[parse] WP found:', wid, c.lat.toFixed(2), c.lng.toFixed(2), 'ctme:', ctmeMin);
-    newWP.push({id:wid,lat:c.lat,lng:c.lng,t:false,ctme:ctmeMin,fuel:wfuel,alt:walt,phase:phaseForNextWp,navMc:navMc});
+    newWP.push({id:wid,lat:c.lat,lng:c.lng,t:false,ctme:ctmeMin,fuel:wfuel,alt:walt,phase:phaseForNextWp,navTc:navTc});
   }
   console.log('[parse] newWP total:', newWP.length, '| newAlts:', newAlts.length, '| newEtps:', newEtps.length);
 
@@ -1648,13 +1645,13 @@ function runParse() {
       if(i===0||i===finalWP.length-1) return true;
       return !altIdMap[w.id];
     });
-    // レグ始点 WP の mc = 次 WP の NAVLOG 行に記載の inbound MC (磁方位・整数)
+    // レグ始点 WP の tc = 次 WP の NAVLOG 行A 先頭 TC (真方位・整数)
     var wi;
     for(wi = 0; wi < finalWP.length - 1; wi++) {
-      var nm = finalWP[wi + 1].navMc;
-      finalWP[wi].mc = (nm != null && !isNaN(nm)) ? Math.round(Number(nm)) : null;
+      var nt = finalWP[wi + 1].navTc;
+      finalWP[wi].tc = (nt != null && !isNaN(nt)) ? Math.round(Number(nt)) : null;
     }
-    finalWP[finalWP.length - 1].mc = null;
+    finalWP[finalWP.length - 1].tc = null;
 
     WP = finalWP;
     if(typeof gfsRadarInvalidateRoutePointsMemo === 'function') gfsRadarInvalidateRoutePointsMemo();
@@ -6129,10 +6126,10 @@ function showMetarPanel(m,taf){
 // =====================================================================
 // AIRCRAFT TRACKING (OpenSky)
 // =====================================================================
-// 航路表示位置に最も近いレグの NAVLOG MC を TRK ラベル用に求める (レグ始点 WP の .mc)
-function formatTrkMcLabel(mc) {
-  if(mc == null || typeof mc !== 'number' || isNaN(mc)) return 'TRK ---';
-  var v = Math.round(Number(mc)) % 360;
+// 航路表示位置に最も近いレグの NAVLOG TC を TRK ラベル用に求める (レグ始点 WP の .tc)
+function formatTrkTcLabel(tc) {
+  if(tc == null || typeof tc !== 'number' || isNaN(tc)) return 'TRK ---';
+  var v = Math.round(Number(tc)) % 360;
   if(v < 0) v += 360;
   return 'TRK ' + String(v).padStart(3, '0');
 }
@@ -6150,12 +6147,12 @@ function apBeyondLastWpSegment(lat, lng, pts) {
   return (Vx * Ux + Vy * Uy) > 0;
 }
 
-function trkMcForPosition(lat, lng, pts) {
+function trkTcForPosition(lat, lng, pts) {
   var n = pts.length;
   if(n < 2) return null;
   if(apBeyondLastWpSegment(lat, lng, pts)) {
-    var mLast = pts[n - 2].mc;
-    return (mLast != null && !isNaN(mLast)) ? mLast : null;
+    var tLast = pts[n - 2].tc;
+    return (tLast != null && !isNaN(tLast)) ? tLast : null;
   }
   var TIE = 0.0005;
   var bestD = Infinity;
@@ -6198,8 +6195,8 @@ function trkMcForPosition(lat, lng, pts) {
   } else {
     ls = bestI;
   }
-  var mcUse = pts[ls] ? pts[ls].mc : null;
-  return (mcUse != null && !isNaN(mcUse)) ? mcUse : null;
+  var tcUse = pts[ls] ? pts[ls].tc : null;
+  return (tcUse != null && !isNaN(tcUse)) ? tcUse : null;
 }
 
 function enrichRoutePosTrkLabel(rpos, vwp) {
@@ -6208,7 +6205,7 @@ function enrichRoutePosTrkLabel(rpos, vwp) {
     rpos.trkLabel = 'TRK ---';
     return;
   }
-  rpos.trkLabel = formatTrkMcLabel(trkMcForPosition(rpos.lat, rpos.lng, vwp));
+  rpos.trkLabel = formatTrkTcLabel(trkTcForPosition(rpos.lat, rpos.lng, vwp));
 }
 
 function calcRoutePos() {
