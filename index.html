@@ -177,6 +177,8 @@
   #fdp-panel .fdp-row-in{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
   #fdp-panel .fdp-row-in label{font-size:13px;color:#90a4ae;min-width:120px;}
   #fdp-panel .fdp-inp{width:88px;background:#0d1117;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:inherit;font-size:15px;padding:6px 8px;}
+  #fdp-panel .fdp-inp.fdp-inp-invalid{border-color:#ef5350!important;box-shadow:0 0 0 1px #ef5350;}
+  #fdp-panel .fdp-inp.fdp-time-inp{width:168px;}
   #fdp-panel .fdp-sel{font-size:14px;padding:5px 8px;max-width:220px;}
   #fdp-panel .fdp-outputs{border:1px solid #1e2a38;border-radius:6px;padding:12px;background:#0d1117;margin-bottom:14px;}
   #fdp-panel .fdp-row{display:flex;align-items:baseline;gap:10px;margin-bottom:8px;flex-wrap:wrap;}
@@ -535,7 +537,7 @@
     <div class="fdp-inputs">
       <div class="fdp-row-in">
         <label for="fdp-su-time">S/U 時刻</label>
-        <input id="fdp-su-time" class="fdp-inp" type="text" placeholder="09:00" maxlength="5" oninput="refreshFdpCalc()" onchange="refreshFdpCalc()">
+        <input id="fdp-su-time" class="fdp-inp fdp-time-inp" type="text" placeholder="0900 または 09:00" oninput="refreshFdpCalc()" onchange="refreshFdpCalc()">
       </div>
       <div class="fdp-row-in">
         <label for="fdp-sectors">着陸回数</label>
@@ -564,7 +566,7 @@
       </div>
       <div class="fdp-row-in">
         <label for="fdp-flt-time">FLT Time</label>
-        <input id="fdp-flt-time" class="fdp-inp" type="text" placeholder="10:00" maxlength="5" oninput="refreshFdpCalc()" onchange="refreshFdpCalc()">
+        <input id="fdp-flt-time" class="fdp-inp fdp-time-inp" type="text" placeholder="1030 または 10:30" oninput="refreshFdpCalc()" onchange="refreshFdpCalc()">
       </div>
       <div class="fdp-row-in">
         <label for="fdp-taxi-out">Taxi-out (分)</label>
@@ -1209,6 +1211,12 @@ function onFdpCrewChange() {
   refreshFdpCalc();
 }
 
+function fdpSetTimeInputInvalid(el, invalid) {
+  if(!el) return;
+  if(invalid) el.classList.add('fdp-inp-invalid');
+  else el.classList.remove('fdp-inp-invalid');
+}
+
 function refreshFdpCalc() {
   if(typeof window.FdpCalc === 'undefined' || !window.FdpCalc.computeFdpLimit) return;
   var suEl = document.getElementById('fdp-su-time');
@@ -1218,9 +1226,16 @@ function refreshFdpCalc() {
   var fltEl = document.getElementById('fdp-flt-time');
   var toutEl = document.getElementById('fdp-taxi-out');
   var tinEl = document.getElementById('fdp-taxi-in');
-  var suParts = window.FdpCalc.parseSuHmToParts(suEl ? suEl.value : '');
-  var fltMin = window.FdpCalc.parseHmToMinutes(fltEl ? fltEl.value : '');
-  var hasSu = !!suParts;
+  var suRaw = suEl ? String(suEl.value).trim() : '';
+  var fltRaw = fltEl ? String(fltEl.value).trim() : '';
+  var suParsed = window.FdpCalc.parseTimeInput(suRaw);
+  var fltParsed = fltRaw ? window.FdpCalc.parseTimeInput(fltRaw) : null;
+  var fltMin = null;
+  if(fltParsed) fltMin = fltParsed.hour * 60 + fltParsed.min;
+
+  fdpSetTimeInputInvalid(suEl, suRaw.length > 0 && !suParsed);
+  fdpSetTimeInputInvalid(fltEl, fltRaw.length > 0 && !fltParsed);
+
   var outFdp = document.getElementById('fdp-out-max-fdp');
   var outBlk = document.getElementById('fdp-out-max-blk');
   var outBi = document.getElementById('fdp-out-latest-bi');
@@ -1229,7 +1244,7 @@ function refreshFdpCalc() {
   var outWarn = document.getElementById('fdp-out-warnings');
   var dash = '—';
 
-  if(!hasSu) {
+  if(!suParsed) {
     if(outFdp) outFdp.textContent = dash;
     if(outBlk) outBlk.textContent = dash;
     if(outBi) outBi.textContent = dash;
@@ -1240,8 +1255,8 @@ function refreshFdpCalc() {
   }
 
   var input = {
-    suHour: suParts.suHour,
-    suMin: suParts.suMin,
+    suHour: suParsed.hour,
+    suMin: suParsed.min,
     sectors: secEl ? parseInt(secEl.value, 10) : 1,
     crew: crewEl ? crewEl.value : 'single',
     restClass: restEl ? parseInt(restEl.value, 10) : 1,

@@ -2,8 +2,26 @@ import { describe, it, expect } from 'vitest';
 import {
   computeFdpLimit,
   formatDurationMin,
-  formatWallClockMin
+  formatWallClockMin,
+  parseTimeInput
 } from '../js/fdp-calc.js';
+
+describe('parseTimeInput', function () {
+  it('accepts HHMM and HH:MM variants', function () {
+    expect(parseTimeInput('0930')).toEqual({ hour: 9, min: 30 });
+    expect(parseTimeInput('09:30')).toEqual({ hour: 9, min: 30 });
+    expect(parseTimeInput('930')).toEqual({ hour: 9, min: 30 });
+    expect(parseTimeInput('9')).toEqual({ hour: 9, min: 0 });
+    expect(parseTimeInput('1430')).toEqual({ hour: 14, min: 30 });
+  });
+
+  it('rejects invalid values', function () {
+    expect(parseTimeInput('25:00')).toBeNull();
+    expect(parseTimeInput('09:65')).toBeNull();
+    expect(parseTimeInput('')).toBeNull();
+    expect(parseTimeInput('30')).toBeNull();
+  });
+});
 
 describe('computeFdpLimit sample cases', function () {
   it('case 1: single 09:00 sector 1', function () {

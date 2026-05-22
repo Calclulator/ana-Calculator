@@ -60,28 +60,45 @@ function fdpClampInt(v, lo, hi) {
   return n;
 }
 
-function parseHmToMinutes(str) {
+function parseTimeInput(str) {
   if (str === null || str === undefined) return null;
-  var s = String(str).trim();
+  var s = String(str).trim().replace(/[^0-9:]/g, '');
   if (!s) return null;
-  var m = s.match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) return null;
-  var h = parseInt(m[1], 10);
-  var min = parseInt(m[2], 10);
-  if (isNaN(h) || isNaN(min) || min < 0 || min > 59 || h < 0) return null;
-  return h * 60 + min;
+
+  var h, m;
+  if (s.indexOf(':') >= 0) {
+    var parts = s.split(':');
+    if (parts.length !== 2) return null;
+    h = parseInt(parts[0], 10);
+    m = parseInt(parts[1], 10);
+  } else if (s.length === 1 || s.length === 2) {
+    h = parseInt(s, 10);
+    m = 0;
+  } else if (s.length === 3) {
+    h = parseInt(s.charAt(0), 10);
+    m = parseInt(s.substr(1, 2), 10);
+  } else if (s.length === 4) {
+    h = parseInt(s.substr(0, 2), 10);
+    m = parseInt(s.substr(2, 2), 10);
+  } else {
+    return null;
+  }
+
+  if (isNaN(h) || isNaN(m)) return null;
+  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return { hour: h, min: m };
+}
+
+function parseHmToMinutes(str) {
+  var p = parseTimeInput(str);
+  if (!p) return null;
+  return p.hour * 60 + p.min;
 }
 
 function parseSuHmToParts(str) {
-  if (str === null || str === undefined) return null;
-  var s = String(str).trim();
-  if (!s) return null;
-  var m = s.match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) return null;
-  var h = parseInt(m[1], 10);
-  var min = parseInt(m[2], 10);
-  if (isNaN(h) || isNaN(min) || min < 0 || min > 59 || h < 0 || h > 23) return null;
-  return { suHour: h, suMin: min };
+  var p = parseTimeInput(str);
+  if (!p) return null;
+  return { suHour: p.hour, suMin: p.min };
 }
 
 function formatDurationMin(totalMin) {
@@ -195,6 +212,7 @@ var FdpCalcExports = {
   BLK_BASE_DOUBLE: BLK_BASE_DOUBLE,
   BLK_MULTI_DOWNGRADE: BLK_MULTI_DOWNGRADE,
   computeFdpLimit: computeFdpLimit,
+  parseTimeInput: parseTimeInput,
   parseHmToMinutes: parseHmToMinutes,
   parseSuHmToParts: parseSuHmToParts,
   formatDurationMin: formatDurationMin,
