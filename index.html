@@ -179,6 +179,10 @@
   #fdp-panel .fdp-inp{width:88px;background:#0d1117;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:inherit;font-size:15px;padding:6px 8px;}
   #fdp-panel .fdp-inp.fdp-inp-invalid{border-color:#ef5350!important;box-shadow:0 0 0 1px #ef5350;}
   #fdp-panel .fdp-inp.fdp-time-inp{width:168px;}
+  #fdp-panel .fdp-inp-wrap{display:inline-flex;align-items:center;gap:6px;}
+  #fdp-panel .fdp-field-status{font-size:14px;line-height:1;min-width:18px;color:#78909c;}
+  #fdp-panel .fdp-clear-row{margin-bottom:12px;}
+  #fdp-panel .fdp-clear-btn{font-size:13px;padding:4px 14px;}
   #fdp-panel .fdp-sel{font-size:14px;padding:5px 8px;max-width:220px;}
   #fdp-panel .fdp-outputs{border:1px solid #1e2a38;border-radius:6px;padding:12px;background:#0d1117;margin-bottom:14px;}
   #fdp-panel .fdp-row{display:flex;align-items:baseline;gap:10px;margin-bottom:8px;flex-wrap:wrap;}
@@ -566,15 +570,24 @@
       </div>
       <div class="fdp-row-in">
         <label for="fdp-flt-time">FLT Time</label>
-        <input id="fdp-flt-time" class="fdp-inp fdp-time-inp" type="text" placeholder="1030 または 10:30" oninput="refreshFdpCalc()" onchange="refreshFdpCalc()">
+        <span class="fdp-inp-wrap">
+          <input id="fdp-flt-time" class="fdp-inp fdp-time-inp" type="text" placeholder="1030 または 10:30" oninput="onFdpNavFieldInput('fdp-flt-time')" onchange="refreshFdpCalc()">
+          <span id="fdp-flt-time-status" class="fdp-field-status" aria-hidden="true"></span>
+        </span>
       </div>
       <div class="fdp-row-in">
         <label for="fdp-taxi-out">Taxi-out (分)</label>
-        <input id="fdp-taxi-out" class="fdp-inp" type="number" min="0" max="999" value="15" oninput="refreshFdpCalc()" onchange="refreshFdpCalc()">
+        <span class="fdp-inp-wrap">
+          <input id="fdp-taxi-out" class="fdp-inp" type="number" min="0" max="999" value="15" oninput="onFdpNavFieldInput('fdp-taxi-out')" onchange="refreshFdpCalc()">
+          <span id="fdp-taxi-out-status" class="fdp-field-status" aria-hidden="true"></span>
+        </span>
       </div>
       <div class="fdp-row-in">
         <label for="fdp-taxi-in">Taxi-in (分)</label>
-        <input id="fdp-taxi-in" class="fdp-inp" type="number" min="0" max="999" value="10" oninput="refreshFdpCalc()" onchange="refreshFdpCalc()">
+        <span class="fdp-inp-wrap">
+          <input id="fdp-taxi-in" class="fdp-inp" type="number" min="0" max="999" value="10" oninput="onFdpNavFieldInput('fdp-taxi-in')" onchange="refreshFdpCalc()">
+          <span id="fdp-taxi-in-status" class="fdp-field-status" aria-hidden="true"></span>
+        </span>
       </div>
     </div>
     <div class="fdp-outputs">
@@ -584,6 +597,9 @@
       <div class="fdp-row important"><span class="label">🎯 Latest Take-off:</span> <span id="fdp-out-latest-to" class="fdp-val">—</span></div>
       <div class="fdp-row sub"><span class="label">Latest Block-out (参考):</span> <span id="fdp-out-latest-bo" class="fdp-val">—</span></div>
       <div id="fdp-out-warnings" class="fdp-warnings"></div>
+    </div>
+    <div class="fdp-clear-row">
+      <button type="button" class="btn fdp-clear-btn" onclick="clearFdpCalc()">Clear</button>
     </div>
     <div class="fdp-notes">
       不測の事態時は +2h (シングル) / +3h (マルチプル・ダブル) まで延長可。詳細は OM 8-5-1 ③ 参照。
@@ -1007,7 +1023,8 @@ function showTab(name) {
     });
   }
   if(name==='fdp') {
-    if(typeof refreshFdpCalc === 'function') refreshFdpCalc();
+    if(typeof syncFdpFromNavlog === 'function') syncFdpFromNavlog();
+    else if(typeof refreshFdpCalc === 'function') refreshFdpCalc();
   }
 }
 function openNav(){
@@ -1202,11 +1219,118 @@ function clearCrewRest() {
 // =====================================================================
 // FDP CALC
 // =====================================================================
+window.NAVLOG = window.NAVLOG || {};
+
 function onFdpCrewChange() {
   var crewSel = document.getElementById('fdp-crew');
   var restRow = document.getElementById('fdp-rest-row');
   if(restRow) {
     restRow.style.display = (crewSel && crewSel.value !== 'single') ? 'flex' : 'none';
+  }
+  refreshFdpCalc();
+}
+
+function formatMinToHHMM(min) {
+  var h = Math.floor(min / 60);
+  var m = min % 60;
+  return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+}
+
+function fdpUpdateFieldStatus(el) {
+  if(!el) return;
+  var statusEl = document.getElementById(el.id + '-status');
+  if(!statusEl) return;
+  if(el.dataset.userEdited === 'true') {
+    statusEl.textContent = '\u270F\uFE0F';
+    statusEl.title = '\u624B\u52D5\u7DE8\u96C6';
+  } else if(el.dataset.autoFilled === 'true') {
+    statusEl.textContent = '\uD83D\uDD04';
+    statusEl.title = 'NAVLOG \u304B\u3089\u81EA\u52D5\u5165\u529B';
+  } else {
+    statusEl.textContent = '';
+    statusEl.title = '';
+  }
+}
+
+function onFdpNavFieldInput(id) {
+  var el = document.getElementById(id);
+  if(!el) return;
+  el.dataset.userEdited = 'true';
+  el.dataset.autoFilled = 'false';
+  fdpUpdateFieldStatus(el);
+  refreshFdpCalc();
+}
+
+function syncFdpFromNavlog() {
+  var elFlt = document.getElementById('fdp-flt-time');
+  var elTaxiOut = document.getElementById('fdp-taxi-out');
+  var elTaxiIn = document.getElementById('fdp-taxi-in');
+  if(!elFlt || !elTaxiOut || !elTaxiIn) return;
+
+  if(window.FDP_DEBUG_NAVLOG === true) {
+    console.log('[FDP] NAVLOG sync:', {
+      fltMin: NAVLOG.fltMin,
+      taxiOutMin: NAVLOG.taxiOutMin,
+      taxiInMin: NAVLOG.taxiInMin
+    });
+  }
+
+  if(NAVLOG.fltMin != null && elFlt.dataset.userEdited !== 'true') {
+    elFlt.value = formatMinToHHMM(NAVLOG.fltMin);
+    elFlt.dataset.autoFilled = 'true';
+    fdpUpdateFieldStatus(elFlt);
+  }
+  if(NAVLOG.taxiOutMin != null && elTaxiOut.dataset.userEdited !== 'true') {
+    elTaxiOut.value = String(NAVLOG.taxiOutMin);
+    elTaxiOut.dataset.autoFilled = 'true';
+    fdpUpdateFieldStatus(elTaxiOut);
+  }
+  if(NAVLOG.taxiInMin != null && elTaxiIn.dataset.userEdited !== 'true') {
+    elTaxiIn.value = String(NAVLOG.taxiInMin);
+    elTaxiIn.dataset.autoFilled = 'true';
+    fdpUpdateFieldStatus(elTaxiIn);
+  }
+  refreshFdpCalc();
+}
+
+function clearFdpCalc() {
+  var suEl = document.getElementById('fdp-su-time');
+  var secEl = document.getElementById('fdp-sectors');
+  var crewEl = document.getElementById('fdp-crew');
+  var restEl = document.getElementById('fdp-rest-class');
+  var restRow = document.getElementById('fdp-rest-row');
+  var fltEl = document.getElementById('fdp-flt-time');
+  var toutEl = document.getElementById('fdp-taxi-out');
+  var tinEl = document.getElementById('fdp-taxi-in');
+
+  if(suEl) {
+    suEl.value = '';
+    delete suEl.dataset.userEdited;
+    delete suEl.dataset.autoFilled;
+    fdpSetTimeInputInvalid(suEl, false);
+  }
+  if(secEl) secEl.value = '1';
+  if(crewEl) crewEl.value = 'single';
+  if(restEl) restEl.value = '1';
+  if(restRow) restRow.style.display = 'none';
+  if(fltEl) {
+    fltEl.value = '';
+    delete fltEl.dataset.userEdited;
+    delete fltEl.dataset.autoFilled;
+    fdpSetTimeInputInvalid(fltEl, false);
+    fdpUpdateFieldStatus(fltEl);
+  }
+  if(toutEl) {
+    toutEl.value = '15';
+    delete toutEl.dataset.userEdited;
+    delete toutEl.dataset.autoFilled;
+    fdpUpdateFieldStatus(toutEl);
+  }
+  if(tinEl) {
+    tinEl.value = '10';
+    delete tinEl.dataset.userEdited;
+    delete tinEl.dataset.autoFilled;
+    fdpUpdateFieldStatus(tinEl);
   }
   refreshFdpCalc();
 }
@@ -1609,6 +1733,19 @@ function runParse() {
   var staM = txt.match(/STA\s+(\d{2})(\d{2})Z/);
   NAV_STA = staM ? (staM[1]+staM[2]) : null;
 
+  // FDP Calc 連動: FLT Time / Taxi-out / Taxi-in (サマリー抽出)
+  window.NAVLOG = window.NAVLOG || {};
+  if(typeof window.FdpCalc !== 'undefined' && window.FdpCalc.parseNavlogFdpFields) {
+    var fdpNavFields = window.FdpCalc.parseNavlogFdpFields(txt);
+    NAVLOG.fltMin = fdpNavFields.fltMin;
+    NAVLOG.taxiOutMin = fdpNavFields.taxiOutMin;
+    NAVLOG.taxiInMin = fdpNavFields.taxiInMin;
+  } else {
+    NAVLOG.fltMin = null;
+    NAVLOG.taxiOutMin = null;
+    NAVLOG.taxiInMin = null;
+  }
+
   // TAXI OUT (CONX値) - 各WPの絶対時刻計算に加算する
   // CONX PAX INFO セクションの "TAXI OUT/IN CONX:28/14MIN AVG:22/12MIN" から CONX 側の OUT 値を取得
   var taxiM = txt.match(/TAXI\s+OUT\/IN\s+CONX:(\d+)\/\d+/i);
@@ -1914,6 +2051,7 @@ function runParse() {
   drawRoute();
   drawEtops();
   frameRoute();
+  if(typeof syncFdpFromNavlog === 'function') syncFdpFromNavlog();
 }
 
 // =====================================================================

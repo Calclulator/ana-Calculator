@@ -101,6 +101,65 @@ function parseSuHmToParts(str) {
   return { suHour: p.hour, suMin: p.min };
 }
 
+function parseNavlogFltMin(txt) {
+  if (!txt) return null;
+  var m, h, min;
+
+  m = txt.match(/\bF\s*\/\s*T\s+(\d{1,2})\s*HR\s*(\d{1,2})\s*MIN\b/i);
+  if (m) {
+    h = parseInt(m[1], 10);
+    min = parseInt(m[2], 10);
+    if (!isNaN(h) && !isNaN(min) && h >= 0 && h <= 23 && min >= 0 && min <= 59) {
+      return h * 60 + min;
+    }
+  }
+
+  m = txt.match(/\b(?:F\s*\/\s*T|FLT(?:\s+TIME)?|FLIGHT\s+TIME)\s+(\d{1,2}):(\d{2})\b/i);
+  if (m) {
+    h = parseInt(m[1], 10);
+    min = parseInt(m[2], 10);
+    if (!isNaN(h) && !isNaN(min) && h >= 0 && h <= 23 && min >= 0 && min <= 59) {
+      return h * 60 + min;
+    }
+  }
+
+  return null;
+}
+
+function parseNavlogTaxiMin(txt, kind) {
+  if (!txt) return null;
+  var patterns = kind === 'out'
+    ? [
+      /(?:T\s*\/\s*O|T\/O)\s+TAXI\s+(\d{1,4})/i,
+      /\bTAXI\s+OUT\s+(?!\/)(\d{1,4})\b/i,
+      /\bTXO\s+(\d{1,4})\b/i,
+      /\bOUT\s+(\d{4})\b/i
+    ]
+    : [
+      /(?:T\s*\/\s*I|T\/I)\s+TAXI\s+(\d{1,4})/i,
+      /\bTAXI\s+IN\s+(\d{1,4})\b/i,
+      /\bTXI\s+(\d{1,4})\b/i,
+      /\bIN\s+(\d{4})\b/i
+    ];
+  var i, m, v;
+  for (i = 0; i < patterns.length; i++) {
+    m = txt.match(patterns[i]);
+    if (m) {
+      v = parseInt(m[1], 10);
+      if (!isNaN(v) && v >= 0 && v <= 999) return v;
+    }
+  }
+  return null;
+}
+
+function parseNavlogFdpFields(txt) {
+  return {
+    fltMin: parseNavlogFltMin(txt),
+    taxiOutMin: parseNavlogTaxiMin(txt, 'out'),
+    taxiInMin: parseNavlogTaxiMin(txt, 'in')
+  };
+}
+
 function formatDurationMin(totalMin) {
   if (totalMin === null || totalMin === undefined || isNaN(totalMin)) return '—';
   var t = Math.max(0, Math.round(Number(totalMin)));
@@ -215,6 +274,9 @@ var FdpCalcExports = {
   parseTimeInput: parseTimeInput,
   parseHmToMinutes: parseHmToMinutes,
   parseSuHmToParts: parseSuHmToParts,
+  parseNavlogFltMin: parseNavlogFltMin,
+  parseNavlogTaxiMin: parseNavlogTaxiMin,
+  parseNavlogFdpFields: parseNavlogFdpFields,
   formatDurationMin: formatDurationMin,
   formatWallClockMin: formatWallClockMin
 };

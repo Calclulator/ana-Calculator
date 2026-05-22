@@ -3,7 +3,8 @@ import {
   computeFdpLimit,
   formatDurationMin,
   formatWallClockMin,
-  parseTimeInput
+  parseTimeInput,
+  parseNavlogFdpFields
 } from '../js/fdp-calc.js';
 
 describe('parseTimeInput', function () {
@@ -20,6 +21,32 @@ describe('parseTimeInput', function () {
     expect(parseTimeInput('09:65')).toBeNull();
     expect(parseTimeInput('')).toBeNull();
     expect(parseTimeInput('30')).toBeNull();
+  });
+});
+
+describe('parseNavlogFdpFields', function () {
+  it('extracts FLT time and taxi minutes from summary patterns', function () {
+    var txt = 'NML PLAN                                B/T 09HR35MIN F/T 08HR49MIN\n' +
+      'T/O TAXI 15  T/I TAXI 10';
+    var r = parseNavlogFdpFields(txt);
+    expect(r.fltMin).toBe(8 * 60 + 49);
+    expect(r.taxiOutMin).toBe(15);
+    expect(r.taxiInMin).toBe(10);
+  });
+
+  it('accepts HH:MM style labels', function () {
+    var txt = 'FLT TIME 10:30\nTAXI OUT 20\nTAXI IN 12';
+    var r = parseNavlogFdpFields(txt);
+    expect(r.fltMin).toBe(10 * 60 + 30);
+    expect(r.taxiOutMin).toBe(20);
+    expect(r.taxiInMin).toBe(12);
+  });
+
+  it('returns null for missing fields', function () {
+    var r = parseNavlogFdpFields('NAVIGATION LOG\nRJAA-KLAX');
+    expect(r.fltMin).toBeNull();
+    expect(r.taxiOutMin).toBeNull();
+    expect(r.taxiInMin).toBeNull();
   });
 });
 
