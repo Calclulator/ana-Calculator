@@ -170,6 +170,25 @@
   #crew-rest-panel .cr-summary{font-size:13px;color:#ffb74d;margin-top:8px;padding-top:8px;border-top:1px solid #243044;}
   #crew-rest-panel .cr-out-meta{font-size:14px;color:#cfd8dc;margin-bottom:8px;}
   #crew-rest-panel #crew-rest-out h3{margin-bottom:10px;}
+  #fdp-panel{overflow:auto;}
+  #fdp-panel .fdp-wrap{padding:12px 14px;font-size:15px;max-width:720px;}
+  #fdp-panel .fdp-wrap h2{margin:0 0 14px;font-size:1.05em;color:#4fc3f7;letter-spacing:.04em;font-weight:bold;}
+  #fdp-panel .fdp-inputs{border:1px solid #1e2a38;border-radius:6px;padding:12px;background:#080a12;margin-bottom:14px;}
+  #fdp-panel .fdp-row-in{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+  #fdp-panel .fdp-row-in label{font-size:13px;color:#90a4ae;min-width:120px;}
+  #fdp-panel .fdp-inp{width:88px;background:#0d1117;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:inherit;font-size:15px;padding:6px 8px;}
+  #fdp-panel .fdp-sel{font-size:14px;padding:5px 8px;max-width:220px;}
+  #fdp-panel .fdp-outputs{border:1px solid #1e2a38;border-radius:6px;padding:12px;background:#0d1117;margin-bottom:14px;}
+  #fdp-panel .fdp-row{display:flex;align-items:baseline;gap:10px;margin-bottom:8px;flex-wrap:wrap;}
+  #fdp-panel .fdp-row .label{font-size:13px;color:#90a4ae;min-width:220px;}
+  #fdp-panel .fdp-row .fdp-val{font-size:15px;color:#cfd8dc;font-weight:600;}
+  #fdp-panel .fdp-row.important .label{color:#4fc3f7;font-size:14px;}
+  #fdp-panel .fdp-row.important .fdp-val{font-size:1.4em;color:#4fc3f7;font-weight:bold;}
+  #fdp-panel .fdp-row.sub .label{font-size:12px;color:#78909c;}
+  #fdp-panel .fdp-row.sub .fdp-val{font-size:0.9em;color:#b0bec5;font-weight:normal;}
+  #fdp-panel .fdp-warnings{font-size:13px;color:#ef5350;line-height:1.5;margin-top:6px;}
+  #fdp-panel .fdp-warnings .fdp-warn-info{color:#ffb74d;}
+  #fdp-panel .fdp-notes{font-size:13px;color:#90a4ae;line-height:1.55;padding:8px 2px;}
   @media print{
     #ws-method-help-overlay,#ws-method-help-panel{display:none!important;}
     #nav-overlay,#nav-panel,#metar-overlay,#metar-panel{display:none!important;}
@@ -505,6 +524,70 @@
     </div>
   </div>
 </div><!-- crew-rest-panel -->
+<!-- ===== FDP CALC ===== -->
+<div id="fdp-panel" class="panel">
+  <div class="bar">
+    <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.06em;font-size:1em;">FDP Calc</span>
+    <span style="font-size:0.95em;color:#90a4ae;margin-left:10px;">UTC / 手入力</span>
+  </div>
+  <div class="fdp-wrap">
+    <h2>FDP Calc (飛行勤務時間計算)</h2>
+    <div class="fdp-inputs">
+      <div class="fdp-row-in">
+        <label for="fdp-su-time">S/U 時刻</label>
+        <input id="fdp-su-time" class="fdp-inp" type="text" placeholder="09:00" maxlength="5" oninput="refreshFdpCalc()" onchange="refreshFdpCalc()">
+      </div>
+      <div class="fdp-row-in">
+        <label for="fdp-sectors">着陸回数</label>
+        <select id="fdp-sectors" class="btn fdp-sel" onchange="refreshFdpCalc()">
+          <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+          <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+          <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+          <option value="10">10</option>
+        </select>
+      </div>
+      <div class="fdp-row-in">
+        <label for="fdp-crew">編成</label>
+        <select id="fdp-crew" class="btn fdp-sel" onchange="onFdpCrewChange()">
+          <option value="single">シングル</option>
+          <option value="multi">マルチプル</option>
+          <option value="double">ダブル</option>
+        </select>
+      </div>
+      <div class="fdp-row-in" id="fdp-rest-row" style="display:none;">
+        <label for="fdp-rest-class">仮眠設備</label>
+        <select id="fdp-rest-class" class="btn fdp-sel" onchange="refreshFdpCalc()">
+          <option value="1">Class 1</option>
+          <option value="2">Class 2</option>
+          <option value="3">Class 3</option>
+        </select>
+      </div>
+      <div class="fdp-row-in">
+        <label for="fdp-flt-time">FLT Time</label>
+        <input id="fdp-flt-time" class="fdp-inp" type="text" placeholder="10:00" maxlength="5" oninput="refreshFdpCalc()" onchange="refreshFdpCalc()">
+      </div>
+      <div class="fdp-row-in">
+        <label for="fdp-taxi-out">Taxi-out (分)</label>
+        <input id="fdp-taxi-out" class="fdp-inp" type="number" min="0" max="999" value="15" oninput="refreshFdpCalc()" onchange="refreshFdpCalc()">
+      </div>
+      <div class="fdp-row-in">
+        <label for="fdp-taxi-in">Taxi-in (分)</label>
+        <input id="fdp-taxi-in" class="fdp-inp" type="number" min="0" max="999" value="10" oninput="refreshFdpCalc()" onchange="refreshFdpCalc()">
+      </div>
+    </div>
+    <div class="fdp-outputs">
+      <div class="fdp-row"><span class="label">飛行勤務時間上限 (Max FDP):</span> <span id="fdp-out-max-fdp" class="fdp-val">—</span></div>
+      <div class="fdp-row"><span class="label">乗務時間上限 (Max Block):</span> <span id="fdp-out-max-blk" class="fdp-val">—</span></div>
+      <div class="fdp-row"><span class="label">Latest Block-in:</span> <span id="fdp-out-latest-bi" class="fdp-val">—</span></div>
+      <div class="fdp-row important"><span class="label">🎯 Latest Take-off:</span> <span id="fdp-out-latest-to" class="fdp-val">—</span></div>
+      <div class="fdp-row sub"><span class="label">Latest Block-out (参考):</span> <span id="fdp-out-latest-bo" class="fdp-val">—</span></div>
+      <div id="fdp-out-warnings" class="fdp-warnings"></div>
+    </div>
+    <div class="fdp-notes">
+      不測の事態時は +2h (シングル) / +3h (マルチプル・ダブル) まで延長可。詳細は OM 8-5-1 ③ 参照。
+    </div>
+  </div>
+</div><!-- fdp-panel -->
 </div><!-- #panels -->
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -513,6 +596,7 @@
 <script src="gfs-client.js"></script>
 <script src="gfs-vws.js"></script>
 <script src="gfs-radar-layer.js"></script>
+<script src="js/fdp-calc.js"></script>
 <script>
 // =====================================================================
 // PDF.js
@@ -894,7 +978,7 @@ var lightningReconnectTimer = null;
 // TABS
 // =====================================================================
 function showTab(name) {
-  ['wx','fp','atm','atm-gfs','crew-rest'].forEach(function(n) {
+  ['wx','fp','atm','atm-gfs','crew-rest','fdp'].forEach(function(n) {
     document.getElementById(n+'-panel').classList.remove('active');
     var ni=document.getElementById('nav-'+n);
     if(ni) ni.classList.toggle('nav-act', n===name);
@@ -919,6 +1003,9 @@ function showTab(name) {
         }
       }, delay);
     });
+  }
+  if(name==='fdp') {
+    if(typeof refreshFdpCalc === 'function') refreshFdpCalc();
   }
 }
 function openNav(){
@@ -1107,6 +1194,83 @@ function clearCrewRest() {
   if(ob) {
     ob.innerHTML = 'HHMM を入力して「計算」を押してください。';
     ob.style.color = '#cfd8dc';
+  }
+}
+
+// =====================================================================
+// FDP CALC
+// =====================================================================
+function onFdpCrewChange() {
+  var crewSel = document.getElementById('fdp-crew');
+  var restRow = document.getElementById('fdp-rest-row');
+  if(restRow) {
+    restRow.style.display = (crewSel && crewSel.value !== 'single') ? 'flex' : 'none';
+  }
+  refreshFdpCalc();
+}
+
+function refreshFdpCalc() {
+  if(typeof window.FdpCalc === 'undefined' || !window.FdpCalc.computeFdpLimit) return;
+  var suEl = document.getElementById('fdp-su-time');
+  var secEl = document.getElementById('fdp-sectors');
+  var crewEl = document.getElementById('fdp-crew');
+  var restEl = document.getElementById('fdp-rest-class');
+  var fltEl = document.getElementById('fdp-flt-time');
+  var toutEl = document.getElementById('fdp-taxi-out');
+  var tinEl = document.getElementById('fdp-taxi-in');
+  var suParts = window.FdpCalc.parseSuHmToParts(suEl ? suEl.value : '');
+  var fltMin = window.FdpCalc.parseHmToMinutes(fltEl ? fltEl.value : '');
+  var hasSu = !!suParts;
+  var outFdp = document.getElementById('fdp-out-max-fdp');
+  var outBlk = document.getElementById('fdp-out-max-blk');
+  var outBi = document.getElementById('fdp-out-latest-bi');
+  var outTo = document.getElementById('fdp-out-latest-to');
+  var outBo = document.getElementById('fdp-out-latest-bo');
+  var outWarn = document.getElementById('fdp-out-warnings');
+  var dash = '—';
+
+  if(!hasSu) {
+    if(outFdp) outFdp.textContent = dash;
+    if(outBlk) outBlk.textContent = dash;
+    if(outBi) outBi.textContent = dash;
+    if(outTo) outTo.textContent = dash;
+    if(outBo) outBo.textContent = dash;
+    if(outWarn) outWarn.innerHTML = '';
+    return;
+  }
+
+  var input = {
+    suHour: suParts.suHour,
+    suMin: suParts.suMin,
+    sectors: secEl ? parseInt(secEl.value, 10) : 1,
+    crew: crewEl ? crewEl.value : 'single',
+    restClass: restEl ? parseInt(restEl.value, 10) : 1,
+    fltMin: fltMin,
+    taxiOutMin: toutEl ? parseInt(toutEl.value, 10) : 15,
+    taxiInMin: tinEl ? parseInt(tinEl.value, 10) : 10
+  };
+  var r = window.FdpCalc.computeFdpLimit(input);
+
+  if(outFdp) outFdp.textContent = window.FdpCalc.formatDurationMin(r.maxFdpMin);
+  if(outBlk) outBlk.textContent = window.FdpCalc.formatDurationMin(r.maxBlkMin);
+  if(outBi) outBi.textContent = window.FdpCalc.formatWallClockMin(r.latestBlockInMin);
+  if(outTo) {
+    outTo.textContent = (r.latestTakeoffMin === null) ? dash : window.FdpCalc.formatWallClockMin(r.latestTakeoffMin);
+  }
+  if(outBo) {
+    outBo.textContent = (r.latestBlockOutMin === null) ? dash : window.FdpCalc.formatWallClockMin(r.latestBlockOutMin);
+  }
+  if(outWarn) {
+    var wh = '';
+    var wi;
+    if(r.warnings && r.warnings.length) {
+      for(wi = 0; wi < r.warnings.length; wi++) {
+        var msg = r.warnings[wi];
+        var isInfo = msg.indexOf('Class 1') >= 0;
+        wh += '<div' + (isInfo ? ' class="fdp-warn-info"' : '') + '>' + msg + '</div>';
+      }
+    }
+    outWarn.innerHTML = wh;
   }
 }
 
@@ -5625,6 +5789,15 @@ function toggleMode() {
     #crew-rest-panel .cr-summary{color:#e65100!important;border-top-color:#d0d8e4!important;}
     #crew-rest-panel .cr-box h3{color:#1565c0!important;}
     #crew-rest-panel .cr-crew-note{color:#546e7a!important;}
+    #fdp-panel{background:#f5f5f5!important;}
+    #fdp-panel .bar{background:#f0f4f8!important;border-bottom-color:#dde3ea!important;}
+    #fdp-panel .fdp-wrap h2{color:#1565c0!important;}
+    #fdp-panel .fdp-inputs,#fdp-panel .fdp-outputs{background:#ffffff!important;border-color:#d0d8e4!important;}
+    #fdp-panel .fdp-row-in label,#fdp-panel .fdp-row .label,#fdp-panel .fdp-notes{color:#546e7a!important;}
+    #fdp-panel .fdp-inp{background:#ffffff!important;border-color:#c8d0da!important;color:#1a2a3a!important;}
+    #fdp-panel .fdp-row .fdp-val{color:#1a2a3a!important;}
+    #fdp-panel .fdp-row.important .label,#fdp-panel .fdp-row.important .fdp-val{color:#1565c0!important;}
+    #fdp-panel .fdp-row.sub .fdp-val{color:#546e7a!important;}
     /* Step P: Day mode contrast — Landmark, 回避, METAR更新, validUtc */
     body.day-mode #wx-panel .wx-ctrl-bar .lbl{color:#333!important;}
     body.day-mode #wx-panel .wx-ctrl-bar .ck{color:#333!important;}
@@ -7040,6 +7213,7 @@ applyGfsRadarForCurrentMethod();
     <div class="nav-sec">
       <div class="nav-sec-lbl">Calculators</div>
       <button class="nav-item" id="nav-crew-rest" onclick="navTo('crew-rest')">💤 Crew Rest Calculator</button>
+      <button class="nav-item" id="nav-fdp" onclick="navTo('fdp')">⏱ FDP Calc</button>
       <button class="nav-item nav-dis">🔔 Curfew Calculator<span class="nav-tag">WIP</span></button>
     </div>
     <div class="nav-sec">
