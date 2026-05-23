@@ -33,9 +33,9 @@
   #wx-panel .wx-ctrl-bar #satOpV,
   #wx-panel .wx-ctrl-bar #satTimeLbl{font-size:13px!important;}
   #wx-panel .wx-ctrl-bar #sat-lbl{font-size:12px!important;}
-  #wx-panel .wx-ctrl-bar #sat-data-source{max-width:210px;}
+  #wx-panel .wx-ctrl-bar #sat-source{max-width:210px;}
   @media (max-width:900px){
-    #wx-panel .wx-ctrl-bar #sat-data-source{max-width:72px;}
+    #wx-panel .wx-ctrl-bar #sat-source{max-width:72px;}
   }
   #wx-panel .wx-ctrl-bar #avoidNm{font-size:14px!important;}
   #wx-panel .wx-ctrl-bar #ap-metar-refresh{font-size:13px;padding:2px 8px;line-height:1.2;margin-left:6px;}
@@ -256,16 +256,9 @@
   <!-- BAR2: SAT時刻スライダー -->
   <div class="bar wx-ctrl-bar">
     <span class="lbl">SAT</span>
-    <select id="satSel" class="btn" onchange="loadSat(this.value)" style="max-width:210px;">
-      <option value="himawari">Himawari-9（アジア太平洋）</option>
-      <option value="rainviewer-radar">RainViewer Radar (世界)</option>
-      <option value="himawari-fd-vis">Himawari-9 可視光</option>
-      <option value="himawari-fd-wv">Himawari-9 水蒸気</option>
-      <option value="himawari-fd-sandwich" selected>Himawari-9 雲頂強調</option>
+    <select id="sat-source" class="btn" onchange="onSatSourceChange()" style="max-width:210px;">
       <option value="none">衛星なし</option>
-    </select>
-    <select id="sat-data-source" class="btn" onchange="onSatDataSourceChange()" style="max-width:210px;">
-      <option value="himawari9" selected>Himawari-9 (太平洋西/アジア/豪)</option>
+      <option value="himawari9" selected>Himawari-9 雲頂強調</option>
       <option value="goes-west">GOES-West (北米西/太平洋東)</option>
       <option value="goes-east">GOES-East (北米東/大西洋)</option>
       <option value="meteosat-iodc">Meteosat IODC (欧州/中央アジア/中東)</option>
@@ -723,6 +716,17 @@ var ETOPS_RING_NM = {
 };
 
 
+/*
+ * SAT データソース — RealEarth 調査結果 (2026-05):
+ * - CORS: Access-Control-Allow-Origin: * (/api/image, /api/times) → proxy 不要
+ * - GOES 採用: G18-ABI-FD-BAND13 (West), G19-ABI-FD-BAND13 (East) — navigated Web Mercator タイル
+ * - Himawari: HIMAWARI-B13 あり; JMA 雲頂強調 (sandwich) の方が品質良いため JMA 維持
+ * - Meteosat IODC: RealEarth 未提供 (Met8/11 @ 0° のみ) → EUMETSAT msg_iodc:cth + wms-relay 維持
+ */
+var REALEARTH_IMAGE = 'https://realearth.ssec.wisc.edu/api/image';
+var SAT_SOURCE_UI = {
+  'none': {label: '衛星なし', shortLabel: 'OFF'}
+};
 var SAT_DATA_SOURCES = {
   'himawari9': {
     label: 'Himawari-9 (太平洋西/アジア/豪)',
@@ -738,24 +742,20 @@ var SAT_DATA_SOURCES = {
     shortLabel: 'GW',
     timeStepMin: 10,
     maxOffsetMin: 360,
-    attribution: '\u00a9 NOAA/CIRA RAMMB',
-    provider: 'rammb-overlay',
-    satellite: 'goes-18',
-    sector: 'full_disk',
-    product: 'band_13',
-    bounds: [[-67, -207], [67, -67]]
+    attribution: '\u00a9 SSEC/UW-Madison',
+    provider: 'realearth',
+    reProduct: 'G18-ABI-FD-BAND13',
+    reMaxZoom: 7
   },
   'goes-east': {
     label: 'GOES-East (北米東/大西洋)',
     shortLabel: 'GE',
     timeStepMin: 10,
     maxOffsetMin: 360,
-    attribution: '\u00a9 NOAA/CIRA RAMMB',
-    provider: 'rammb-overlay',
-    satellite: 'goes-19',
-    sector: 'full_disk',
-    product: 'band_13',
-    bounds: [[-67, -145], [67, -5]]
+    attribution: '\u00a9 SSEC/UW-Madison',
+    provider: 'realearth',
+    reProduct: 'G19-ABI-FD-BAND13',
+    reMaxZoom: 7
   },
   'meteosat-iodc': {
     label: 'Meteosat IODC (\u6b27\u5dde/\u4e2d\u592e\u30a2\u30b8\u30a2/\u4e2d\u6771)',
@@ -1038,8 +1038,8 @@ var LY = {
 var lowBw = false;
 var firGeoJSON = null;
 var radarOn = false;
-var satKey = 'himawari-fd-sandwich';
 var satDataSource = 'himawari9';
+var HIMAWARI_SAT_KEY = 'himawari-fd-sandwich';
 var satOffsetMins = 0; // 0=最新, stepMin=10分前, ...
 var SAT_LAYER_CACHE = {};   // satKey+'|'+offsetMins → {ly, timeLabel, source}
 var SAT_API_CACHE   = {};   // satKey → API data (JMA list / RainViewer frames)
@@ -1076,9 +1076,8 @@ function showTab(name) {
             map.invalidateSize(true);
           } catch(e){}
         }
-        if(delay === 200 && typeof loadSat === 'function') {
-          var sel = document.getElementById('satSel');
-          if(sel) loadSat(sel.value);
+        if(delay === 200 && typeof reloadSatLayer === 'function') {
+          reloadSatLayer();
         }
       }, delay);
     });
@@ -1612,24 +1611,30 @@ function parseCTME(s) {
 // SATELLITE TIME
 // =====================================================================
 function getSatDataSourceConfig() {
+  if(satDataSource === 'none') return null;
   return SAT_DATA_SOURCES[satDataSource] || SAT_DATA_SOURCES.himawari9;
 }
 
-function updateSatDataSourceOptionLabels() {
-  var sel = document.getElementById('sat-data-source');
+function updateSatSourceOptionLabels() {
+  var sel = document.getElementById('sat-source');
   if(!sel) return;
   var compact = window.innerWidth <= 900;
-  var i, opt, src;
+  var i, opt, src, ui;
   for(i = 0; i < sel.options.length; i++) {
     opt = sel.options[i];
+    ui = SAT_SOURCE_UI[opt.value];
     src = SAT_DATA_SOURCES[opt.value];
-    if(!src) continue;
-    opt.text = compact ? src.shortLabel : src.label;
+    if(ui) {
+      opt.text = compact ? ui.shortLabel : ui.label;
+    } else if(src) {
+      opt.text = compact ? src.shortLabel : src.label;
+    }
   }
 }
 
 function rebuildSatTimeSlider() {
   var ds = getSatDataSourceConfig();
+  if(!ds) return;
   var step = ds.timeStepMin || 10;
   var maxOff = ds.maxOffsetMin || 120;
   var sl = document.getElementById('satTimeSlider');
@@ -1646,42 +1651,50 @@ function rebuildSatTimeSlider() {
   if(lbl) lbl.textContent = satOffsetMins === 0 ? '最新' : satOffsetMins + '分前';
 }
 
+function _clearSatLayer() {
+  if(LY.sat) {
+    if(_isCachedLayer(LY.sat) && map.hasLayer(LY.sat)) {
+      LY.sat.setOpacity(0);
+    } else if(map.hasLayer(LY.sat)) {
+      try { map.removeLayer(LY.sat); } catch(x) {}
+    }
+    LY.sat = null;
+  }
+  var lbl = document.getElementById('sat-lbl');
+  if(lbl) lbl.textContent = '衛星:なし';
+}
+
 function reloadSatLayer() {
-  if(satDataSource === 'himawari9') loadSat(satKey);
+  if(satDataSource === 'none') {
+    _clearSatLayer();
+    return;
+  }
+  if(satDataSource === 'himawari9') loadSatHimawari();
   else loadSatAlt();
 }
 
-function onSatDataSourceChange() {
-  var sel = document.getElementById('sat-data-source');
-  var prev = satDataSource;
+function onSatSourceChange() {
+  var sel = document.getElementById('sat-source');
   satDataSource = sel ? sel.value : 'himawari9';
   var ds = getSatDataSourceConfig();
   if(window.WXR_DEBUG === true) {
-    console.log('[SAT] data source switched:', satDataSource, ds);
+    console.log('[SAT] source switched:', satDataSource, ds);
   }
-  var prodSel = document.getElementById('satSel');
-  if(prodSel) prodSel.disabled = (satDataSource !== 'himawari9');
   Object.keys(SAT_LAYER_CACHE).forEach(function(ck) {
-    if(ck.indexOf(prev + '|') === 0) {
-      var e = SAT_LAYER_CACHE[ck];
-      if(e && e.ly && map && map.hasLayer(e.ly)) {
-        try { map.removeLayer(e.ly); } catch(x) {}
-      }
-      delete SAT_LAYER_CACHE[ck];
+    var e = SAT_LAYER_CACHE[ck];
+    if(e && e.ly && map && map.hasLayer(e.ly)) {
+      try { map.removeLayer(e.ly); } catch(x) {}
     }
+    delete SAT_LAYER_CACHE[ck];
   });
   LY.sat = null;
   rebuildSatTimeSlider();
-  if(satDataSource === 'himawari9') {
-    if(prodSel && prodSel.value === 'none') prodSel.value = ds.satKey || 'himawari-fd-sandwich';
-    loadSat(prodSel ? prodSel.value : ds.satKey);
-  } else {
-    loadSatAlt();
-  }
+  reloadSatLayer();
 }
 
 function onSatTimeSlide(val) {
   var ds = getSatDataSourceConfig();
+  if(!ds) return;
   var step = ds.timeStepMin || 10;
   var max = parseInt(document.getElementById('satTimeSlider').max, 10);
   satOffsetMins = (max - parseInt(val, 10)) * step;
@@ -4817,64 +4830,63 @@ function _allOffsets() {
   return arr;
 }
 
-function _rammbOverlayUrl(satellite, tsInt) {
-  var s = String(tsInt);
-  var datePath = s.substr(0, 4) + '/' + s.substr(4, 2) + '/' + s.substr(6, 2);
-  return 'https://rammb-slider.cira.colostate.edu/data/imagery/' + datePath + '/' +
-    satellite + '---full_disk/band_13/' + tsInt + '/00/000_000.png';
+function _reTimeSuffix(ts) {
+  return String(ts).replace('.', '_');
 }
 
-function _fetchRammbTimes(sat, sector, product, callback, onErr) {
-  var proxy = (typeof GFS_PROXY === 'string')
-    ? String(GFS_PROXY).replace(/\/$/, '')
-    : 'https://ana-calculator-gfs-proxy.vercel.app';
-  var url = proxy + '/api/sat/latest_times'
-    + '?sat=' + encodeURIComponent(sat)
-    + '&sector=' + encodeURIComponent(sector)
-    + '&product=' + encodeURIComponent(product)
-    + '&_=' + Date.now();
-  fetch(url)
-    .then(function(r) {
-      if(!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    })
-    .then(function(data) {
-      if(data && data.error) throw new Error(data.error);
-      var times = data.timestamps_int || data;
-      if(!times || !times.length) throw new Error('empty timestamps');
-      callback(times);
-    })
-    .catch(function() { if(onErr) onErr(); });
+function _reTimeLabel(ts) {
+  var s = String(ts);
+  if(s.indexOf('.') >= 0 && s.length >= 13) {
+    return s.substr(9, 2) + ':' + s.substr(11, 2) + 'Z';
+  }
+  return s;
 }
 
-function _rammbTimeLabel(tsInt) {
-  var s = String(tsInt);
-  return s.slice(8, 10) + ':' + s.slice(10, 12) + 'Z';
-}
-
-function _rammbTsFromOffset(timestamps, offsetMin, ds) {
+function _reTsFromOffset(times, offsetMin, ds) {
   var step = ds.timeStepMin || 10;
   var maxOff = ds.maxOffsetMin || 360;
   var maxIdx = Math.floor(maxOff / step);
   var idx = Math.round(offsetMin / step);
   if(idx < 0) idx = 0;
   if(idx > maxIdx) idx = maxIdx;
-  if(idx >= timestamps.length) idx = timestamps.length - 1;
-  return timestamps[idx];
+  var arrIdx = times.length - 1 - idx;
+  if(arrIdx < 0) arrIdx = 0;
+  return times[arrIdx];
 }
 
-function _makeRammbOverlayEntry(srcKey, ds, timestamps, offset) {
+function _fetchRealEarthTimes(productId, callback, onErr) {
+  fetch('https://realearth.ssec.wisc.edu/api/times?products=' +
+    encodeURIComponent(productId) + '&_=' + Date.now())
+    .then(function(r) {
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(data) {
+      var times = data[productId] || [];
+      if(!times.length) throw new Error('empty timestamps');
+      callback(times);
+    })
+    .catch(function() { if(onErr) onErr(); });
+}
+
+function _makeRealEarthEntry(srcKey, ds, times, offset) {
   var ck = _satCk(srcKey, offset);
   if(SAT_LAYER_CACHE[ck]) return SAT_LAYER_CACHE[ck];
-  var tsInt = _rammbTsFromOffset(timestamps, offset, ds);
-  var url = _rammbOverlayUrl(ds.satellite, tsInt);
-  var b = ds.bounds;
-  var ly = L.imageOverlay(url, L.latLngBounds(b[0], b[1]), {
+  var ts = _reTsFromOffset(times, offset, ds);
+  var prod = ds.reProduct + '_' + _reTimeSuffix(ts);
+  var url = REALEARTH_IMAGE + '?products=' + encodeURIComponent(prod) + '&x={x}&y={y}&z={z}';
+  var mz = ds.reMaxZoom || 7;
+  var ly = L.tileLayer(url, {
     opacity: 0,
-    attribution: ds.attribution,
-    interactive: false
+    maxZoom: mz,
+    maxNativeZoom: mz,
+    updateWhenIdle: false,
+    keepBuffer: 0,
+    errorTileUrl: BLANK_TILE,
+    noWrap: true,
+    attribution: ds.attribution
   });
-  var entry = {ly: ly, timeLabel: _rammbTimeLabel(tsInt), source: 'RAMMB'};
+  var entry = {ly: ly, timeLabel: _reTimeLabel(ts), source: 'RealEarth'};
   SAT_LAYER_CACHE[ck] = entry;
   return entry;
 }
@@ -4936,23 +4948,23 @@ function loadSatAlt() {
     return;
   }
 
-  if(ds.provider === 'rammb-overlay') {
-    function showRammb(list) {
-      var e = _makeRammbOverlayEntry(srcKey, ds, list, capturedOffset);
+  if(ds.provider === 'realearth') {
+    function showRe(list) {
+      var e = _makeRealEarthEntry(srcKey, ds, list, capturedOffset);
       _activateSat(e, op, label, capturedOffset);
       var others = _allOffsets().filter(function(o){ return o !== capturedOffset; });
-      _preloadEntries(others.map(function(o){ return _makeRammbOverlayEntry(srcKey, ds, list, o); }));
+      _preloadEntries(others.map(function(o){ return _makeRealEarthEntry(srcKey, ds, list, o); }));
     }
-    var cacheKey = srcKey + '|ts5760';
+    var cacheKey = srcKey + '|reTimes';
     if(SAT_API_CACHE[cacheKey]) {
-      showRammb(SAT_API_CACHE[cacheKey].timestamps);
+      showRe(SAT_API_CACHE[cacheKey].times);
       return;
     }
     document.getElementById('sat-lbl').textContent = label + ' 読込中...';
-    _fetchRammbTimes(ds.satellite, ds.sector, ds.product, function(list) {
-      SAT_API_CACHE[cacheKey] = {timestamps: list, ts: Date.now()};
+    _fetchRealEarthTimes(ds.reProduct, function(list) {
+      SAT_API_CACHE[cacheKey] = {times: list, ts: Date.now()};
       if(satDataSource !== srcKey) return;
-      showRammb(list);
+      showRe(list);
     }, function() {
       document.getElementById('sat-lbl').textContent = label + ' (取得失敗)';
     });
@@ -5002,135 +5014,48 @@ function _makeRvEntry(k, host, past, offset) {
   return entry;
 }
 
-function loadSat(k) {
-  if(satDataSource !== 'himawari9') {
-    loadSatAlt();
-    return;
-  }
-  var prevKey = satKey;
-  satKey = k;
-
-  // ソース変更時：前ソースのプリロード済みレイヤーをmapから除去
-  if(prevKey && prevKey !== k) {
-    Object.keys(SAT_LAYER_CACHE).forEach(function(ck) {
-      if(ck.slice(0, prevKey.length+1) === prevKey+'|') {
-        var e = SAT_LAYER_CACHE[ck];
-        if(e && e.ly && map.hasLayer(e.ly)) try { map.removeLayer(e.ly); } catch(x) {}
-      }
-    });
-    LY.sat = null;
-  }
-
-  if(k!=='rainviewer-radar') {
-    radarOn = false;
-    if(LY.radar){ map.removeLayer(LY.radar); LY.radar=null; }
-  }
-
-  if(k==='none') {
-    if(LY.sat) {
-      if(_isCachedLayer(LY.sat) && map.hasLayer(LY.sat)) LY.sat.setOpacity(0);
-      else if(map.hasLayer(LY.sat)) try { map.removeLayer(LY.sat); } catch(e) {}
-      LY.sat = null;
-    }
-    document.getElementById('sat-lbl').textContent = '衛星:なし';
-    return;
-  }
-
+function loadSatHimawari() {
+  var k = HIMAWARI_SAT_KEY;
   var s = SATS[k];
-  if(!s) return;
+  if(!s || !s.jma) return;
   var op = parseFloat(document.getElementById('satOp').value) / 100;
   var capturedOffset = satOffsetMins;
-  var capturedKey    = k;
-  var label          = s.label;
-  var ck             = _satCk(k, capturedOffset);
+  var label = s.label;
+  var ck = _satCk(k, capturedOffset);
 
-  // ── レイヤーキャッシュヒット（即時表示） ─────────────────────────────
   if(SAT_LAYER_CACHE[ck]) {
     _activateSat(SAT_LAYER_CACHE[ck], op, label, capturedOffset);
     return;
   }
 
-  // ── RainViewer Radar ──────────────────────────────────────────────────
-  if(s.rainviewer) {
-    function _showRv(host, past) {
-      var e = _makeRvEntry(k, host, past, capturedOffset);
-      if(e) {
-        _activateSat(e, op, label, capturedOffset);
-        var others = _allOffsets().filter(function(o){ return o !== capturedOffset; });
-        _preloadEntries(others.map(function(o){ return _makeRvEntry(k, host, past, o); }).filter(Boolean));
-      } else {
-        var maxMin = Math.round((Date.now()/1000 - past[0].time)/60);
-        document.getElementById('sat-lbl').textContent = label+' (過去データなし: 最大'+maxMin+'分前まで)';
-        document.getElementById('satTimeLbl').textContent = capturedOffset+'分前 (データなし)';
-      }
-    }
-    if(SAT_API_CACHE[k]) { _showRv(SAT_API_CACHE[k].host, SAT_API_CACHE[k].past); return; }
-
-    if(loadSat._rvAbort) loadSat._rvAbort.abort();
-    var rvCtrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    loadSat._rvAbort = rvCtrl;
-    document.getElementById('sat-lbl').textContent = label+' 読込中...';
-    fetch('https://api.rainviewer.com/public/weather-maps.json', rvCtrl ? {signal:rvCtrl.signal} : {})
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        loadSat._rvAbort = null;
-        if(capturedKey !== satKey) return;
-        var past = d.radar.past;
-        if(!past || !past.length) throw new Error('no data');
-        SAT_API_CACHE[k] = {host:d.host, past:past, ts:Date.now()};
-        _showRv(d.host, past);
-      }).catch(function(e){
-        if(e && e.name==='AbortError') return;
-        document.getElementById('sat-lbl').textContent = label+' (取得失敗)';
-      });
-    return;
+  function _showJma(jmaList) {
+    var e = _makeJmaEntry(k, s, jmaList, capturedOffset);
+    _activateSat(e, op, label, capturedOffset);
+    var others = _allOffsets().filter(function(o){ return o !== capturedOffset; });
+    _preloadEntries(others.map(function(o){ return _makeJmaEntry(k, s, jmaList, o); }));
   }
+  if(SAT_API_CACHE[k]) { _showJma(SAT_API_CACHE[k].jmaList); return; }
 
-  // ── overlay ──────────────────────────────────────────────────────────
-  if(s.overlay) {
-    if(LY.sat && !_isCachedLayer(LY.sat)) try { map.removeLayer(LY.sat); } catch(e) {}
-    document.getElementById('sat-lbl').textContent = s.label+' 読込中...';
-    LY.sat = L.imageOverlay(s.url, s.bounds, {opacity:op}).addTo(map);
-    if(LY.base) LY.base.bringToBack();
-    document.getElementById('sat-lbl').textContent = s.label;
-    setTimeout(function(){ bringTop(); }, 300);
-    return;
-  }
-
-  // ── JMA Himawari ──────────────────────────────────────────────────────
-  if(s.jma) {
-    function _showJma(jmaList) {
-      var e = _makeJmaEntry(k, s, jmaList, capturedOffset);
-      _activateSat(e, op, label, capturedOffset);
-      var others = _allOffsets().filter(function(o){ return o !== capturedOffset; });
-      _preloadEntries(others.map(function(o){ return _makeJmaEntry(k, s, jmaList, o); }));
-    }
-    if(SAT_API_CACHE[k]) { _showJma(SAT_API_CACHE[k].jmaList); return; }
-
-    if(loadSat._jmaAbort) loadSat._jmaAbort.abort();
-    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    loadSat._jmaAbort = ctrl;
-    document.getElementById('sat-lbl').textContent = label+' 読込中...';
-    fetch('https://www.jma.go.jp/bosai/himawari/data/satimg/targetTimes_'+s.area+'.json?_='+Date.now(), ctrl ? {signal:ctrl.signal} : {})
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        loadSat._jmaAbort = null;
-        if(capturedKey !== satKey) return;
-        SAT_API_CACHE[k] = {jmaList:d, ts:Date.now()};
-        _showJma(d);
-      }).catch(function(e){
-        if(e && e.name==='AbortError') return;
-        document.getElementById('sat-lbl').textContent = label+' (取得失敗)';
-      });
-    return;
-  }
-
-  document.getElementById('sat-lbl').textContent = label + ' (未対応)';
+  if(loadSatHimawari._jmaAbort) loadSatHimawari._jmaAbort.abort();
+  var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  loadSatHimawari._jmaAbort = ctrl;
+  document.getElementById('sat-lbl').textContent = label + ' 読込中...';
+  fetch('https://www.jma.go.jp/bosai/himawari/data/satimg/targetTimes_' + s.area + '.json?_=' + Date.now(), ctrl ? {signal: ctrl.signal} : {})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      loadSatHimawari._jmaAbort = null;
+      if(satDataSource !== 'himawari9') return;
+      SAT_API_CACHE[k] = {jmaList: d, ts: Date.now()};
+      _showJma(d);
+    }).catch(function(e){
+      if(e && e.name === 'AbortError') return;
+      document.getElementById('sat-lbl').textContent = label + ' (取得失敗)';
+    });
 }
-updateSatDataSourceOptionLabels();
-window.addEventListener('resize', updateSatDataSourceOptionLabels);
+updateSatSourceOptionLabels();
+window.addEventListener('resize', updateSatSourceOptionLabels);
 rebuildSatTimeSlider();
-loadSat(document.getElementById('satSel').value);
+reloadSatLayer();
 
 function setSatOp(v) {
   var val = parseFloat(v);
@@ -7555,7 +7480,7 @@ function frameRoute() {
 }
 
 function refreshAll() {
-  loadSat(satKey);
+  reloadSatLayer();
   if(radarOn) loadRadar();
   if(document.getElementById('oSig').checked)   loadSigmets();
   if(document.getElementById('dep').checked)    fetchAc();
@@ -7565,13 +7490,13 @@ function refreshAll() {
 function toggleBw() {
   lowBw = document.getElementById('lowbw').checked;
   document.getElementById('msg').textContent = lowBw?'⚡ 低速度モード: タイル削減・自動更新停止':'';
-  loadSat(satKey);
+  reloadSatLayer();
   setBase(document.getElementById('baseSel').value);
 }
 
 // 10分おきに衛星・レーダー自動更新
 setInterval(function(){
-  if(!lowBw) { loadSat(satKey); if(radarOn) loadRadar(); }
+  if(!lowBw) { reloadSatLayer(); if(radarOn) loadRadar(); }
 },600000);
 
 // =====================================================================
