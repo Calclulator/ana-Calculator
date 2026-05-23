@@ -289,7 +289,6 @@
       <label class="ck" style="font-size:10px;"><input type="checkbox" id="oEtops207" onchange="drawEtops()"> 207min</label>
     </span>
     <label class="ck" id="glide-b787-toggle" style="display:none;"><input type="checkbox" id="oGlide" onchange="updateGlide()"> Glide (B787)</label>
-    <button class="btn" id="radarBtn" onclick="toggleRadar()">○ Radar</button>
     <label class="ck"><input type="checkbox" id="oFir" checked onchange="drawFir()"> FIR</label>
     <label class="ck"><input type="checkbox" id="oSig" checked onchange="loadSigmets()"> SIGMETs</label>
     <label class="ck"><input type="checkbox" id="oMetar" onchange="onApOverlayToggle()" oninput="onApOverlayToggle()" onclick="onApOverlayToggle()"> A/P</label>
@@ -725,8 +724,10 @@ var ETOPS_RING_NM = {
  * - CORS: * on /api/image, /api/times — タイルは proxy realearth-relay で 10 分 cache (Size limit 対策)
  * - GOES 雲頂強調: G18/G19-ABI-FD-BAND13-GRAD (Clean IR enhanced, 青黄赤カラー)
  * - Himawari: JMA 雲頂強調/可視光/水蒸気 (NICT tile); RealEarth HIMAWARI-B13-GRAD もあるが JMA sandwich 維持
- * - Meteosat IODC: RealEarth に IODC 専用 product なし → EUMETSAT msg_iodc:cth (Cloud Top Height) + wms-relay
+ * - Meteosat IODC: EUMETSAT msg_iodc:rgb_naturalenhncd 固定 (GetCapabilities 2026-05:
+ *   mumi_iodc:cth_iodc / enhanced_ir なし; cth は高度スケールで紫系 → naturalenhncd を採用)
  */
+var METEOSAT_IODC_WMS_LAYER = 'msg_iodc:rgb_naturalenhncd';
 var SAT_SOURCE_UI = {
   'none': {label: '衛星なし', shortLabel: 'OFF'}
 };
@@ -785,7 +786,6 @@ var SAT_DATA_SOURCES = {
     maxOffsetMin: 360,
     attribution: '\u00a9 EUMETSAT',
     provider: 'eumetsat-wms',
-    wmsLayer: 'msg_iodc:cth',
     wmsMaxNativeZoom: 7
   },
   'rainviewer': {
@@ -1060,14 +1060,13 @@ var APT = {
 };
 var BLANK_TILE=(function(){var c=document.createElement('canvas');c.width=c.height=1;return c.toDataURL();})();
 var LY = {
-  base:null, sat:null, radar:null,
+  base:null, sat:null,
   corridor:[], route:null, wpts:[], etops:[], alt:[],
   routeBounds:null,
   fir:null, sig:null, metar:[], glide:null, ac:null, avoidL:null, avoidR:null
 };
 var lowBw = false;
 var firGeoJSON = null;
-var radarOn = false;
 var satDataSource = 'h9-cloudtop';
 var satOffsetMins = 0; // 0=最新, stepMin=10分前, ...
 var SAT_LAYER_CACHE = {};   // satKey+'|'+offsetMins → {ly, timeLabel, source}
@@ -1693,13 +1692,31 @@ function _clearSatLayer() {
   if(lbl) lbl.textContent = '衛星:なし';
 }
 
+function removeAllSatLayers() {
+  Object.keys(SAT_LAYER_CACHE).forEach(function(ck) {
+    var e = SAT_LAYER_CACHE[ck];
+    if(e && e.ly && map && map.hasLayer(e.ly)) {
+      try { map.removeLayer(e.ly); } catch(x) {}
+    }
+    delete SAT_LAYER_CACHE[ck];
+  });
+  if(LY.sat) {
+    if(map && map.hasLayer(LY.sat)) {
+      try { map.removeLayer(LY.sat); } catch(x) {}
+    }
+    LY.sat = null;
+  }
+}
+
 function reloadSatLayer() {
   if(satDataSource === 'none') {
     _clearSatLayer();
     return;
   }
   var ds = getSatDataSourceConfig();
-  if(ds && ds.provider === 'jma') loadSatJma();
+  if(!ds) return;
+  if(ds.provider === 'jma') loadSatJma();
+  else if(ds.provider === 'rainviewer') loadRainViewer();
   else loadSatAlt();
 }
 
@@ -1710,14 +1727,7 @@ function onSatSourceChange() {
   if(window.WXR_DEBUG === true) {
     console.log('[SAT] source switched:', satDataSource, ds);
   }
-  Object.keys(SAT_LAYER_CACHE).forEach(function(ck) {
-    var e = SAT_LAYER_CACHE[ck];
-    if(e && e.ly && map && map.hasLayer(e.ly)) {
-      try { map.removeLayer(e.ly); } catch(x) {}
-    }
-    delete SAT_LAYER_CACHE[ck];
-  });
-  LY.sat = null;
+  removeAllSatLayers();
   rebuildSatTimeSlider();
   reloadSatLayer();
 }
@@ -4956,7 +4966,7 @@ function _makeEumetsatEntry(srcKey, ds, offset) {
   var t = _eumetsatTimeOffset(offset, ds.timeStepMin);
   var wmsNz = ds.wmsMaxNativeZoom || 7;
   var ly = L.tileLayer.wms(_eumetsatWmsBase(), {
-    layers: ds.wmsLayer,
+    layers: METEOSAT_IODC_WMS_LAYER,
     format: 'image/png',
     transparent: true,
     opacity: 0,
@@ -5016,40 +5026,52 @@ function loadSatAlt() {
     _activateSat(ee, op, label, capturedOffset);
     var othersEu = _allOffsets().filter(function(o){ return o !== capturedOffset; });
     _preloadEntries(othersEu.map(function(o){ return _makeEumetsatEntry(srcKey, ds, o); }));
+  }
+}
+
+function loadRainViewer() {
+  var ds = getSatDataSourceConfig();
+  if(!ds || ds.provider !== 'rainviewer') return;
+  var srcKey = satDataSource;
+  var op = parseFloat(document.getElementById('satOp').value) / 100;
+  var capturedOffset = satOffsetMins;
+  var label = ds.label;
+  var ck = _satCk(srcKey, capturedOffset);
+
+  if(SAT_LAYER_CACHE[ck]) {
+    _activateSat(SAT_LAYER_CACHE[ck], op, label, capturedOffset);
     return;
   }
 
-  if(ds.provider === 'rainviewer') {
-    function showRv(rvData) {
-      var e = _makeRvEntry(srcKey, rvData.host, rvData.past, capturedOffset);
-      if(!e) {
-        document.getElementById('sat-lbl').textContent = label + ' (該当時刻なし)';
-        return;
-      }
-      _activateSat(e, op, label, capturedOffset);
-      var othersRv = _allOffsets().filter(function(o){ return o !== capturedOffset; });
-      _preloadEntries(othersRv.map(function(o){
-        return _makeRvEntry(srcKey, rvData.host, rvData.past, o);
-      }).filter(function(x){ return x; }));
-    }
-    var rvKey = 'rainviewer|frames';
-    if(SAT_API_CACHE[rvKey]) {
-      showRv(SAT_API_CACHE[rvKey]);
+  function showRv(rvData) {
+    var e = _makeRvEntry(srcKey, rvData.host, rvData.past, capturedOffset);
+    if(!e) {
+      document.getElementById('sat-lbl').textContent = label + ' (該当時刻なし)';
       return;
     }
-    document.getElementById('sat-lbl').textContent = label + ' 読込中...';
-    fetch('https://api.rainviewer.com/public/weather-maps.json')
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        if(!d || !d.radar || !d.radar.past || !d.radar.past.length) throw new Error('empty');
-        SAT_API_CACHE[rvKey] = {host: d.host, past: d.radar.past, ts: Date.now()};
-        if(satDataSource !== srcKey) return;
-        showRv(SAT_API_CACHE[rvKey]);
-      })
-      .catch(function(){
-        document.getElementById('sat-lbl').textContent = label + ' (取得失敗)';
-      });
+    _activateSat(e, op, label, capturedOffset);
+    var othersRv = _allOffsets().filter(function(o){ return o !== capturedOffset; });
+    _preloadEntries(othersRv.map(function(o){
+      return _makeRvEntry(srcKey, rvData.host, rvData.past, o);
+    }).filter(function(x){ return x; }));
   }
+  var rvKey = 'rainviewer|frames';
+  if(SAT_API_CACHE[rvKey]) {
+    showRv(SAT_API_CACHE[rvKey]);
+    return;
+  }
+  document.getElementById('sat-lbl').textContent = label + ' 読込中...';
+  fetch('https://api.rainviewer.com/public/weather-maps.json')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d || !d.radar || !d.radar.past || !d.radar.past.length) throw new Error('empty');
+      SAT_API_CACHE[rvKey] = {host: d.host, past: d.radar.past, ts: Date.now()};
+      if(satDataSource !== srcKey) return;
+      showRv(SAT_API_CACHE[rvKey]);
+    })
+    .catch(function(){
+      document.getElementById('sat-lbl').textContent = label + ' (取得失敗)';
+    });
 }
 
 function _makeJmaEntry(k, s, jmaList, offset) {
@@ -5140,36 +5162,6 @@ function setSatOp(v) {
   if(LY.sat) {
     LY.sat.setOpacity(val/100);
   }
-}
-
-// =====================================================================
-// RADAR
-// =====================================================================
-function loadRadar() {
-  if(!radarOn) return;
-  fetch('https://api.rainviewer.com/public/weather-maps.json')
-    .then(function(r){return r.json();})
-    .then(function(d){
-      var f = d.radar.past[d.radar.past.length-1];
-      if(LY.radar){map.removeLayer(LY.radar); LY.radar=null;}
-      LY.radar = L.tileLayer(
-        d.host+f.path+'/256/{z}/{x}/{y}/4/1_1.png',
-        {opacity:0.65,maxZoom:12,maxNativeZoom:7,updateWhenIdle:lowBw,keepBuffer:lowBw?0:2,noWrap:false}
-      ).addTo(map);
-      bringTop();
-    }).catch(function(){});
-}
-loadRadar();
-
-function toggleRadar() {
-  radarOn = !radarOn;
-  var b = document.getElementById('radarBtn');
-  if(b) {
-    b.className = radarOn ? 'btn on' : 'btn';
-    b.textContent = radarOn ? '● Radar' : '○ Radar';
-  }
-  if(radarOn) loadRadar();
-  else if(LY.radar){map.removeLayer(LY.radar); LY.radar=null;}
 }
 
 // =====================================================================
@@ -7527,7 +7519,7 @@ function toggleLightning() {
 
 function bringTop() {
   if(LY.sig)   try{LY.sig.bringToFront();}catch(e){}
-  if(LY.radar) try{LY.radar.bringToFront();}catch(e){}
+  if(LY.sat)   try{LY.sat.bringToFront();}catch(e){}
   if(LY.fir)   try{LY.fir.bringToFront();}catch(e){}
   if(LY.glide) try{LY.glide.bringToFront();}catch(e){}
   if(gfsRadarLayer) try{gfsRadarLayer.bringToFront();}catch(e){}
@@ -7560,7 +7552,6 @@ function frameRoute() {
 
 function refreshAll() {
   reloadSatLayer();
-  if(radarOn) loadRadar();
   if(document.getElementById('oSig').checked)   loadSigmets();
   if(document.getElementById('dep').checked)    fetchAc();
   if(typeof drawAlt === 'function') drawAlt();
@@ -7575,7 +7566,7 @@ function toggleBw() {
 
 // 10分おきに衛星・レーダー自動更新
 setInterval(function(){
-  if(!lowBw) { reloadSatLayer(); if(radarOn) loadRadar(); }
+  if(!lowBw) { reloadSatLayer(); }
 },600000);
 
 // =====================================================================
