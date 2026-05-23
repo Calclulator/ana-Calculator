@@ -179,6 +179,8 @@
   #fdp-panel .fdp-inp{width:88px;background:#0d1117;border:1px solid #2a3a4e;border-radius:3px;color:#cfd8dc;font-family:inherit;font-size:15px;padding:6px 8px;}
   #fdp-panel .fdp-inp.fdp-inp-invalid{border-color:#ef5350!important;box-shadow:0 0 0 1px #ef5350;}
   #fdp-panel .fdp-inp.fdp-time-inp{width:168px;}
+  #fdp-panel .fdp-inp.fdp-offset-inp{width:88px;}
+  #fdp-panel .fdp-su-note{font-size:12px;color:#78909c;margin:-4px 0 8px 130px;line-height:1.45;max-width:520px;}
   #fdp-panel .fdp-inp-wrap{display:inline-flex;align-items:center;gap:6px;}
   #fdp-panel .fdp-field-status{font-size:14px;line-height:1;min-width:18px;color:#78909c;}
   #fdp-panel .fdp-clear-row{margin-bottom:12px;}
@@ -540,8 +542,13 @@
     <h2>FDP Calc (飛行勤務時間計算)</h2>
     <div class="fdp-inputs">
       <div class="fdp-row-in">
-        <label for="fdp-su-time">S/U 時刻</label>
-        <input id="fdp-su-time" class="fdp-inp fdp-time-inp" type="text" placeholder="0900 または 09:00" oninput="refreshFdpCalc()" onchange="refreshFdpCalc()">
+        <label for="fdp-su-time">S/U 時刻 (Z)</label>
+        <input id="fdp-su-time" class="fdp-inp fdp-time-inp" type="text" placeholder="0900 または 09:00 (Z で記入)" oninput="refreshFdpCalc()" onchange="refreshFdpCalc()">
+      </div>
+      <div class="fdp-su-note">※ Z (UTC) で入力。table 引きは順応地域 LCL に内部換算 (OM 8-5-1 ①注1)。</div>
+      <div class="fdp-row-in">
+        <label for="fdp-utc-offset">順応地域 UTC offset</label>
+        <input id="fdp-utc-offset" class="fdp-inp fdp-offset-inp" type="text" value="9" placeholder="+9 (JST), -10 (HST), -8 (PST) 等" oninput="refreshFdpCalc()" onchange="refreshFdpCalc()">
       </div>
       <div class="fdp-row-in">
         <label for="fdp-sectors">着陸回数</label>
@@ -1295,6 +1302,7 @@ function syncFdpFromNavlog() {
 
 function clearFdpCalc() {
   var suEl = document.getElementById('fdp-su-time');
+  var offsetEl = document.getElementById('fdp-utc-offset');
   var secEl = document.getElementById('fdp-sectors');
   var crewEl = document.getElementById('fdp-crew');
   var restEl = document.getElementById('fdp-rest-class');
@@ -1308,6 +1316,10 @@ function clearFdpCalc() {
     delete suEl.dataset.userEdited;
     delete suEl.dataset.autoFilled;
     fdpSetTimeInputInvalid(suEl, false);
+  }
+  if(offsetEl) {
+    offsetEl.value = '9';
+    fdpSetTimeInputInvalid(offsetEl, false);
   }
   if(secEl) secEl.value = '1';
   if(crewEl) crewEl.value = 'single';
@@ -1344,6 +1356,7 @@ function fdpSetTimeInputInvalid(el, invalid) {
 function refreshFdpCalc() {
   if(typeof window.FdpCalc === 'undefined' || !window.FdpCalc.computeFdpLimit) return;
   var suEl = document.getElementById('fdp-su-time');
+  var offsetEl = document.getElementById('fdp-utc-offset');
   var secEl = document.getElementById('fdp-sectors');
   var crewEl = document.getElementById('fdp-crew');
   var restEl = document.getElementById('fdp-rest-class');
@@ -1351,13 +1364,16 @@ function refreshFdpCalc() {
   var toutEl = document.getElementById('fdp-taxi-out');
   var tinEl = document.getElementById('fdp-taxi-in');
   var suRaw = suEl ? String(suEl.value).trim() : '';
+  var offsetRaw = offsetEl ? String(offsetEl.value).trim() : '';
   var fltRaw = fltEl ? String(fltEl.value).trim() : '';
   var suParsed = window.FdpCalc.parseTimeInput(suRaw);
   var fltParsed = fltRaw ? window.FdpCalc.parseTimeInput(fltRaw) : null;
+  var offsetParsed = offsetRaw.length > 0 ? window.FdpCalc.parseUtcOffset(offsetRaw) : 9;
   var fltMin = null;
   if(fltParsed) fltMin = fltParsed.hour * 60 + fltParsed.min;
 
   fdpSetTimeInputInvalid(suEl, suRaw.length > 0 && !suParsed);
+  fdpSetTimeInputInvalid(offsetEl, offsetRaw.length > 0 && offsetParsed === null);
   fdpSetTimeInputInvalid(fltEl, fltRaw.length > 0 && !fltParsed);
 
   var outFdp = document.getElementById('fdp-out-max-fdp');
@@ -1368,7 +1384,7 @@ function refreshFdpCalc() {
   var outWarn = document.getElementById('fdp-out-warnings');
   var dash = '—';
 
-  if(!suParsed) {
+  if(!suParsed || offsetParsed === null) {
     if(outFdp) outFdp.textContent = dash;
     if(outBlk) outBlk.textContent = dash;
     if(outBi) outBi.textContent = dash;
@@ -1381,6 +1397,7 @@ function refreshFdpCalc() {
   var input = {
     suHour: suParsed.hour,
     suMin: suParsed.min,
+    utcOffset: offsetParsed,
     sectors: secEl ? parseInt(secEl.value, 10) : 1,
     crew: crewEl ? crewEl.value : 'single',
     restClass: restEl ? parseInt(restEl.value, 10) : 1,
@@ -1392,12 +1409,12 @@ function refreshFdpCalc() {
 
   if(outFdp) outFdp.textContent = window.FdpCalc.formatDurationMin(r.maxFdpMin);
   if(outBlk) outBlk.textContent = window.FdpCalc.formatDurationMin(r.maxBlkMin);
-  if(outBi) outBi.textContent = window.FdpCalc.formatWallClockMin(r.latestBlockInMin);
+  if(outBi) outBi.textContent = window.FdpCalc.formatWallClockMinZ(r.latestBlockInMin);
   if(outTo) {
-    outTo.textContent = (r.latestTakeoffMin === null) ? dash : window.FdpCalc.formatWallClockMin(r.latestTakeoffMin);
+    outTo.textContent = (r.latestTakeoffMin === null) ? dash : window.FdpCalc.formatWallClockMinZ(r.latestTakeoffMin);
   }
   if(outBo) {
-    outBo.textContent = (r.latestBlockOutMin === null) ? dash : window.FdpCalc.formatWallClockMin(r.latestBlockOutMin);
+    outBo.textContent = (r.latestBlockOutMin === null) ? dash : window.FdpCalc.formatWallClockMinZ(r.latestBlockOutMin);
   }
   if(outWarn) {
     var wh = '';
@@ -5946,7 +5963,7 @@ function toggleMode() {
     #fdp-panel .bar{background:#f0f4f8!important;border-bottom-color:#dde3ea!important;}
     #fdp-panel .fdp-wrap h2{color:#1565c0!important;}
     #fdp-panel .fdp-inputs,#fdp-panel .fdp-outputs{background:#ffffff!important;border-color:#d0d8e4!important;}
-    #fdp-panel .fdp-row-in label,#fdp-panel .fdp-row .label,#fdp-panel .fdp-notes{color:#546e7a!important;}
+    #fdp-panel .fdp-row-in label,#fdp-panel .fdp-row .label,#fdp-panel .fdp-notes,#fdp-panel .fdp-su-note{color:#546e7a!important;}
     #fdp-panel .fdp-inp{background:#ffffff!important;border-color:#c8d0da!important;color:#1a2a3a!important;}
     #fdp-panel .fdp-row .fdp-val{color:#1a2a3a!important;}
     #fdp-panel .fdp-row.important .label,#fdp-panel .fdp-row.important .fdp-val{color:#1565c0!important;}

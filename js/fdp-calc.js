@@ -60,6 +60,27 @@ function fdpClampInt(v, lo, hi) {
   return n;
 }
 
+function parseUtcOffset(str) {
+  if (str === null || str === undefined) return null;
+  var s = String(str).trim().replace(/\s/g, '');
+  if (!s) return null;
+  var n = parseFloat(s);
+  if (isNaN(n)) return null;
+  n = Math.round(n * 4) / 4;
+  if (n < -12 || n > 14) return null;
+  return n;
+}
+
+function fdpNormalizeUtcOffset(v) {
+  if (v === null || v === undefined || v === '') return 0;
+  var n = Number(v);
+  if (isNaN(n)) return 0;
+  n = Math.round(n * 4) / 4;
+  if (n < -12) n = -12;
+  if (n > 14) n = 14;
+  return n;
+}
+
 function parseTimeInput(str) {
   if (str === null || str === undefined) return null;
   var s = String(str).trim().replace(/[^0-9:]/g, '');
@@ -182,6 +203,12 @@ function formatWallClockMin(totalMin) {
   return out;
 }
 
+function formatWallClockMinZ(totalMin) {
+  var out = formatWallClockMin(totalMin);
+  if (out === '—') return out;
+  return out + ' Z';
+}
+
 function computeFdpLimit(input) {
   var warnings = [];
   var inObj = input || {};
@@ -194,18 +221,24 @@ function computeFdpLimit(input) {
   if (fltMin !== null && (isNaN(fltMin) || fltMin <= 0)) fltMin = null;
   var taxiOutMin = fdpClampInt(inObj.taxiOutMin, 0, 999);
   var taxiInMin = fdpClampInt(inObj.taxiInMin, 0, 999);
+  var utcOffset = fdpNormalizeUtcOffset(inObj.utcOffset);
+
+  var suZTotalMin = suHour * 60 + suMin;
+  var offsetMin = Math.round(utcOffset * 60);
+  var suLclTotalMin = ((suZTotalMin + offsetMin) % 1440 + 1440) % 1440;
+  var suLclHour = Math.floor(suLclTotalMin / 60);
 
   var maxFdpMin = null;
   var maxBlkMin = null;
   var row, secIdx, secCol, rcKey;
 
   if (crew === 'single') {
-    row = fdpFindTableRow(FDP_TABLE_SINGLE, suHour);
+    row = fdpFindTableRow(FDP_TABLE_SINGLE, suLclHour);
     if (row) {
       secIdx = fdpSectorIdxSingle(sectors);
       maxFdpMin = row.fdpMin[secIdx];
     }
-    row = fdpFindTableRow(BLK_TABLE_SINGLE, suHour);
+    row = fdpFindTableRow(BLK_TABLE_SINGLE, suLclHour);
     if (row) {
       secCol = sectors <= 2 ? 0 : 1;
       maxBlkMin = row.blkMin[secCol];
@@ -238,8 +271,7 @@ function computeFdpLimit(input) {
   if (maxFdpMin === null) maxFdpMin = 0;
   if (maxBlkMin === null) maxBlkMin = 0;
 
-  var suTotalMin = suHour * 60 + suMin;
-  var latestBlockInMin = suTotalMin + maxFdpMin;
+  var latestBlockInMin = suZTotalMin + maxFdpMin;
   var latestTakeoffMin = null;
   var latestBlockOutMin = null;
 
@@ -277,8 +309,10 @@ var FdpCalcExports = {
   parseNavlogFltMin: parseNavlogFltMin,
   parseNavlogTaxiMin: parseNavlogTaxiMin,
   parseNavlogFdpFields: parseNavlogFdpFields,
+  parseUtcOffset: parseUtcOffset,
   formatDurationMin: formatDurationMin,
-  formatWallClockMin: formatWallClockMin
+  formatWallClockMin: formatWallClockMin,
+  formatWallClockMinZ: formatWallClockMinZ
 };
 
 if (typeof window !== 'undefined') {
