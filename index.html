@@ -258,9 +258,9 @@
       <option value="h9-cloudtop" selected>Himawari-9 雲頂強調</option>
       <option value="h9-visible">Himawari-9 可視光</option>
       <option value="h9-watervapor">Himawari-9 水蒸気</option>
-      <option value="goes-west">GOES-West 雲頂強調 (北米西/太平洋東)</option>
-      <option value="goes-east">GOES-East 雲頂強調 (北米東/大西洋)</option>
-      <option value="meteosat-iodc">Meteosat IODC 雲頂強調 (欧州/中央アジア)</option>
+      <option value="goes-west">雲頂強調-西海岸</option>
+      <option value="goes-east">雲頂強調-東海岸</option>
+      <option value="meteosat-iodc">雲頂強調-中央アジア</option>
       <option value="rainviewer">RainViewer Radar (降水)</option>
     </select>
     <span class="lbl">透過度</span>
@@ -752,7 +752,7 @@ var SAT_DATA_SOURCES = {
     jmaKey: 'himawari-fd-wv'
   },
   'goes-west': {
-    label: 'GOES-West 雲頂強調 (北米西/太平洋東)',
+    label: '雲頂強調-西海岸',
     timeStepMin: 10,
     maxOffsetMin: 360,
     attribution: '\u00a9 SSEC/UW-Madison',
@@ -761,7 +761,7 @@ var SAT_DATA_SOURCES = {
     reMaxZoom: 5
   },
   'goes-east': {
-    label: 'GOES-East 雲頂強調 (北米東/大西洋)',
+    label: '雲頂強調-東海岸',
     timeStepMin: 10,
     maxOffsetMin: 360,
     attribution: '\u00a9 SSEC/UW-Madison',
@@ -770,7 +770,7 @@ var SAT_DATA_SOURCES = {
     reMaxZoom: 5
   },
   'meteosat-iodc': {
-    label: 'Meteosat IODC 雲頂強調 (欧州/中央アジア/中東)',
+    label: '雲頂強調-中央アジア',
     timeStepMin: 15,
     maxOffsetMin: 360,
     attribution: '\u00a9 EUMETSAT',
