@@ -4838,13 +4838,41 @@ function _allOffsets() {
   return arr;
 }
 
-function _rammbTileUrl(satellite, sector, product, tsInt, rz, ty, tx) {
-  var s = String(tsInt);
-  var date = s.slice(0, 4) + '/' + s.slice(4, 6) + '/' + s.slice(6, 8);
-  return 'https://rammb-slider.cira.colostate.edu/data/imagery/' + date + '/' +
-    satellite + '---' + sector + '/' + product + '/' + tsInt + '/' +
-    ('0' + rz).slice(-2) + '/' +
-    ('00' + ty).slice(-3) + '_' + ('00' + tx).slice(-3) + '.png';
+function _rammbPad2(n) { return (n < 10 ? '0' : '') + n; }
+function _rammbPad3(n) { var s = String(n); while (s.length < 3) s = '0' + s; return s; }
+
+function _rammbTileUrl(satellite, sector, product, timestamp, zoom, tileX, tileY) {
+  var tsStr = String(timestamp);
+  // RAMMB 現行サーバーは YYYY/MM/DD パス (YYYYMMDD は 404)
+  var datePath = tsStr.substr(0, 4) + '/' + tsStr.substr(4, 2) + '/' + tsStr.substr(6, 2);
+  return 'https://rammb-slider.cira.colostate.edu/data/imagery/' + datePath + '/' +
+    satellite + '---' + sector + '/' + product + '/' + tsStr + '/' +
+    _rammbPad2(zoom) + '/' + _rammbPad3(tileY) + '_' + _rammbPad3(tileX) + '.png';
+}
+
+function _fetchRammbTimes(sat, sector, product, callback, onErr) {
+  var url = 'https://rammb-slider.cira.colostate.edu/data/json/' +
+    sat + '/' + sector + '/' + product + '/latest_times_5760.json?_=' + Date.now();
+  fetch(url)
+    .then(function(r) {
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(data) {
+      var times = data.timestamps_int || data;
+      if(!times || !times.length) throw new Error('empty timestamps');
+      callback(times);
+    })
+    .catch(function() {
+      var fallback = 'https://rammb-slider.cira.colostate.edu/data/json/' +
+        sat + '/' + sector + '/' + product + '/latest_times.json?_=' + Date.now();
+      fetch(fallback)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          callback(data.timestamps_int || data || []);
+        })
+        .catch(function() { if(onErr) onErr(); });
+    });
 }
 
 function _rammbTimeLabel(tsInt) {
@@ -4870,67 +4898,37 @@ function _createRammbLayer(ds, tsInt) {
   var product = ds.product;
   var RammbLayer = L.GridLayer.extend({
     createTile: function(coords, done) {
-      var canvas = document.createElement('canvas');
-      canvas.width = canvas.height = 256;
-      var ctx = canvas.getContext('2d');
+      var tile = document.createElement('img');
+      L.DomEvent.on(tile, 'load', L.bind(done, null, null, tile));
+      L.DomEvent.on(tile, 'error', function() {
+        tile.src = BLANK_TILE;
+        done(null, tile);
+      });
       var tileBounds = this._tileCoordsToBounds(coords);
       var south = tileBounds.getSouth();
       var north = tileBounds.getNorth();
       var west = tileBounds.getWest();
       var east = tileBounds.getEast();
       if(north < b[0][0] || south > b[1][0] || east < b[0][1] || west > b[1][1]) {
-        done(null, canvas);
-        return canvas;
+        tile.src = BLANK_TILE;
+        return tile;
+      }
+      var latSpan = b[1][0] - b[0][0];
+      var lonSpan = b[1][1] - b[0][1];
+      var lat = (north + south) / 2;
+      var lng = (west + east) / 2;
+      var fx = (lng - b[0][1]) / lonSpan;
+      var fy = (b[1][0] - lat) / latSpan;
+      if(fx < 0 || fx > 1 || fy < 0 || fy > 1) {
+        tile.src = BLANK_TILE;
+        return tile;
       }
       var rammbZ = Math.min(3, Math.max(0, coords.z - 2));
       var n = Math.pow(2, rammbZ);
-      var latSpan = b[1][0] - b[0][0];
-      var lonSpan = b[1][1] - b[0][1];
-      function llToRammb(lat, lng) {
-        var fx = (lng - b[0][1]) / lonSpan;
-        var fy = (b[1][0] - lat) / latSpan;
-        return {
-          tx: Math.min(n - 1, Math.max(0, Math.floor(fx * n))),
-          ty: Math.min(n - 1, Math.max(0, Math.floor(fy * n)))
-        };
-      }
-      var sw = llToRammb(south, west);
-      var ne = llToRammb(north, east);
-      var txMin = Math.max(0, Math.min(sw.tx, ne.tx));
-      var txMax = Math.min(n - 1, Math.max(sw.tx, ne.tx));
-      var tyMin = Math.max(0, Math.min(sw.ty, ne.ty));
-      var tyMax = Math.min(n - 1, Math.max(sw.ty, ne.ty));
-      var pending = 0;
-      var ty, tx;
-      for(ty = tyMin; ty <= tyMax; ty++) {
-        for(tx = txMin; tx <= txMax; tx++) {
-          pending++;
-          (function(rTy, rTx) {
-            var img = new Image();
-            img.onload = function() {
-              var rWest = b[0][1] + (rTx / n) * lonSpan;
-              var rEast = b[0][1] + ((rTx + 1) / n) * lonSpan;
-              var rNorth = b[1][0] - (rTy / n) * latSpan;
-              var rSouth = b[1][0] - ((rTy + 1) / n) * latSpan;
-              var tWest = west, tEast = east, tNorth = north, tSouth = south;
-              var x0 = Math.max(0, (rWest - tWest) / (tEast - tWest) * 256);
-              var x1 = Math.min(256, (rEast - tWest) / (tEast - tWest) * 256);
-              var y0 = Math.max(0, (tNorth - rNorth) / (tNorth - tSouth) * 256);
-              var y1 = Math.min(256, (tNorth - rSouth) / (tNorth - tSouth) * 256);
-              if(x1 > x0 && y1 > y0) ctx.drawImage(img, x0, y0, x1 - x0, y1 - y0);
-              pending--;
-              if(pending === 0) done(null, canvas);
-            };
-            img.onerror = function() {
-              pending--;
-              if(pending === 0) done(null, canvas);
-            };
-            img.src = _rammbTileUrl(sat, sector, product, tsInt, rammbZ, rTy, rTx);
-          })(ty, tx);
-        }
-      }
-      if(pending === 0) done(null, canvas);
-      return canvas;
+      var tileX = Math.min(n - 1, Math.max(0, Math.floor(fx * n)));
+      var tileY = Math.min(n - 1, Math.max(0, Math.floor(fy * n)));
+      tile.src = _rammbTileUrl(sat, sector, product, tsInt, rammbZ, tileX, tileY);
+      return tile;
     }
   });
   return new RammbLayer({
@@ -4941,6 +4939,7 @@ function _createRammbLayer(ds, tsInt) {
     maxNativeZoom: 6,
     updateWhenIdle: false,
     keepBuffer: 1,
+    errorTileUrl: BLANK_TILE,
     noWrap: false
   });
 }
@@ -4957,7 +4956,7 @@ function _makeRammbEntry(srcKey, ds, timestamps, offset) {
 
 function _eumetsatTimeOffset(offsetMin, stepMin) {
   var step = stepMin || 15;
-  var lagMin = 30;
+  var lagMin = 45;
   var ms = Date.now() - (lagMin + offsetMin) * 60000;
   var d = new Date(ms);
   var mn = Math.floor(d.getUTCMinutes() / step) * step;
@@ -4967,7 +4966,7 @@ function _eumetsatTimeOffset(offsetMin, stepMin) {
   var dy = ('0' + d.getUTCDate()).slice(-2);
   var hr = ('0' + d.getUTCHours()).slice(-2);
   var mm = ('0' + mn).slice(-2);
-  return yr + '-' + mo + '-' + dy + 'T' + hr + ':' + mm + ':00Z';
+  return yr + '-' + mo + '-' + dy + 'T' + hr + ':' + mm + ':00.000Z';
 }
 
 function _makeEumetsatEntry(srcKey, ds, offset) {
@@ -4982,7 +4981,8 @@ function _makeEumetsatEntry(srcKey, ds, offset) {
     attribution: ds.attribution,
     uppercase: true,
     version: '1.1.1',
-    time: t
+    time: t,
+    errorTileUrl: BLANK_TILE
   });
   var entry = {ly: ly, timeLabel: t.slice(11, 16) + 'Z', source: 'EUMETSAT'};
   SAT_LAYER_CACHE[ck] = entry;
@@ -5010,25 +5010,19 @@ function loadSatAlt() {
       var others = _allOffsets().filter(function(o){ return o !== capturedOffset; });
       _preloadEntries(others.map(function(o){ return _makeRammbEntry(srcKey, ds, list, o); }));
     }
-    var cacheKey = srcKey + '|ts';
+    var cacheKey = srcKey + '|ts5760';
     if(SAT_API_CACHE[cacheKey]) {
       showRammb(SAT_API_CACHE[cacheKey].timestamps);
       return;
     }
-    var metaUrl = 'https://rammb-slider.cira.colostate.edu/data/json/' +
-      ds.satellite + '/' + ds.sector + '/' + ds.product + '/latest_times.json';
     document.getElementById('sat-lbl').textContent = label + ' 読込中...';
-    fetch(metaUrl + '?_=' + Date.now())
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        var list = d.timestamps_int || [];
-        SAT_API_CACHE[cacheKey] = {timestamps: list, ts: Date.now()};
-        if(satDataSource !== srcKey) return;
-        showRammb(list);
-      })
-      .catch(function(){
-        document.getElementById('sat-lbl').textContent = label + ' (取得失敗)';
-      });
+    _fetchRammbTimes(ds.satellite, ds.sector, ds.product, function(list) {
+      SAT_API_CACHE[cacheKey] = {timestamps: list, ts: Date.now()};
+      if(satDataSource !== srcKey) return;
+      showRammb(list);
+    }, function() {
+      document.getElementById('sat-lbl').textContent = label + ' (取得失敗)';
+    });
     return;
   }
 
