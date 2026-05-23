@@ -57,6 +57,19 @@
   #map{height:100%;width:100%;background:#080a12;}
   body.day-mode #map{background:#ffffff;}
   #vleg{position:absolute;right:8px;top:10px;z-index:900;background:rgba(8,10,20,.92);border:1px solid #1e2a38;border-radius:4px;padding:6px 10px 6px 6px;pointer-events:none;display:flex;flex-direction:row;align-items:flex-start;gap:10px;max-width:calc(100vw - 16px);flex-wrap:wrap;justify-content:flex-end;}
+  #sat-fl-legend{position:absolute;left:8px;bottom:10px;z-index:900;pointer-events:none;background:rgba(255,255,255,.9);border:1px solid rgba(0,0,0,.15);border-radius:4px;padding:6px 8px;font-size:11px;line-height:1.35;color:#1a1a1a;max-width:min(168px,calc(100vw - 24px));}
+  body.day-mode #sat-fl-legend{background:rgba(0,0,0,.78);border-color:rgba(255,255,255,.22);color:#fff;}
+  .sat-fl-legend .sfl-title{font-size:11px;font-weight:bold;margin-bottom:4px;text-align:center;letter-spacing:.04em;}
+  .sat-fl-legend .sfl-bar{display:flex;flex-direction:column;gap:2px;}
+  .sat-fl-legend .sfl-row{display:flex;align-items:center;gap:5px;}
+  .sat-fl-legend .sfl-color{flex-shrink:0;width:12px;height:12px;border:1px solid rgba(129,147,168,.45);border-radius:1px;}
+  .sat-fl-legend .sfl-text{font-size:11px;white-space:nowrap;}
+  .sat-fl-legend .sfl-note{margin-top:4px;font-size:9px;line-height:1.35;opacity:.78;}
+  .sat-fl-legend .sfl-note-warn{margin-top:3px;font-size:9px;line-height:1.35;color:#ff9800;}
+  body.day-mode .sat-fl-legend .sfl-note-warn{color:#ffb74d;}
+  @media (max-width:900px){
+    #sat-fl-legend{left:6px;bottom:8px;max-width:min(160px,calc(100vw - 20px));}
+  }
   #wx-fl-panel .wx-fl-btn{cursor:pointer;padding:3px 8px;margin-bottom:4px;border-radius:3px;font-size:13px;font-family:monospace;text-align:center;min-width:52px;box-sizing:border-box;}
   .etops-opts{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;max-width:min(320px,90vw);}
   #statusbar{background:#080a12;border-top:1px solid #1a2535;padding:3px 8px;padding-bottom:max(3px,env(safe-area-inset-bottom));display:flex;flex-wrap:wrap;gap:12px;font-size:10px;color:#546e7a;flex-shrink:0;}
@@ -341,6 +354,21 @@
           </div>
         </div>
       </div>
+    </div>
+    <div id="sat-fl-legend" class="sat-fl-legend" style="display:none;">
+      <div class="sfl-title">雲頂 FL (ISA 換算)</div>
+      <div class="sfl-bar">
+        <div class="sfl-row"><span class="sfl-color" style="background:#4b0082"></span><span class="sfl-text">FL450+</span></div>
+        <div class="sfl-row"><span class="sfl-color" style="background:#dc143c"></span><span class="sfl-text">FL400-450</span></div>
+        <div class="sfl-row"><span class="sfl-color" style="background:#ff8c00"></span><span class="sfl-text">FL370-400</span></div>
+        <div class="sfl-row"><span class="sfl-color" style="background:#ffd700"></span><span class="sfl-text">FL340-370</span></div>
+        <div class="sfl-row"><span class="sfl-color" style="background:#32cd32"></span><span class="sfl-text">FL290-340</span></div>
+        <div class="sfl-row"><span class="sfl-color" style="background:#00bfff"></span><span class="sfl-text">FL240-290</span></div>
+        <div class="sfl-row"><span class="sfl-color" style="background:#1e90ff"></span><span class="sfl-text">FL190-240</span></div>
+        <div class="sfl-row"><span class="sfl-color" style="background:#808080"></span><span class="sfl-text">低層雲</span></div>
+      </div>
+      <div class="sfl-note">※ ISA 換算のざっくり値<br>熱帯/極地で ±5,000ft 誤差</div>
+      <div class="sfl-note-warn" style="display:none">※ Meteosat IODC は RGB 合成のため<br>色マップが異なります (参考値)</div>
     </div>
   </div>
 
@@ -1626,6 +1654,40 @@ function parseCTME(s) {
 // =====================================================================
 // SATELLITE TIME
 // =====================================================================
+
+// BT (K) → FL (ISA 標準大気換算) — 凡例 FL 帯の根拠
+function btToFlIsa(btK) {
+  var z;
+  if (btK >= 216.65) {
+    z = (288.15 - btK) / 6.5;
+  } else {
+    z = 11.0 + (216.65 - btK) * 0.5;
+  }
+  if (z < 0) z = 0;
+  var ft = z * 1000 / 0.3048;
+  return Math.round(ft / 100);
+}
+
+var SAT_FL_LEGEND_SOURCES = ['h9-cloudtop', 'goes-west', 'goes-east', 'meteosat-iodc'];
+
+function updateSatFlLegend(sourceKey) {
+  var legend = document.getElementById('sat-fl-legend');
+  if (!legend) return;
+  var showFor = SAT_FL_LEGEND_SOURCES;
+  var meteosat = (sourceKey === 'meteosat-iodc');
+  var i, found = false;
+  for (i = 0; i < showFor.length; i++) {
+    if (showFor[i] === sourceKey) { found = true; break; }
+  }
+  if (found) {
+    legend.style.display = '';
+    var noteWarn = legend.querySelector('.sfl-note-warn');
+    if (noteWarn) noteWarn.style.display = meteosat ? '' : 'none';
+  } else {
+    legend.style.display = 'none';
+  }
+}
+
 function getSatDataSourceConfig() {
   if(satDataSource === 'none') return null;
   return SAT_DATA_SOURCES[satDataSource] || SAT_DATA_SOURCES['h9-cloudtop'];
@@ -1701,6 +1763,7 @@ function onSatSourceChange() {
   removeAllSatLayers();
   rebuildSatTimeSlider();
   reloadSatLayer();
+  updateSatFlLegend(satDataSource);
 }
 
 function onSatTimeSlide(val) {
@@ -5136,6 +5199,7 @@ function loadSatJma() {
 }
 rebuildSatTimeSlider();
 reloadSatLayer();
+updateSatFlLegend(satDataSource);
 
 function setSatOp(v) {
   var val = parseFloat(v);
