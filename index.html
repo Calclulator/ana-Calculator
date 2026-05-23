@@ -33,10 +33,7 @@
   #wx-panel .wx-ctrl-bar #satOpV,
   #wx-panel .wx-ctrl-bar #satTimeLbl{font-size:13px!important;}
   #wx-panel .wx-ctrl-bar #sat-lbl{font-size:12px!important;}
-  #wx-panel .wx-ctrl-bar #sat-source{max-width:240px;}
-  @media (max-width:900px){
-    #wx-panel .wx-ctrl-bar #sat-source{max-width:72px;}
-  }
+  #wx-panel .wx-ctrl-bar #sat-source{max-width:min(100%,420px);}
   #wx-panel .wx-ctrl-bar #avoidNm{font-size:14px!important;}
   #wx-panel .wx-ctrl-bar #ap-metar-refresh{font-size:13px;padding:2px 8px;line-height:1.2;margin-left:6px;}
   #wx-panel .wx-ctrl-bar #ap-metar-refresh:disabled{opacity:0.45;cursor:not-allowed;}
@@ -256,7 +253,7 @@
   <!-- BAR2: SAT時刻スライダー -->
   <div class="bar wx-ctrl-bar">
     <span class="lbl">SAT</span>
-    <select id="sat-source" class="btn" onchange="onSatSourceChange()" style="max-width:240px;">
+    <select id="sat-source" class="btn" onchange="onSatSourceChange()" style="max-width:min(100%,420px);">
       <option value="none">衛星なし</option>
       <option value="h9-cloudtop" selected>Himawari-9 雲頂強調</option>
       <option value="h9-visible">Himawari-9 可視光</option>
@@ -724,17 +721,14 @@ var ETOPS_RING_NM = {
  * - CORS: * on /api/image, /api/times — タイルは proxy realearth-relay で 10 分 cache (Size limit 対策)
  * - GOES 雲頂強調: G18/G19-ABI-FD-BAND13-GRAD (Clean IR enhanced, 青黄赤カラー)
  * - Himawari: JMA 雲頂強調/可視光/水蒸気 (NICT tile); RealEarth HIMAWARI-B13-GRAD もあるが JMA sandwich 維持
- * - Meteosat IODC: EUMETSAT msg_iodc:rgb_naturalenhncd 固定 (GetCapabilities 2026-05:
- *   mumi_iodc:cth_iodc / enhanced_ir なし; cth は高度スケールで紫系 → naturalenhncd を採用)
+ * - Meteosat IODC: EUMETSAT msg_iodc:rgb_microphysics 固定 (GetCapabilities 2026-05:
+ *   enhanced_ir なし; cth=高度スケール; rgb_microphysics=Day Microphysics 雲頂分類)
+ *   禁止: Convection RGB 紫マダラ系 — fallback 経路なし
  */
-var METEOSAT_IODC_WMS_LAYER = 'msg_iodc:rgb_naturalenhncd';
-var SAT_SOURCE_UI = {
-  'none': {label: '衛星なし', shortLabel: 'OFF'}
-};
+var METEOSAT_IODC_WMS_LAYER = 'msg_iodc:rgb_microphysics';
 var SAT_DATA_SOURCES = {
   'h9-cloudtop': {
     label: 'Himawari-9 雲頂強調',
-    shortLabel: 'H9-CT',
     timeStepMin: 10,
     maxOffsetMin: 120,
     attribution: 'JMA/JAXA',
@@ -743,7 +737,6 @@ var SAT_DATA_SOURCES = {
   },
   'h9-visible': {
     label: 'Himawari-9 可視光',
-    shortLabel: 'H9-V',
     timeStepMin: 10,
     maxOffsetMin: 120,
     attribution: 'JMA/JAXA',
@@ -752,7 +745,6 @@ var SAT_DATA_SOURCES = {
   },
   'h9-watervapor': {
     label: 'Himawari-9 水蒸気',
-    shortLabel: 'H9-WV',
     timeStepMin: 10,
     maxOffsetMin: 120,
     attribution: 'JMA/JAXA',
@@ -761,7 +753,6 @@ var SAT_DATA_SOURCES = {
   },
   'goes-west': {
     label: 'GOES-West 雲頂強調 (北米西/太平洋東)',
-    shortLabel: 'GW',
     timeStepMin: 10,
     maxOffsetMin: 360,
     attribution: '\u00a9 SSEC/UW-Madison',
@@ -771,7 +762,6 @@ var SAT_DATA_SOURCES = {
   },
   'goes-east': {
     label: 'GOES-East 雲頂強調 (北米東/大西洋)',
-    shortLabel: 'GE',
     timeStepMin: 10,
     maxOffsetMin: 360,
     attribution: '\u00a9 SSEC/UW-Madison',
@@ -781,7 +771,6 @@ var SAT_DATA_SOURCES = {
   },
   'meteosat-iodc': {
     label: 'Meteosat IODC 雲頂強調 (欧州/中央アジア/中東)',
-    shortLabel: 'MTI',
     timeStepMin: 15,
     maxOffsetMin: 360,
     attribution: '\u00a9 EUMETSAT',
@@ -790,7 +779,6 @@ var SAT_DATA_SOURCES = {
   },
   'rainviewer': {
     label: 'RainViewer Radar (降水)',
-    shortLabel: 'RV',
     timeStepMin: 10,
     maxOffsetMin: 120,
     attribution: '\u00a9 RainViewer',
@@ -1641,23 +1629,6 @@ function parseCTME(s) {
 function getSatDataSourceConfig() {
   if(satDataSource === 'none') return null;
   return SAT_DATA_SOURCES[satDataSource] || SAT_DATA_SOURCES['h9-cloudtop'];
-}
-
-function updateSatSourceOptionLabels() {
-  var sel = document.getElementById('sat-source');
-  if(!sel) return;
-  var compact = window.innerWidth <= 900;
-  var i, opt, src, ui;
-  for(i = 0; i < sel.options.length; i++) {
-    opt = sel.options[i];
-    ui = SAT_SOURCE_UI[opt.value];
-    src = SAT_DATA_SOURCES[opt.value];
-    if(ui) {
-      opt.text = compact ? ui.shortLabel : ui.label;
-    } else if(src) {
-      opt.text = compact ? src.shortLabel : src.label;
-    }
-  }
 }
 
 function rebuildSatTimeSlider() {
@@ -5087,6 +5058,18 @@ function _makeJmaEntry(k, s, jmaList, offset) {
   return entry;
 }
 
+function _rainviewerRelayBase() {
+  var proxy = (typeof GFS_PROXY === 'string')
+    ? String(GFS_PROXY).replace(/\/$/, '')
+    : 'https://ana-calculator-gfs-proxy.vercel.app';
+  return proxy + '/api/sat/rainviewer-relay';
+}
+
+function _rainviewerTileUrl(framePath) {
+  var fp = String(framePath || '').replace(/^\//, '');
+  return _rainviewerRelayBase() + '?path=' + fp + '/256/{z}/{x}/{y}/4/1_1.png';
+}
+
 function _makeRvEntry(k, host, past, offset) {
   var ck = _satCk(k, offset);
   if(SAT_LAYER_CACHE[ck]) return SAT_LAYER_CACHE[ck];
@@ -5102,8 +5085,8 @@ function _makeRvEntry(k, host, past, offset) {
   }
   var ts = new Date(frame.time*1000);
   var tl = ('0'+ts.getUTCHours()).slice(-2)+':'+('0'+ts.getUTCMinutes()).slice(-2)+'Z';
-  var url = host+frame.path+'/256/{z}/{x}/{y}/4/1_1.png';
-  var ly = L.tileLayer(url, {opacity:0,maxNativeZoom:7,maxZoom:18,updateWhenIdle:false,keepBuffer:0,errorTileUrl:BLANK_TILE,noWrap:false});
+  var url = _rainviewerTileUrl(frame.path);
+  var ly = L.tileLayer(url, {opacity:0,maxNativeZoom:5,maxZoom:18,updateWhenIdle:false,keepBuffer:0,errorTileUrl:BLANK_TILE,noWrap:false});
   var entry = {ly:ly, timeLabel:tl, source:'RainViewer'};
   SAT_LAYER_CACHE[ck] = entry;
   return entry;
@@ -5151,8 +5134,6 @@ function loadSatJma() {
       document.getElementById('sat-lbl').textContent = label + ' (取得失敗)';
     });
 }
-updateSatSourceOptionLabels();
-window.addEventListener('resize', updateSatSourceOptionLabels);
 rebuildSatTimeSlider();
 reloadSatLayer();
 
