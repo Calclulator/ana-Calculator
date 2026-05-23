@@ -4851,28 +4851,26 @@ function _rammbTileUrl(satellite, sector, product, timestamp, zoom, tileX, tileY
 }
 
 function _fetchRammbTimes(sat, sector, product, callback, onErr) {
-  var url = 'https://rammb-slider.cira.colostate.edu/data/json/' +
-    sat + '/' + sector + '/' + product + '/latest_times_5760.json?_=' + Date.now();
+  var proxy = (typeof GFS_PROXY === 'string')
+    ? String(GFS_PROXY).replace(/\/$/, '')
+    : 'https://ana-calculator-gfs-proxy.vercel.app';
+  var url = proxy + '/api/sat/latest_times'
+    + '?sat=' + encodeURIComponent(sat)
+    + '&sector=' + encodeURIComponent(sector)
+    + '&product=' + encodeURIComponent(product)
+    + '&_=' + Date.now();
   fetch(url)
     .then(function(r) {
       if(!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     })
     .then(function(data) {
+      if(data && data.error) throw new Error(data.error);
       var times = data.timestamps_int || data;
       if(!times || !times.length) throw new Error('empty timestamps');
       callback(times);
     })
-    .catch(function() {
-      var fallback = 'https://rammb-slider.cira.colostate.edu/data/json/' +
-        sat + '/' + sector + '/' + product + '/latest_times.json?_=' + Date.now();
-      fetch(fallback)
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          callback(data.timestamps_int || data || []);
-        })
-        .catch(function() { if(onErr) onErr(); });
-    });
+    .catch(function() { if(onErr) onErr(); });
 }
 
 function _rammbTimeLabel(tsInt) {
