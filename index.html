@@ -33,7 +33,7 @@
   #wx-panel .wx-ctrl-bar #satOpV,
   #wx-panel .wx-ctrl-bar #satTimeLbl{font-size:13px!important;}
   #wx-panel .wx-ctrl-bar #sat-lbl{font-size:12px!important;}
-  #wx-panel .wx-ctrl-bar #sat-source{max-width:210px;}
+  #wx-panel .wx-ctrl-bar #sat-source{max-width:240px;}
   @media (max-width:900px){
     #wx-panel .wx-ctrl-bar #sat-source{max-width:72px;}
   }
@@ -256,12 +256,14 @@
   <!-- BAR2: SAT時刻スライダー -->
   <div class="bar wx-ctrl-bar">
     <span class="lbl">SAT</span>
-    <select id="sat-source" class="btn" onchange="onSatSourceChange()" style="max-width:210px;">
+    <select id="sat-source" class="btn" onchange="onSatSourceChange()" style="max-width:240px;">
       <option value="none">衛星なし</option>
-      <option value="himawari9" selected>Himawari-9 雲頂強調</option>
-      <option value="goes-west">GOES-West (北米西/太平洋東)</option>
-      <option value="goes-east">GOES-East (北米東/大西洋)</option>
-      <option value="meteosat-iodc">Meteosat IODC (欧州/中央アジア/中東)</option>
+      <option value="h9-cloudtop" selected>Himawari-9 雲頂強調</option>
+      <option value="h9-visible">Himawari-9 可視光</option>
+      <option value="h9-watervapor">Himawari-9 水蒸気</option>
+      <option value="goes-west">GOES-West 雲頂強調 (北米西/太平洋東)</option>
+      <option value="goes-east">GOES-East 雲頂強調 (北米東/大西洋)</option>
+      <option value="meteosat-iodc">Meteosat IODC 雲頂強調 (欧州/中央アジア)</option>
     </select>
     <span class="lbl">透過度</span>
     <input type="range" id="satOp" min="0" max="100" value="50" step="5"
@@ -718,53 +720,70 @@ var ETOPS_RING_NM = {
 
 /*
  * SAT データソース — RealEarth 調査結果 (2026-05):
- * - CORS: Access-Control-Allow-Origin: * (/api/image, /api/times) → proxy 不要
- * - GOES 採用: G18-ABI-FD-BAND13 (West), G19-ABI-FD-BAND13 (East) — navigated Web Mercator タイル
- * - Himawari: HIMAWARI-B13 あり; JMA 雲頂強調 (sandwich) の方が品質良いため JMA 維持
- * - Meteosat IODC: RealEarth 未提供 (Met8/11 @ 0° のみ) → EUMETSAT msg_iodc:cth + wms-relay 維持
+ * - CORS: * on /api/image, /api/times — タイルは proxy realearth-relay で 10 分 cache (Size limit 対策)
+ * - GOES 雲頂強調: G18/G19-ABI-FD-BAND13-GRAD (Clean IR enhanced, 青黄赤カラー)
+ * - Himawari: JMA 雲頂強調/可視光/水蒸気 (NICT tile); RealEarth HIMAWARI-B13-GRAD もあるが JMA sandwich 維持
+ * - Meteosat IODC: RealEarth に IODC 専用 product なし → EUMETSAT msg_iodc:rgb_naturalenhncd + wms-relay
  */
-var REALEARTH_IMAGE = 'https://realearth.ssec.wisc.edu/api/image';
 var SAT_SOURCE_UI = {
   'none': {label: '衛星なし', shortLabel: 'OFF'}
 };
 var SAT_DATA_SOURCES = {
-  'himawari9': {
-    label: 'Himawari-9 (太平洋西/アジア/豪)',
-    shortLabel: 'H9',
+  'h9-cloudtop': {
+    label: 'Himawari-9 雲頂強調',
+    shortLabel: 'H9-CT',
     timeStepMin: 10,
     maxOffsetMin: 120,
     attribution: 'JMA/JAXA',
     provider: 'jma',
-    satKey: 'himawari-fd-sandwich'
+    jmaKey: 'himawari-fd-sandwich'
+  },
+  'h9-visible': {
+    label: 'Himawari-9 可視光',
+    shortLabel: 'H9-V',
+    timeStepMin: 10,
+    maxOffsetMin: 120,
+    attribution: 'JMA/JAXA',
+    provider: 'jma',
+    jmaKey: 'himawari-fd-vis'
+  },
+  'h9-watervapor': {
+    label: 'Himawari-9 水蒸気',
+    shortLabel: 'H9-WV',
+    timeStepMin: 10,
+    maxOffsetMin: 120,
+    attribution: 'JMA/JAXA',
+    provider: 'jma',
+    jmaKey: 'himawari-fd-wv'
   },
   'goes-west': {
-    label: 'GOES-West (北米西/太平洋東)',
+    label: 'GOES-West 雲頂強調 (北米西/太平洋東)',
     shortLabel: 'GW',
     timeStepMin: 10,
     maxOffsetMin: 360,
     attribution: '\u00a9 SSEC/UW-Madison',
     provider: 'realearth',
-    reProduct: 'G18-ABI-FD-BAND13',
-    reMaxZoom: 7
+    reProduct: 'G18-ABI-FD-BAND13-GRAD',
+    reMaxZoom: 5
   },
   'goes-east': {
-    label: 'GOES-East (北米東/大西洋)',
+    label: 'GOES-East 雲頂強調 (北米東/大西洋)',
     shortLabel: 'GE',
     timeStepMin: 10,
     maxOffsetMin: 360,
     attribution: '\u00a9 SSEC/UW-Madison',
     provider: 'realearth',
-    reProduct: 'G19-ABI-FD-BAND13',
-    reMaxZoom: 7
+    reProduct: 'G19-ABI-FD-BAND13-GRAD',
+    reMaxZoom: 5
   },
   'meteosat-iodc': {
-    label: 'Meteosat IODC (\u6b27\u5dde/\u4e2d\u592e\u30a2\u30b8\u30a2/\u4e2d\u6771)',
+    label: 'Meteosat IODC 雲頂強調 (欧州/中央アジア/中東)',
     shortLabel: 'MTI',
     timeStepMin: 15,
     maxOffsetMin: 360,
     attribution: '\u00a9 EUMETSAT',
     provider: 'eumetsat-wms',
-    wmsLayer: 'msg_iodc:cth'
+    wmsLayer: 'msg_iodc:rgb_naturalenhncd'
   }
 };
 var SATS = {
@@ -1038,8 +1057,7 @@ var LY = {
 var lowBw = false;
 var firGeoJSON = null;
 var radarOn = false;
-var satDataSource = 'himawari9';
-var HIMAWARI_SAT_KEY = 'himawari-fd-sandwich';
+var satDataSource = 'h9-cloudtop';
 var satOffsetMins = 0; // 0=最新, stepMin=10分前, ...
 var SAT_LAYER_CACHE = {};   // satKey+'|'+offsetMins → {ly, timeLabel, source}
 var SAT_API_CACHE   = {};   // satKey → API data (JMA list / RainViewer frames)
@@ -1612,7 +1630,7 @@ function parseCTME(s) {
 // =====================================================================
 function getSatDataSourceConfig() {
   if(satDataSource === 'none') return null;
-  return SAT_DATA_SOURCES[satDataSource] || SAT_DATA_SOURCES.himawari9;
+  return SAT_DATA_SOURCES[satDataSource] || SAT_DATA_SOURCES['h9-cloudtop'];
 }
 
 function updateSatSourceOptionLabels() {
@@ -1669,13 +1687,14 @@ function reloadSatLayer() {
     _clearSatLayer();
     return;
   }
-  if(satDataSource === 'himawari9') loadSatHimawari();
+  var ds = getSatDataSourceConfig();
+  if(ds && ds.provider === 'jma') loadSatJma();
   else loadSatAlt();
 }
 
 function onSatSourceChange() {
   var sel = document.getElementById('sat-source');
-  satDataSource = sel ? sel.value : 'himawari9';
+  satDataSource = sel ? sel.value : 'h9-cloudtop';
   var ds = getSatDataSourceConfig();
   if(window.WXR_DEBUG === true) {
     console.log('[SAT] source switched:', satDataSource, ds);
@@ -4830,6 +4849,13 @@ function _allOffsets() {
   return arr;
 }
 
+function _realearthImageBase() {
+  var proxy = (typeof GFS_PROXY === 'string')
+    ? String(GFS_PROXY).replace(/\/$/, '')
+    : 'https://ana-calculator-gfs-proxy.vercel.app';
+  return proxy + '/api/sat/realearth-relay';
+}
+
 function _reTimeSuffix(ts) {
   return String(ts).replace('.', '_');
 }
@@ -4874,8 +4900,8 @@ function _makeRealEarthEntry(srcKey, ds, times, offset) {
   if(SAT_LAYER_CACHE[ck]) return SAT_LAYER_CACHE[ck];
   var ts = _reTsFromOffset(times, offset, ds);
   var prod = ds.reProduct + '_' + _reTimeSuffix(ts);
-  var url = REALEARTH_IMAGE + '?products=' + encodeURIComponent(prod) + '&x={x}&y={y}&z={z}';
-  var mz = ds.reMaxZoom || 7;
+  var url = _realearthImageBase() + '?products=' + encodeURIComponent(prod) + '&x={x}&y={y}&z={z}';
+  var mz = ds.reMaxZoom || 5;
   var ly = L.tileLayer(url, {
     opacity: 0,
     maxZoom: mz,
@@ -5014,14 +5040,17 @@ function _makeRvEntry(k, host, past, offset) {
   return entry;
 }
 
-function loadSatHimawari() {
-  var k = HIMAWARI_SAT_KEY;
+function loadSatJma() {
+  var ds = getSatDataSourceConfig();
+  if(!ds || ds.provider !== 'jma') return;
+  var k = ds.jmaKey;
+  var srcKey = satDataSource;
   var s = SATS[k];
   if(!s || !s.jma) return;
   var op = parseFloat(document.getElementById('satOp').value) / 100;
   var capturedOffset = satOffsetMins;
-  var label = s.label;
-  var ck = _satCk(k, capturedOffset);
+  var label = ds.label;
+  var ck = _satCk(srcKey, capturedOffset);
 
   if(SAT_LAYER_CACHE[ck]) {
     _activateSat(SAT_LAYER_CACHE[ck], op, label, capturedOffset);
@@ -5029,23 +5058,24 @@ function loadSatHimawari() {
   }
 
   function _showJma(jmaList) {
-    var e = _makeJmaEntry(k, s, jmaList, capturedOffset);
+    var e = _makeJmaEntry(srcKey, s, jmaList, capturedOffset);
     _activateSat(e, op, label, capturedOffset);
     var others = _allOffsets().filter(function(o){ return o !== capturedOffset; });
-    _preloadEntries(others.map(function(o){ return _makeJmaEntry(k, s, jmaList, o); }));
+    _preloadEntries(others.map(function(o){ return _makeJmaEntry(srcKey, s, jmaList, o); }));
   }
-  if(SAT_API_CACHE[k]) { _showJma(SAT_API_CACHE[k].jmaList); return; }
+  var apiKey = 'jma-fd';
+  if(SAT_API_CACHE[apiKey]) { _showJma(SAT_API_CACHE[apiKey].jmaList); return; }
 
-  if(loadSatHimawari._jmaAbort) loadSatHimawari._jmaAbort.abort();
+  if(loadSatJma._jmaAbort) loadSatJma._jmaAbort.abort();
   var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-  loadSatHimawari._jmaAbort = ctrl;
+  loadSatJma._jmaAbort = ctrl;
   document.getElementById('sat-lbl').textContent = label + ' 読込中...';
   fetch('https://www.jma.go.jp/bosai/himawari/data/satimg/targetTimes_' + s.area + '.json?_=' + Date.now(), ctrl ? {signal: ctrl.signal} : {})
     .then(function(r){ return r.json(); })
     .then(function(d){
-      loadSatHimawari._jmaAbort = null;
-      if(satDataSource !== 'himawari9') return;
-      SAT_API_CACHE[k] = {jmaList: d, ts: Date.now()};
+      loadSatJma._jmaAbort = null;
+      if(satDataSource !== srcKey) return;
+      SAT_API_CACHE[apiKey] = {jmaList: d, ts: Date.now()};
       _showJma(d);
     }).catch(function(e){
       if(e && e.name === 'AbortError') return;
