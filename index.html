@@ -4882,7 +4882,7 @@ function _createRammbLayer(ds, tsInt) {
         done(null, canvas);
         return canvas;
       }
-      var rammbZ = Math.min(4, Math.max(0, coords.z - 2));
+      var rammbZ = Math.min(3, Math.max(0, coords.z - 2));
       var n = Math.pow(2, rammbZ);
       var latSpan = b[1][0] - b[0][0];
       var lonSpan = b[1][1] - b[0][1];
