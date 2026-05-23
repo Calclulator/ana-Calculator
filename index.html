@@ -739,24 +739,24 @@ var SAT_DATA_SOURCES = {
     shortLabel: 'GW',
     timeStepMin: 10,
     maxOffsetMin: 360,
-    attribution: '\u00a9 NOAA/CIRA',
-    provider: 'rammb',
-    satellite: 'goes-18',
-    sector: 'full_disk',
-    product: 'band_13',
-    bounds: [[-55, -141], [55, -12]]
+    attribution: '\u00a9 NASA GIBS / NOAA',
+    provider: 'gibs',
+    gibsLayer: 'GOES-West_ABI_Band13_Clean_Infrared',
+    gibsTileMatrix: 'GoogleMapsCompatible_Level6',
+    gibsMaxZoom: 6,
+    gibsLagMin: 30
   },
   'goes-east': {
     label: 'GOES-East (北米東/大西洋)',
     shortLabel: 'GE',
     timeStepMin: 10,
     maxOffsetMin: 360,
-    attribution: '\u00a9 NOAA/CIRA',
-    provider: 'rammb',
-    satellite: 'goes-19',
-    sector: 'full_disk',
-    product: 'band_13',
-    bounds: [[-55, -79], [55, 75]]
+    attribution: '\u00a9 NASA GIBS / NOAA',
+    provider: 'gibs',
+    gibsLayer: 'GOES-East_ABI_Band13_Clean_Infrared',
+    gibsTileMatrix: 'GoogleMapsCompatible_Level6',
+    gibsMaxZoom: 6,
+    gibsLagMin: 30
   },
   'meteosat-iodc': {
     label: 'Meteosat IODC (\u6b27\u5dde/\u4e2d\u592e\u30a2\u30b8\u30a2/\u4e2d\u6771)',
@@ -765,8 +765,7 @@ var SAT_DATA_SOURCES = {
     maxOffsetMin: 360,
     attribution: '\u00a9 EUMETSAT',
     provider: 'eumetsat-wms',
-    wmsUrl: 'https://view.eumetsat.int/geoserver/wms',
-    wmsLayer: 'msg_iodc:rgb_convection'
+    wmsLayer: 'msg_iodc:cth'
   }
 };
 var SATS = {
@@ -1613,11 +1612,11 @@ function parseCTME(s) {
 // =====================================================================
 // SATELLITE TIME
 // =====================================================================
-function gibsTimeOffset(offsetMins, stepMin) {
+function gibsTimeOffset(offsetMins, stepMin, lagMin) {
   var step = stepMin || 10;
-  var lagMin = step >= 60 ? 180 : 180;
+  var lag = (lagMin != null && lagMin !== undefined) ? lagMin : (step >= 60 ? 180 : 180);
   var now = new Date();
-  var ms = now.getTime() - (lagMin + offsetMins) * 60000;
+  var ms = now.getTime() - (lag + offsetMins) * 60000;
   var d = new Date(ms);
   var yr = d.getUTCFullYear();
   var mo = ('0'+(d.getUTCMonth()+1)).slice(-2);
@@ -4838,118 +4837,34 @@ function _allOffsets() {
   return arr;
 }
 
-function _rammbPad2(n) { return (n < 10 ? '0' : '') + n; }
-function _rammbPad3(n) { var s = String(n); while (s.length < 3) s = '0' + s; return s; }
-
-function _rammbTileUrl(satellite, sector, product, timestamp, zoom, tileX, tileY) {
-  var tsStr = String(timestamp);
-  // RAMMB 現行サーバーは YYYY/MM/DD パス (YYYYMMDD は 404)
-  var datePath = tsStr.substr(0, 4) + '/' + tsStr.substr(4, 2) + '/' + tsStr.substr(6, 2);
-  return 'https://rammb-slider.cira.colostate.edu/data/imagery/' + datePath + '/' +
-    satellite + '---' + sector + '/' + product + '/' + tsStr + '/' +
-    _rammbPad2(zoom) + '/' + _rammbPad3(tileY) + '_' + _rammbPad3(tileX) + '.png';
+function _makeGibsEntry(srcKey, ds, offset) {
+  var ck = _satCk(srcKey, offset);
+  if(SAT_LAYER_CACHE[ck]) return SAT_LAYER_CACHE[ck];
+  var lag = (ds.gibsLagMin != null) ? ds.gibsLagMin : 30;
+  var t = gibsTimeOffset(offset, ds.timeStepMin || 10, lag);
+  var tms = ds.gibsTileMatrix || 'GoogleMapsCompatible_Level6';
+  var mz = ds.gibsMaxZoom || 6;
+  var url = GIBS + '/' + ds.gibsLayer + '/default/' + t + '/' + tms + '/{z}/{y}/{x}.png';
+  var ly = L.tileLayer(url, {
+    opacity: 0,
+    maxZoom: mz,
+    maxNativeZoom: mz,
+    updateWhenIdle: false,
+    keepBuffer: 0,
+    errorTileUrl: BLANK_TILE,
+    noWrap: false,
+    attribution: ds.attribution
+  });
+  var entry = {ly: ly, timeLabel: t.slice(11, 16) + 'Z', source: 'GIBS'};
+  SAT_LAYER_CACHE[ck] = entry;
+  return entry;
 }
 
-function _fetchRammbTimes(sat, sector, product, callback, onErr) {
+function _eumetsatWmsBase() {
   var proxy = (typeof GFS_PROXY === 'string')
     ? String(GFS_PROXY).replace(/\/$/, '')
     : 'https://ana-calculator-gfs-proxy.vercel.app';
-  var url = proxy + '/api/sat/latest_times'
-    + '?sat=' + encodeURIComponent(sat)
-    + '&sector=' + encodeURIComponent(sector)
-    + '&product=' + encodeURIComponent(product)
-    + '&_=' + Date.now();
-  fetch(url)
-    .then(function(r) {
-      if(!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    })
-    .then(function(data) {
-      if(data && data.error) throw new Error(data.error);
-      var times = data.timestamps_int || data;
-      if(!times || !times.length) throw new Error('empty timestamps');
-      callback(times);
-    })
-    .catch(function() { if(onErr) onErr(); });
-}
-
-function _rammbTimeLabel(tsInt) {
-  var s = String(tsInt);
-  return s.slice(8, 10) + ':' + s.slice(10, 12) + 'Z';
-}
-
-function _rammbTsFromOffset(timestamps, offsetMin, ds) {
-  var step = ds.timeStepMin || 10;
-  var maxOff = ds.maxOffsetMin || 360;
-  var maxIdx = Math.floor(maxOff / step);
-  var idx = Math.round(offsetMin / step);
-  if(idx < 0) idx = 0;
-  if(idx > maxIdx) idx = maxIdx;
-  if(idx >= timestamps.length) idx = timestamps.length - 1;
-  return timestamps[idx];
-}
-
-function _createRammbLayer(ds, tsInt) {
-  var b = ds.bounds;
-  var sat = ds.satellite;
-  var sector = ds.sector;
-  var product = ds.product;
-  var RammbLayer = L.GridLayer.extend({
-    createTile: function(coords, done) {
-      var tile = document.createElement('img');
-      L.DomEvent.on(tile, 'load', L.bind(done, null, null, tile));
-      L.DomEvent.on(tile, 'error', function() {
-        tile.src = BLANK_TILE;
-        done(null, tile);
-      });
-      var tileBounds = this._tileCoordsToBounds(coords);
-      var south = tileBounds.getSouth();
-      var north = tileBounds.getNorth();
-      var west = tileBounds.getWest();
-      var east = tileBounds.getEast();
-      if(north < b[0][0] || south > b[1][0] || east < b[0][1] || west > b[1][1]) {
-        tile.src = BLANK_TILE;
-        return tile;
-      }
-      var latSpan = b[1][0] - b[0][0];
-      var lonSpan = b[1][1] - b[0][1];
-      var lat = (north + south) / 2;
-      var lng = (west + east) / 2;
-      var fx = (lng - b[0][1]) / lonSpan;
-      var fy = (b[1][0] - lat) / latSpan;
-      if(fx < 0 || fx > 1 || fy < 0 || fy > 1) {
-        tile.src = BLANK_TILE;
-        return tile;
-      }
-      var rammbZ = Math.min(3, Math.max(0, coords.z - 2));
-      var n = Math.pow(2, rammbZ);
-      var tileX = Math.min(n - 1, Math.max(0, Math.floor(fx * n)));
-      var tileY = Math.min(n - 1, Math.max(0, Math.floor(fy * n)));
-      tile.src = _rammbTileUrl(sat, sector, product, tsInt, rammbZ, tileX, tileY);
-      return tile;
-    }
-  });
-  return new RammbLayer({
-    opacity: 0,
-    attribution: ds.attribution,
-    minZoom: 1,
-    maxZoom: 10,
-    maxNativeZoom: 6,
-    updateWhenIdle: false,
-    keepBuffer: 1,
-    errorTileUrl: BLANK_TILE,
-    noWrap: false
-  });
-}
-
-function _makeRammbEntry(srcKey, ds, timestamps, offset) {
-  var ck = _satCk(srcKey, offset);
-  if(SAT_LAYER_CACHE[ck]) return SAT_LAYER_CACHE[ck];
-  var tsInt = _rammbTsFromOffset(timestamps, offset, ds);
-  var ly = _createRammbLayer(ds, tsInt);
-  var entry = {ly: ly, timeLabel: _rammbTimeLabel(tsInt), source: 'NOAA/CIRA'};
-  SAT_LAYER_CACHE[ck] = entry;
-  return entry;
+  return proxy + '/api/sat/wms-relay';
 }
 
 function _eumetsatTimeOffset(offsetMin, stepMin) {
@@ -4971,14 +4886,15 @@ function _makeEumetsatEntry(srcKey, ds, offset) {
   var ck = _satCk(srcKey, offset);
   if(SAT_LAYER_CACHE[ck]) return SAT_LAYER_CACHE[ck];
   var t = _eumetsatTimeOffset(offset, ds.timeStepMin);
-  var ly = L.tileLayer.wms(ds.wmsUrl, {
+  var ly = L.tileLayer.wms(_eumetsatWmsBase(), {
     layers: ds.wmsLayer,
     format: 'image/png',
     transparent: true,
     opacity: 0,
     attribution: ds.attribution,
     uppercase: true,
-    version: '1.1.1',
+    version: '1.3.0',
+    crs: L.CRS.EPSG3857,
     time: t,
     errorTileUrl: BLANK_TILE
   });
@@ -5001,26 +4917,11 @@ function loadSatAlt() {
     return;
   }
 
-  if(ds.provider === 'rammb') {
-    function showRammb(list) {
-      var e = _makeRammbEntry(srcKey, ds, list, capturedOffset);
-      _activateSat(e, op, label, capturedOffset);
-      var others = _allOffsets().filter(function(o){ return o !== capturedOffset; });
-      _preloadEntries(others.map(function(o){ return _makeRammbEntry(srcKey, ds, list, o); }));
-    }
-    var cacheKey = srcKey + '|ts5760';
-    if(SAT_API_CACHE[cacheKey]) {
-      showRammb(SAT_API_CACHE[cacheKey].timestamps);
-      return;
-    }
-    document.getElementById('sat-lbl').textContent = label + ' 読込中...';
-    _fetchRammbTimes(ds.satellite, ds.sector, ds.product, function(list) {
-      SAT_API_CACHE[cacheKey] = {timestamps: list, ts: Date.now()};
-      if(satDataSource !== srcKey) return;
-      showRammb(list);
-    }, function() {
-      document.getElementById('sat-lbl').textContent = label + ' (取得失敗)';
-    });
+  if(ds.provider === 'gibs') {
+    var ge = _makeGibsEntry(srcKey, ds, capturedOffset);
+    _activateSat(ge, op, label, capturedOffset);
+    var othersG = _allOffsets().filter(function(o){ return o !== capturedOffset; });
+    _preloadEntries(othersG.map(function(o){ return _makeGibsEntry(srcKey, ds, o); }));
     return;
   }
 
