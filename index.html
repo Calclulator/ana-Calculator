@@ -864,6 +864,7 @@ var VWS_BY_FL = {};
 var WFM_DATA = {};
 var ALTS = [];
 var RALT_ICAOS = [];
+var INVALID_ICAO_WORDS = ['TCAS', 'GPWS', 'TAWS', 'EGPWS', 'ACAS'];
 var ETOPS_DRAW_RETRY = null;
 var ETOPS_DRAW_RETRY_COUNT = 0;
 var ETPS = [];
@@ -2027,8 +2028,9 @@ function runParse() {
     var raltTokens = rm[1].match(/\b[A-Z]{4}\b/g) || [];
     var ri;
     for(ri = 0; ri < raltTokens.length; ri++) {
-      var raltId = raltTokens[ri];
+      var raltId = raltTokens[ri].toUpperCase();
       if(raltId.length !== 4 || altSeen[raltId]) continue;
+      if(typeof isValidRaltIcao === 'function' && !isValidRaltIcao(raltId)) continue;
       altSeen[raltId] = true;
       RALT_ICAOS.push(raltId);
       if(APT[raltId]) {
@@ -7053,13 +7055,23 @@ function apChunkIcaos(arr, size) {
   return out;
 }
 
+function isValidRaltIcao(icao) {
+  if(!icao || !/^[A-Z]{4}$/.test(icao)) return false;
+  if(INVALID_ICAO_WORDS.indexOf(icao) !== -1) return false;
+  return true;
+}
+
 function collectApNearIcaos() {
   var seen = {};
   var list = [];
   function addIcao(id, forceRalt) {
     if(!id || typeof id !== 'string' || id.length !== 4) return;
     var u = id.toUpperCase();
-    if(!/^[A-Z0-9]{4}$/.test(u)) return;
+    if(forceRalt) {
+      if(!isValidRaltIcao(u)) return;
+    } else if(!/^[A-Z0-9]{4}$/.test(u)) {
+      return;
+    }
     if(seen[u]) return;
     if(!forceRalt && (typeof APT === 'undefined' || !APT[u])) return;
     seen[u] = 1;
@@ -7136,41 +7148,14 @@ function apRaltMissingFromApt() {
 }
 
 function ensureApAirportCoordsPromise(icaos) {
-  var missing = apRaltMissingFromApt();
-  var i, u;
-  if(icaos && icaos.length) {
-    for(i = 0; i < icaos.length; i++) {
-      u = String(icaos[i]).toUpperCase();
-      if(typeof RALT_ICAOS !== 'undefined' && RALT_ICAOS && RALT_ICAOS.indexOf(u) >= 0 && missing.indexOf(u) < 0) {
-        if(typeof APT === 'undefined' || !APT[u]) missing.push(u);
-      }
-    }
-  }
   if(window.AP_DEBUG === true) {
     console.log('[AP] RALT_ICAOS:', (typeof RALT_ICAOS !== 'undefined' && RALT_ICAOS) ? RALT_ICAOS.slice() : []);
-    console.log('[AP] RALT not in APT master:', missing.slice());
-  }
-  if(!missing.length) return Promise.resolve();
-  var url = 'https://aviationweather.gov/api/data/airport?ids=' + encodeURIComponent(missing.join(',')) + '&format=json';
-  return fetch(url, { method: 'GET', cache: 'default' }).then(function(r) {
-    if(!r.ok) throw new Error('HTTP ' + r.status);
-    return r.json();
-  }).then(function(data) {
-    if(!data || !data.length) return;
-    var j, row, id;
-    for(j = 0; j < data.length; j++) {
-      row = data[j];
-      id = row && row.icaoId ? String(row.icaoId).toUpperCase() : '';
-      if(id && typeof row.lat === 'number' && typeof row.lon === 'number') {
-        APT[id] = { lat: row.lat, lon: row.lon, tz: 'UTC' };
-        if(window.AP_DEBUG === true) {
-          console.log('[AP] dynamic APT add', id, row.lat, row.lon);
-        }
-      }
+    console.log('[AP] RALT not in APT master:', apRaltMissingFromApt());
+    if(icaos && icaos.length) {
+      console.log('[AP] final icao list sent to checkwx:', icaos.slice());
     }
-  }).catch(function(err) {
-    console.warn('[AP] airport coord fetch failed', err);
-  });
+  }
+  return Promise.resolve();
 }
 
 function renderApNoCoordList(metars) {
@@ -7408,7 +7393,9 @@ function loadMetars() {
   var om = document.getElementById('oMetar');
   if(!om || !om.checked) return Promise.resolve();
   var icaos = collectApNearIcaos();
-  return ensureApAirportCoordsPromise(icaos).then(function() {
+  return ensureApAirportCoordsPromise(icaos).catch(function() {
+    // coord lookup failure is ignored; continue METAR fetch
+  }).then(function() {
     return loadMetarsForIcaosList(icaos);
   });
 }
@@ -7436,7 +7423,9 @@ function onApMetarRefreshClicked() {
     finishRefresh();
     return;
   }
-  ensureApAirportCoordsPromise(icaos).then(function() {
+  ensureApAirportCoordsPromise(icaos).catch(function() {
+    // coord lookup failure is ignored; continue METAR fetch
+  }).then(function() {
     return Promise.all([
       loadMetarsForIcaosList(icaos),
       prefetchApTafBatchesPromise(icaos, AP_CHECKWX_HEADERS)
