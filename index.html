@@ -304,6 +304,7 @@
     <label class="ck"><input type="checkbox" id="oSig" checked onchange="loadSigmets()"> SIGMETs</label>
     <label class="ck"><input type="checkbox" id="oMetar" onchange="onApOverlayToggle()" oninput="onApOverlayToggle()" onclick="onApOverlayToggle()"> A/P</label>
     <button type="button" class="btn" id="ap-metar-refresh" onclick="onApMetarRefreshClicked()" disabled title="METAR/TAF を再取得">(METAR更新)</button>
+    <span id="ap-nocoord-wrap" style="display:none;align-items:center;flex-wrap:wrap;gap:2px;"></span>
     <span class="wx-landmark-wrap">
       <span class="lbl">Landmark:</span>
       <input type="text" id="landmark-coord" class="landmark-coord-inp" placeholder="3536N13942E"
@@ -3212,9 +3213,9 @@ function applyGfsWindLayer() {
   if(isNaN(fl)) fl = 350;
   WX_GFS_WIND_FL = fl;
   WX_GFS_WIND_ON = true;
-  var gridPts = buildWindGridPoints(150);
+  var gridPts = buildWindGridPoints(250);
   if(!gridPts.length) {
-    console.warn('[GfsWind] no grid points within 150NM of route');
+    console.warn('[GfsWind] no grid points within 250NM of route');
     renderWxWindLegend();
     return;
   }
@@ -5718,7 +5719,10 @@ function drawAlt() {
   try { if(map && map.closePopup) map.closePopup(); } catch(e) {}
   try { if(typeof closeMetarPanel === 'function') closeMetarPanel(); } catch(e) {}
 
-  if(!document.getElementById('oMetar').checked) return;
+  if(!document.getElementById('oMetar').checked) {
+    renderApNoCoordList([]);
+    return;
+  }
   if(!WP || !WP.length) return;
   loadMetars();
 }
@@ -7094,9 +7098,130 @@ function collectApNearIcaos() {
   }
   list.sort();
   if(window.AP_DEBUG === true) {
-    console.log('[AP] icao list:', list.slice());
+    var missingApt = [];
+    if(typeof RALT_ICAOS !== 'undefined' && RALT_ICAOS && RALT_ICAOS.length) {
+      var mx;
+      for(mx = 0; mx < RALT_ICAOS.length; mx++) {
+        var ru = String(RALT_ICAOS[mx]).toUpperCase();
+        if(typeof APT === 'undefined' || !APT[ru]) missingApt.push(ru);
+      }
+    }
+    console.log('[AP] RALT_ICAOS:', (typeof RALT_ICAOS !== 'undefined' && RALT_ICAOS) ? RALT_ICAOS.slice() : []);
+    console.log('[AP] RALT not in APT master:', missingApt);
+    console.log('[AP] final icao list sent to checkwx:', list.slice());
   }
   return list;
+}
+
+function apMetarLatLon(m) {
+  if(m && m.station && m.station.geometry && m.station.geometry.coordinates) {
+    return { lat: m.station.geometry.coordinates[1], lon: m.station.geometry.coordinates[0] };
+  }
+  var ic = m && m.icao ? String(m.icao).toUpperCase() : '';
+  if(ic && typeof APT !== 'undefined' && APT[ic] && typeof APT[ic].lat === 'number' && typeof APT[ic].lon === 'number') {
+    return { lat: APT[ic].lat, lon: APT[ic].lon };
+  }
+  return null;
+}
+
+function apRaltMissingFromApt() {
+  var missing = [];
+  if(typeof RALT_ICAOS === 'undefined' || !RALT_ICAOS || !RALT_ICAOS.length) return missing;
+  var i, u;
+  for(i = 0; i < RALT_ICAOS.length; i++) {
+    u = String(RALT_ICAOS[i]).toUpperCase();
+    if(typeof APT === 'undefined' || !APT[u]) missing.push(u);
+  }
+  return missing;
+}
+
+function ensureApAirportCoordsPromise(icaos) {
+  var missing = apRaltMissingFromApt();
+  var i, u;
+  if(icaos && icaos.length) {
+    for(i = 0; i < icaos.length; i++) {
+      u = String(icaos[i]).toUpperCase();
+      if(typeof RALT_ICAOS !== 'undefined' && RALT_ICAOS && RALT_ICAOS.indexOf(u) >= 0 && missing.indexOf(u) < 0) {
+        if(typeof APT === 'undefined' || !APT[u]) missing.push(u);
+      }
+    }
+  }
+  if(window.AP_DEBUG === true) {
+    console.log('[AP] RALT_ICAOS:', (typeof RALT_ICAOS !== 'undefined' && RALT_ICAOS) ? RALT_ICAOS.slice() : []);
+    console.log('[AP] RALT not in APT master:', missing.slice());
+  }
+  if(!missing.length) return Promise.resolve();
+  var url = 'https://aviationweather.gov/api/data/airport?ids=' + encodeURIComponent(missing.join(',')) + '&format=json';
+  return fetch(url, { method: 'GET', cache: 'default' }).then(function(r) {
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(data) {
+    if(!data || !data.length) return;
+    var j, row, id;
+    for(j = 0; j < data.length; j++) {
+      row = data[j];
+      id = row && row.icaoId ? String(row.icaoId).toUpperCase() : '';
+      if(id && typeof row.lat === 'number' && typeof row.lon === 'number') {
+        APT[id] = { lat: row.lat, lon: row.lon, tz: 'UTC' };
+        if(window.AP_DEBUG === true) {
+          console.log('[AP] dynamic APT add', id, row.lat, row.lon);
+        }
+      }
+    }
+  }).catch(function(err) {
+    console.warn('[AP] airport coord fetch failed', err);
+  });
+}
+
+function renderApNoCoordList(metars) {
+  var wrap = document.getElementById('ap-nocoord-wrap');
+  if(!wrap) return;
+  if(!metars || !metars.length) {
+    wrap.style.display = 'none';
+    wrap.innerHTML = '';
+    return;
+  }
+  wrap.style.display = 'inline-flex';
+  var html = '<span class="lbl" style="margin-right:2px;">RALT:</span>';
+  var i;
+  for(i = 0; i < metars.length; i++) {
+    html += '<button type="button" class="btn" style="padding:1px 5px;font-size:10px;" onclick="openApNoCoordMetar(\'' +
+      escAttr(String(metars[i].icao || '')) + '\')">' + escH(String(metars[i].icao || '')) + '</button>';
+  }
+  wrap.innerHTML = html;
+}
+
+function openApNoCoordMetar(icao) {
+  var ic = String(icao || '').toUpperCase();
+  if(!ic) return;
+  ensureApWxCache();
+  var m = window.__apWxCache.metarByIcao[ic];
+  var taf = window.__apWxCache.tafByIcao[ic];
+  if(m) {
+    showMetarPanel(m, taf || null);
+    return;
+  }
+  var headers = AP_CHECKWX_HEADERS;
+  var metarUrl = 'https://api.checkwx.com/v2/metar/' + ic + '/decoded';
+  apFetchCheckwxJson(metarUrl, headers, 'METAR-nocoord-' + ic).then(function(res) {
+    var d = res && res.json ? res.json : null;
+    var row = d && d.data && d.data[0] ? d.data[0] : null;
+    if(row) {
+      ensureApWxCache();
+      window.__apWxCache.metarByIcao[ic] = row;
+      var tafUrl = 'https://api.checkwx.com/v2/taf/' + ic + '/decoded';
+      return apFetchCheckwxJson(tafUrl, headers, 'TAF-nocoord-' + ic).then(function(tafRes) {
+        var t = tafRes && tafRes.json ? tafRes.json : null;
+        var tafObj = t && t.data && t.data[0] ? t.data[0] : null;
+        if(tafObj) window.__apWxCache.tafByIcao[ic] = tafObj;
+        showMetarPanel(row, tafObj || null);
+      }).catch(function() {
+        showMetarPanel(row, null);
+      });
+    }
+  }).catch(function(err) {
+    console.warn('[AP] no-coord metar fetch failed', ic, err);
+  });
 }
 
 function apPopupMetarTafHtml(metar, tafRaw) {
@@ -7151,10 +7276,15 @@ function loadMetarsForIcaosList(near) {
   var headers = AP_CHECKWX_HEADERS;
 
   function renderMetarMarkers(metarList) {
+    var noCoordMetars = [];
     metarList.forEach(function(m) {
-      if(!m.station || !m.station.geometry) return;
-      var lat = m.station.geometry.coordinates[1];
-      var lon = m.station.geometry.coordinates[0];
+      var ll = apMetarLatLon(m);
+      if(!ll) {
+        noCoordMetars.push(m);
+        return;
+      }
+      var lat = ll.lat;
+      var lon = ll.lon;
       var col = CAT[m.flight_category] || '#546e7a';
       var ic = L.divIcon({
         html: '<div style="width:28px;height:28px;border-radius:50%;background:' + col + ';border:2px solid white;box-shadow:0 0 4px ' + col + '88;"></div>',
@@ -7188,11 +7318,9 @@ function loadMetarsForIcaosList(near) {
           direction: 'top',
           offset: [0, -16]
         });
-        mk.on('click', (function(metar) {
+        mk.on('click', (function(metar, llFix) {
           return function(e) {
-            var ll = e && e.latlng ? e.latlng : (metar.station && metar.station.geometry
-              ? L.latLng(metar.station.geometry.coordinates[1], metar.station.geometry.coordinates[0])
-              : null);
+            var ll = e && e.latlng ? e.latlng : (llFix ? L.latLng(llFix.lat, llFix.lon) : null);
             var pop = L.popup({ maxWidth: 500, minWidth: 420 });
             var ic2 = String(metar.icao || '').toUpperCase();
             ensureApWxCache();
@@ -7229,10 +7357,11 @@ function loadMetarsForIcaosList(near) {
                 );
               });
           };
-        })(m));
+        })(m, ll));
         LY.metar.push(mk);
       }
     });
+    renderApNoCoordList(noCoordMetars);
     bringTop();
   }
 
@@ -7275,9 +7404,13 @@ function loadMetars() {
   if(typeof map === 'undefined' || !map) return Promise.resolve();
   LY.metar.forEach(function(m) { try { map.removeLayer(m); } catch(e) {} });
   LY.metar = [];
+  renderApNoCoordList([]);
   var om = document.getElementById('oMetar');
   if(!om || !om.checked) return Promise.resolve();
-  return loadMetarsForIcaosList(collectApNearIcaos());
+  var icaos = collectApNearIcaos();
+  return ensureApAirportCoordsPromise(icaos).then(function() {
+    return loadMetarsForIcaosList(icaos);
+  });
 }
 
 function onApMetarRefreshClicked() {
@@ -7299,13 +7432,16 @@ function onApMetarRefreshClicked() {
       LY.metar.forEach(function(m) { try { map.removeLayer(m); } catch(e) {} });
     }
     LY.metar = [];
+    renderApNoCoordList([]);
     finishRefresh();
     return;
   }
-  Promise.all([
-    loadMetarsForIcaosList(icaos),
-    prefetchApTafBatchesPromise(icaos, AP_CHECKWX_HEADERS)
-  ]).catch(function(e) {
+  ensureApAirportCoordsPromise(icaos).then(function() {
+    return Promise.all([
+      loadMetarsForIcaosList(icaos),
+      prefetchApTafBatchesPromise(icaos, AP_CHECKWX_HEADERS)
+    ]);
+  }).catch(function(e) {
     console.warn('[A/P-refresh]', e);
   }).then(finishRefresh);
 }
