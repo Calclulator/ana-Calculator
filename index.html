@@ -57,7 +57,7 @@
   #map{height:100%;width:100%;background:#080a12;}
   body.day-mode #map{background:#ffffff;}
   #vleg{position:absolute;right:8px;top:10px;z-index:900;background:rgba(8,10,20,.92);border:1px solid #1e2a38;border-radius:4px;padding:6px 10px 6px 6px;pointer-events:none;display:flex;flex-direction:row;align-items:flex-start;gap:10px;max-width:calc(100vw - 16px);flex-wrap:wrap;justify-content:flex-end;}
-  #sat-fl-legend{position:absolute;left:8px;bottom:10px;z-index:900;pointer-events:none;background:rgba(255,255,255,.9);border:1px solid rgba(0,0,0,.15);border-radius:4px;padding:6px 8px;font-size:11px;line-height:1.35;color:#1a1a1a;max-width:min(168px,calc(100vw - 24px));}
+  #sat-fl-legend{position:absolute;left:8px;bottom:10px;z-index:900;pointer-events:none;background:rgba(0,0,0,.78);border:1px solid rgba(255,255,255,.22);border-radius:4px;padding:6px 8px;font-size:11px;line-height:1.35;color:#fff;max-width:min(168px,calc(100vw - 24px));}
   body.day-mode #sat-fl-legend{background:rgba(0,0,0,.78);border-color:rgba(255,255,255,.22);color:#fff;}
   .sat-fl-legend .sfl-title{font-size:11px;font-weight:bold;margin-bottom:4px;text-align:center;letter-spacing:.04em;}
   .sat-fl-legend .sfl-bar{display:flex;flex-direction:column;gap:2px;}
@@ -341,10 +341,12 @@
     <div id="vleg">
       <div id="wx-fl-panel" style="pointer-events:auto;display:flex;flex-direction:column;align-items:stretch;"></div>
       <div style="pointer-events:auto;display:flex;flex-direction:column;align-items:center;flex-shrink:0;">
-        <div id="wx-turb-leg-title" style="font-size:12px;color:#78909c;margin-bottom:4px;text-align:center;">VWS</div>
-        <div style="display:flex;flex-direction:row;align-items:stretch;gap:8px;">
-          <div id="wx-turb-leg-gradient" style="width:21px;height:120px;border-radius:3px;border:1px solid rgba(129,147,168,.35);flex-shrink:0;"></div>
-          <div id="wx-turb-leg-labels" style="font-size:12px;color:#90a4ae;line-height:1.2;white-space:nowrap;display:flex;flex-direction:column;justify-content:space-between;min-height:120px;padding:2px 0;"></div>
+        <div id="wx-turb-leg-wrap" style="width:100%;">
+          <div id="wx-turb-leg-title" style="font-size:12px;color:#78909c;margin-bottom:4px;text-align:center;">VWS</div>
+          <div style="display:flex;flex-direction:row;align-items:stretch;gap:8px;">
+            <div id="wx-turb-leg-gradient" style="width:21px;height:120px;border-radius:3px;border:1px solid rgba(129,147,168,.35);flex-shrink:0;"></div>
+            <div id="wx-turb-leg-labels" style="font-size:12px;color:#90a4ae;line-height:1.2;white-space:nowrap;display:flex;flex-direction:column;justify-content:space-between;min-height:120px;padding:2px 0;"></div>
+          </div>
         </div>
         <div id="wx-gfs-leg-wrap" style="display:none;margin-top:10px;width:100%;">
           <div id="wx-gfs-leg-title" style="font-size:12px;color:#78909c;margin-bottom:4px;text-align:center;">GFS-VWS</div>
@@ -844,6 +846,9 @@ var VWS = {};
 var VWS_BY_FL = {};
 var WFM_DATA = {};
 var ALTS = [];
+var RALT_ICAOS = [];
+var ETOPS_DRAW_RETRY = null;
+var ETOPS_DRAW_RETRY_COUNT = 0;
 var ETPS = [];
 var FP_ROWS = [];
 var NAV_MLDW = null;
@@ -1085,8 +1090,10 @@ var lowBw = false;
 var firGeoJSON = null;
 var satDataSource = 'h9-cloudtop';
 var satOffsetMins = 0; // 0=最新, stepMin=10分前, ...
-var SAT_LAYER_CACHE = {};   // satKey+'|'+offsetMins → {ly, timeLabel, source}
-var SAT_API_CACHE   = {};   // satKey → API data (JMA list / RainViewer frames)
+if(!window.SAT_LAYER_CACHE) window.SAT_LAYER_CACHE = {};
+if(!window.SAT_API_CACHE) window.SAT_API_CACHE = {};
+var SAT_LAYER_CACHE = window.SAT_LAYER_CACHE;   // satKey+'|'+offsetMins → {ly, timeLabel, source}
+var SAT_API_CACHE   = window.SAT_API_CACHE;     // satKey → API data (JMA list / RainViewer frames)
 var acInt = null;
 var acPos = null;
 var acReg = '--';
@@ -1125,6 +1132,10 @@ function showTab(name) {
         }
       }, delay);
     });
+    if(typeof drawEtops === 'function') {
+      var etCb = document.getElementById('oEtops');
+      if(etCb && etCb.checked) drawEtops();
+    }
   }
   if(name==='fdp') {
     if(typeof syncFdpFromNavlog === 'function') syncFdpFromNavlog();
@@ -1904,7 +1915,6 @@ function runParse() {
     document.getElementById('parse-result').textContent = '⚠ テキストを貼り付けてください';
     return;
   }
-  clearSatCache();
   var fplParseOk = false;
   var newWP=[], newVWS={}, newAlts=[], newEtps=[], newVWS_BY_FL={}, newWfmData={};
   var dep=null, dest=null, reg=null, etopsKey=null, depFuel=null;
@@ -1989,15 +1999,24 @@ function runParse() {
   // ── ETOPS代替空港: RALT/ 行を最優先で解析 ──
   // 例: RALT/RJTT PGUM YBCS  または  RALT/PGUM YBCS
   var altSeen = {};
-  var raltM = txt.match(/RALT\/([A-Z0-9 ]+?)(?:\s+SEL\/|\s+CODE\/|\s+OPR\/|\s*\n|\s*$)/);
-  if(raltM) {
-    var raltParts = raltM[1].trim().split(/\s+/);
-    raltParts.forEach(function(id) {
-      if(id.length===4 && APT[id] && !altSeen[id]) {
-        altSeen[id] = true;
-        newAlts.push({id:id, lat:APT[id].lat, lng:APT[id].lon});
+  RALT_ICAOS = [];
+  var raltRe = /RALT\/([^\n]+)/gi;
+  var rm;
+  while((rm = raltRe.exec(txt)) !== null) {
+    var raltTokens = rm[1].match(/\b[A-Z]{4}\b/g) || [];
+    var ri;
+    for(ri = 0; ri < raltTokens.length; ri++) {
+      var raltId = raltTokens[ri];
+      if(raltId.length !== 4 || altSeen[raltId]) continue;
+      altSeen[raltId] = true;
+      RALT_ICAOS.push(raltId);
+      if(APT[raltId]) {
+        newAlts.push({id:raltId, lat:APT[raltId].lat, lng:APT[raltId].lon});
+      } else {
+        newAlts.push({id:raltId, lat:null, lng:null, pending:true});
+        console.warn('[ETOPS] RALT airport pending APT data:', raltId);
       }
-    });
+    }
   }
   // RALT/が見つからない場合はCPT行, ALT行からフォールバック
   if(newAlts.length===0) {
@@ -2203,11 +2222,6 @@ function runParse() {
     WP = finalWP;
     gfsAtmInvalidateDerivedCache();
     if(typeof gfsRadarInvalidateRoutePointsMemo === 'function') gfsRadarInvalidateRoutePointsMemo();
-    if(typeof gfsResetRadarPreloadFlag === 'function') gfsResetRadarPreloadFlag();
-    if(window.GFS_POINT) {
-      window.GFS_POINT.status = 'idle';
-      window.GFS_POINT.key = null;
-    }
     VWS = newVWS;
     var hasWindFcst = Object.keys(newVWS_BY_FL).length > 0;
     [29,31,33,34,35,37,39,41,43,45].forEach(function(fl){
@@ -2556,11 +2570,6 @@ function onAtoChange(idx,val) {
       console.log('DEP_ATO_MIN updated:', DEP_ATO_MIN, '→ calcRoutePos:', calcRoutePos());
     }
     if(typeof syncWpEtoUtcFromSchedule === 'function') syncWpEtoUtcFromSchedule();
-    if(typeof gfsResetRadarPreloadFlag === 'function') gfsResetRadarPreloadFlag();
-    if(window.GFS_POINT) {
-      window.GFS_POINT.status = 'idle';
-      window.GFS_POINT.key = null;
-    }
     if(typeof gfsRadarInvalidateRoutePointsMemo === 'function') gfsRadarInvalidateRoutePointsMemo();
     if(typeof WX_GFS_CORR_ON !== 'undefined' && WX_GFS_CORR_ON &&
         typeof applyGfsRadarForCurrentMethod === 'function') {
@@ -2909,10 +2918,12 @@ function renderWxCorridorLegend() {
   var grad = document.getElementById('wx-turb-leg-gradient');
   var labs = document.getElementById('wx-turb-leg-labels');
   var ttl = document.getElementById('wx-turb-leg-title');
+  var wrapTurb = document.getElementById('wx-turb-leg-wrap');
   var wrapGfs = document.getElementById('wx-gfs-leg-wrap');
   var gradG = document.getElementById('wx-gfs-leg-gradient');
   var labsG = document.getElementById('wx-gfs-leg-labels');
   var ttlG = document.getElementById('wx-gfs-leg-title');
+  if(wrapTurb) wrapTurb.style.display = WX_GFS_CORR_ON ? 'none' : 'block';
   if(!grad || !labs) return;
   var mode = WX_TURB_METHOD;
   if(typeof mode === 'string' && mode.indexOf('GFS-') === 0) mode = 'vws';
@@ -4869,6 +4880,8 @@ function clearFpl() {
   if(prh) prh.textContent = '';
   var pdfInput = document.getElementById('fpl-pdf');
   if(pdfInput) pdfInput.value='';
+  if(typeof clearSatCache === 'function') clearSatCache();
+  if(typeof clearGfsWxCaches === 'function') clearGfsWxCaches();
   WAYPOINTS = [];
   if(typeof FP_ROWS !== 'undefined') FP_ROWS = [];
   if(typeof etpsAlts !== 'undefined') etpsAlts = [];
@@ -4887,6 +4900,8 @@ function clearFpl() {
   if(typeof updateNavFlightInfo === 'function') updateNavFlightInfo();
   if(typeof renderFpTable === 'function') renderFpTable();
   if(typeof drawRoute === 'function') drawRoute();
+  RALT_ICAOS = [];
+  ALTS = [];
   if(typeof drawEtops === 'function') drawEtops();
 }
 
@@ -4955,10 +4970,31 @@ function clearSatCache() {
   Object.keys(SAT_LAYER_CACHE).forEach(function(ck) {
     var e = SAT_LAYER_CACHE[ck];
     if(e && e.ly) try { map.removeLayer(e.ly); } catch(x) {}
+    delete SAT_LAYER_CACHE[ck];
   });
-  SAT_LAYER_CACHE = {};
-  SAT_API_CACHE   = {};
+  Object.keys(SAT_API_CACHE).forEach(function(k) {
+    delete SAT_API_CACHE[k];
+  });
   LY.sat = null;
+}
+
+function clearGfsWxCaches() {
+  if(typeof gfsResetRadarPreloadFlag === 'function') gfsResetRadarPreloadFlag();
+  if(typeof window.gfsPointClearCache === 'function') window.gfsPointClearCache();
+  if(window.__gfsPreloadKeys && typeof window.__gfsPreloadKeys.clear === 'function') {
+    window.__gfsPreloadKeys.clear();
+  } else {
+    window.__gfsPreloadKeys = new Set();
+  }
+  if(typeof gfsAtmInvalidateDerivedCache === 'function') gfsAtmInvalidateDerivedCache();
+  if(typeof gfsRadarInvalidateRoutePointsMemo === 'function') gfsRadarInvalidateRoutePointsMemo();
+  if(typeof GFS_RADAR_PRELOAD_STATE !== 'undefined') {
+    GFS_RADAR_PRELOAD_STATE.inflight = false;
+    GFS_RADAR_PRELOAD_STATE.key = '';
+    GFS_RADAR_PRELOAD_STATE.callbacks = [];
+  }
+  window.GFS_POINT = { status: 'idle', error: null, key: null };
+  GFS_POINT_STATE = window.GFS_POINT;
 }
 
 // キャッシュ済みエントリをアクティブ表示（前のレイヤーはopacity 0で保持）
@@ -6458,9 +6494,45 @@ map.on('zoomend',function() {
 // =====================================================================
 // ETOPS RINGS
 // =====================================================================
+function resolveEtopsAltCoords() {
+  var changed = false;
+  if(!ALTS || !ALTS.length) return changed;
+  var i, a, apt;
+  for(i = 0; i < ALTS.length; i++) {
+    a = ALTS[i];
+    if(!a || !a.id) continue;
+    if(typeof a.lat === 'number' && !isNaN(a.lat) && typeof a.lng === 'number' && !isNaN(a.lng)) continue;
+    apt = (typeof APT !== 'undefined' && APT[a.id]) ? APT[a.id] : null;
+    if(apt && typeof apt.lat === 'number' && typeof apt.lon === 'number') {
+      a.lat = apt.lat;
+      a.lng = apt.lon;
+      a.pending = false;
+      changed = true;
+    } else {
+      console.warn('[ETOPS] missing APT coords for', a.id, '- will retry');
+    }
+  }
+  return changed;
+}
+
+function scheduleEtopsDrawRetry() {
+  if(ETOPS_DRAW_RETRY) return;
+  if(ETOPS_DRAW_RETRY_COUNT >= 10) {
+    console.warn('[ETOPS] max retry reached, some rings not drawn');
+    return;
+  }
+  ETOPS_DRAW_RETRY_COUNT++;
+  ETOPS_DRAW_RETRY = setTimeout(function() {
+    ETOPS_DRAW_RETRY = null;
+    resolveEtopsAltCoords();
+    drawEtops();
+  }, 500);
+}
+
 function drawEtops() {
   LY.etops.forEach(function(l){map.removeLayer(l);}); LY.etops=[];
   if(!document.getElementById('oEtops').checked) return;
+  resolveEtopsAltCoords();
   var key = ACTIVE_ETOPS_KEY;
   var nmTab = ETOPS_RING_NM[key] || ETOPS_RING_NM.NH9D;
   var el60 = document.getElementById('oEtops60');
@@ -6474,7 +6546,16 @@ function drawEtops() {
   if(show180) ringDefs.push({min:180,nm:nmTab[180],w:1.35,da:null,c:'rgba(215,220,120,0.68)'});
   if(show60) ringDefs.push({min:60,nm:nmTab[60],w:2.1,da:null,c:'rgba(230,240,160,0.92)'});
   var worldLngOffsets = [-360, 0, 360];
+  var pendingRetry = false;
   ALTS.forEach(function(a) {
+    if(!a || typeof a.lat !== 'number' || isNaN(a.lat) || typeof a.lng !== 'number' || isNaN(a.lng)) {
+      if(a && a.id) {
+        console.warn('[ETOPS] skip ring, no coords for', a.id);
+        pendingRetry = true;
+      }
+      return;
+    }
+    console.log('[ETOPS] drawing ring for', a.id, a.lat, a.lng);
     ringDefs.forEach(function(rd) {
       for(var wi = 0; wi < worldLngOffsets.length; wi++) {
         var off = worldLngOffsets[wi];
@@ -6494,6 +6575,11 @@ function drawEtops() {
       LY.etops.push(L.marker(L.latLng(a.lat, a.lng + worldLngOffsets[wj]),{icon:ic}).addTo(map));
     }
   });
+  if(pendingRetry) {
+    scheduleEtopsDrawRetry();
+  } else {
+    ETOPS_DRAW_RETRY_COUNT = 0;
+  }
   bringTop();
 }
 drawEtops();
@@ -6747,20 +6833,27 @@ function apChunkIcaos(arr, size) {
 function collectApNearIcaos() {
   var seen = {};
   var list = [];
-  function addIcao(id) {
+  function addIcao(id, forceRalt) {
     if(!id || typeof id !== 'string' || id.length !== 4) return;
     var u = id.toUpperCase();
+    if(!/^[A-Z0-9]{4}$/.test(u)) return;
     if(seen[u]) return;
-    if(typeof APT === 'undefined' || !APT[u]) return;
+    if(!forceRalt && (typeof APT === 'undefined' || !APT[u])) return;
     seen[u] = 1;
     list.push(u);
   }
   if(typeof NAV_DEP === 'string' && NAV_DEP) addIcao(NAV_DEP);
   if(typeof NAV_DEST === 'string' && NAV_DEST) addIcao(NAV_DEST);
+  if(typeof RALT_ICAOS !== 'undefined' && RALT_ICAOS && RALT_ICAOS.length) {
+    var rx;
+    for(rx = 0; rx < RALT_ICAOS.length; rx++) {
+      addIcao(RALT_ICAOS[rx], true);
+    }
+  }
   if(typeof ALTS !== 'undefined' && ALTS && ALTS.length) {
     var ax;
     for(ax = 0; ax < ALTS.length; ax++) {
-      if(ALTS[ax] && ALTS[ax].id) addIcao(ALTS[ax].id);
+      if(ALTS[ax] && ALTS[ax].id) addIcao(ALTS[ax].id, true);
     }
   }
   if(typeof WP !== 'undefined' && WP && WP.length >= 2) {
@@ -6781,6 +6874,9 @@ function collectApNearIcaos() {
     }
   }
   list.sort();
+  if(window.AP_DEBUG === true) {
+    console.log('[AP] icao list:', list.slice());
+  }
   return list;
 }
 
