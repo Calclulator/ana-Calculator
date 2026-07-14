@@ -257,6 +257,7 @@
     <button class="btn" onclick="map.zoomIn()">＋</button>
     <button class="btn" onclick="frameRoute()">RTE全体表示</button>
     <button class="btn" onclick="goToAircraft()">現在位置表示</button>
+    <button class="btn" onclick="openFR24()" style="background:rgba(255,152,0,.15);color:#ff9800;border-color:#ff9800;" title="FlightRadar24で開く">FR24</button>
         
     <label class="ck" style="margin-left:auto;">
       <span class="lbl">低速モード</span>
@@ -1973,6 +1974,11 @@ function runParse() {
   if(rtM) { dep=rtM[1]; dest=rtM[2]; }
   console.log('[parse] dep:', dep, '| dest:', dest, '| reg:', reg, '| etopsKey:', etopsKey);
   NAV_DEP = dep; NAV_DEST = dest;
+
+  // 便番号（例: ANA0006/50/23 → "ANA0006"、または NH123 形式）
+  var fltM = txt.match(/\b(ANA\d{3,4})\b/);
+  if(!fltM) fltM = txt.match(/\b(NH\d{3,4})\b/);
+  NAV_FLT_NO = fltM ? fltM[1] : null;
 
   // STD / STA
   var stdM = txt.match(/STD\s+(\d{2})(\d{2})Z/);
@@ -5122,6 +5128,7 @@ function clearFpl() {
   if(typeof etpPoints !== 'undefined') etpPoints = [];
   if(typeof NAV_DEP !== 'undefined') NAV_DEP = null;
   if(typeof NAV_DEST !== 'undefined') NAV_DEST = null;
+  if(typeof NAV_FLT_NO !== 'undefined') NAV_FLT_NO = null;
   if(typeof NAV_STD !== 'undefined') NAV_STD = null;
   if(typeof NAV_STA !== 'undefined') NAV_STA = null;
   if(typeof NAV_MLDW !== 'undefined') NAV_MLDW = null;
@@ -6389,6 +6396,7 @@ function preloadGfsRadarPoints(routePts, options, done) {
 
 drawRoute();
 var NAV_DEP = null, NAV_DEST = null, NAV_STD = null, NAV_STA = null;
+var NAV_FLT_NO = null;
 
 // Intl.DateTimeFormat を使ってタイムゾーンの現在オフセット(時間)と略称を取得
 function _tzInfo(tzName) {
@@ -8013,6 +8021,17 @@ function drawAvoidLine() {
     LY.avoidR = g;
   }
   bringTop();
+}
+
+function openFR24() {
+  var base = 'https://www.flightradar24.com/';
+  var url;
+  if(NAV_FLT_NO) {
+    url = base + NAV_FLT_NO.toUpperCase();
+  } else {
+    url = base;
+  }
+  window.open(url, '_blank');
 }
 
 function goToAircraft() {
