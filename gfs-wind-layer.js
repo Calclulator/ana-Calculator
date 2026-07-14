@@ -101,8 +101,7 @@
       parts.push('<line x1="' + pos + '" y1="0" x2="' + pos + '" y2="' + (-SHORT_PEN) + '" stroke="' + col + '" stroke-width="1.5" stroke-linecap="round"/>');
       pos -= 2;
     }
-    var blowTo = (dirDeg + 180) % 360;
-    var rotDeg = blowTo - 90;
+    var rotDeg = dirDeg - 90;
     return '<g transform="rotate(' + rotDeg + ')">' + parts.join('') + '</g>';
   }
 
