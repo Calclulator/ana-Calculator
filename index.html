@@ -3021,6 +3021,15 @@ function renderWxCorridorLegend() {
   renderWxWindLegend();
 }
 
+function formatWindValidUtc(d) {
+  if(!(d instanceof Date) || isNaN(d.getTime())) return '';
+  var dd = d.getUTCDate();
+  var hh = d.getUTCHours();
+  var mm = d.getUTCMinutes();
+  var pad2 = function(n){ return n < 10 ? '0' + n : '' + n; };
+  return pad2(dd) + '/' + pad2(hh) + pad2(mm) + 'Z';
+}
+
 function renderWxWindLegend() {
   var wrapW = document.getElementById('wx-wind-leg-wrap');
   var sample = document.getElementById('wx-wind-leg-sample');
@@ -3035,7 +3044,9 @@ function renderWxWindLegend() {
     sample.innerHTML = GfsWind.windLegendSampleSvg('#ffffff');
   }
   if(note) {
-    note.textContent = 'FL' + WX_GFS_WIND_FL + ' (kt)';
+    var wVu = windOverlayValidUtc();
+    var wVuStr = formatWindValidUtc(wVu);
+    note.textContent = 'FL' + WX_GFS_WIND_FL + ' (kt)' + (wVuStr ? '  |  GFS ' + wVuStr : '');
   }
 }
 
