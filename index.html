@@ -8062,14 +8062,17 @@ function drawAvoidLine() {
 }
 
 function openFR24() {
-  var base = 'https://www.flightradar24.com/';
-  var url;
-  if(NAV_FLT_NO) {
-    url = base + NAV_FLT_NO.toUpperCase();
-  } else {
-    url = base;
-  }
-  window.open(url, '_blank');
+  var webUrl = 'https://www.flightradar24.com/' + (NAV_FLT_NO ? NAV_FLT_NO.toUpperCase() : '');
+  var t = setTimeout(function() {
+    window.open(webUrl, '_blank');
+  }, 1500);
+  document.addEventListener('visibilitychange', function onHide() {
+    if(document.hidden) {
+      clearTimeout(t);
+      document.removeEventListener('visibilitychange', onHide);
+    }
+  });
+  window.location.href = 'flightradar24://';
 }
 
 function goToAircraft() {
