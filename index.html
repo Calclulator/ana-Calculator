@@ -6834,7 +6834,8 @@ function drawEtops() {
 
 function drawPgumRing() {
   var pgumLbl = document.getElementById('pgum-ring-lbl');
-  var isSyd = (typeof NAV_DEST === 'string' && NAV_DEST === 'YSSY');
+  var isSyd = (typeof NAV_DEST === 'string' && NAV_DEST === 'YSSY') ||
+              (typeof NAV_DEP === 'string' && NAV_DEP === 'YSSY');
   if(pgumLbl) pgumLbl.style.display = isSyd ? '' : 'none';
   LY.pgum.forEach(function(l){ try { map.removeLayer(l); } catch(e) {} });
   LY.pgum = [];
