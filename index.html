@@ -875,6 +875,7 @@ var FP_ROWS = [];
 var NAV_MLDW = null;
 var NAV_PZFW = null;
 var DEP_ATO_MIN = null;
+var ATO_AUTO_INT = null;
 var DEP_STD_MIN = null;
 var WP_FONT_SIZE = 11;
 var WP_FONT_SIZES = [9, 11, 16];
@@ -2317,6 +2318,7 @@ function runParse() {
   drawRoute();
   drawEtops();
   drawPgumRing();
+  startAtoAutoFill();
   frameRoute();
   if(typeof syncFdpFromNavlog === 'function') syncFdpFromNavlog();
 }
@@ -2576,7 +2578,7 @@ function renderFpTable() {
       '<td style="color:'+(isFirBoundary?'#cfd8dc':'#90a4ae')+';padding:3px 8px;">'+row.id+'</td>'+
       '<td style="color:#546e7a;text-align:center;padding:3px 6px;">'+ztmeStr+'</td>'+
       '<td style="color:#78909c;padding:3px 6px;">'+eto+'</td>'+
-      '<td style="padding:3px 4px;"><input class="fp-in" value="'+row.ato+'" placeholder="HHMM" onchange="onAtoChange('+idx+',this.value)"></td>'+
+      '<td style="padding:3px 4px;"><input class="fp-in" value="'+row.ato+'" placeholder="" onchange="onAtoChange('+idx+',this.value)"></td>'+
       '<td style="padding:3px 6px;text-align:center;min-width:70px;">'+timeDeltaHtml+'</td>'+
       '<td style="color:#546e7a;text-align:right;padding:3px 8px;">'+(row.fuel!==null?row.fuel.toFixed(1):'—')+'</td>'+
       '<td style="padding:3px 4px;"><input class="fp-in" value="'+row.actualFuel+'" placeholder="0.0" onchange="onFuelChange('+idx+',this.value)"></td>'+
@@ -2586,6 +2588,74 @@ function renderFpTable() {
     tbody.appendChild(tr);
     prevRowFirName = rowFirName;
   });
+}
+
+function tickAtoAutoFill() {
+  if(typeof FP_ROWS === 'undefined' || !FP_ROWS || !FP_ROWS.length) return;
+  var now = new Date();
+  var nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+
+  // 最後にATOが入力されているWPを基準点として探す
+  var lastAtoMin = null;
+  var lastAtoCtme = null;
+  var lastAtoIdx = -1;
+  var i, row, atoMin;
+  for(i = 0; i < FP_ROWS.length; i++) {
+    row = FP_ROWS[i];
+    if(!row || !row.ato || String(row.ato).trim() === '') continue;
+    if(typeof row.id === 'string' && row.id.charAt(0) === '-') continue;
+    if(row.ctme === null || row.ctme === undefined) continue;
+    atoMin = hhmmToMins(String(row.ato).trim());
+    if(atoMin === null) continue;
+    lastAtoMin = atoMin;
+    lastAtoCtme = row.ctme;
+    lastAtoIdx = i;
+  }
+  if(lastAtoIdx === -1 || lastAtoMin === null) return;
+
+  // 以降のATOが空のWPを順に処理
+  var changed = false;
+  var triggerMin, diff;
+  for(i = lastAtoIdx + 1; i < FP_ROWS.length; i++) {
+    row = FP_ROWS[i];
+    if(!row) continue;
+    if(typeof row.id === 'string' && row.id.charAt(0) === '-') continue;
+    // ATOが入力済みの場合は基準点を更新してスキップ
+    if(row.ato && String(row.ato).trim() !== '') {
+      atoMin = hhmmToMins(String(row.ato).trim());
+      if(atoMin !== null && row.ctme !== null && row.ctme !== undefined) {
+        lastAtoMin = atoMin;
+        lastAtoCtme = row.ctme;
+      }
+      continue;
+    }
+    if(row.ctme === null || row.ctme === undefined) continue;
+    // トリガー時刻 = 直前のATO + ZTME（ctme差分）
+    triggerMin = (lastAtoMin + (row.ctme - lastAtoCtme) + 1440) % 1440;
+    diff = nowMin - triggerMin;
+    if(diff > 720) diff -= 1440;
+    if(diff < -720) diff += 1440;
+    if(diff >= 0) {
+      row.ato = minsToHHMM(triggerMin);
+      lastAtoMin = triggerMin;
+      lastAtoCtme = row.ctme;
+      changed = true;
+    } else {
+      break; // 以降のWPはまだ時刻未到達
+    }
+  }
+  if(changed && typeof renderFpTable === 'function') renderFpTable();
+}
+
+function startAtoAutoFill() {
+  if(ATO_AUTO_INT) { clearInterval(ATO_AUTO_INT); ATO_AUTO_INT = null; }
+  if(typeof FP_ROWS === 'undefined' || !FP_ROWS || FP_ROWS.length < 2) return;
+  ATO_AUTO_INT = setInterval(tickAtoAutoFill, 30000);
+  tickAtoAutoFill();
+}
+
+function stopAtoAutoFill() {
+  if(ATO_AUTO_INT) { clearInterval(ATO_AUTO_INT); ATO_AUTO_INT = null; }
 }
 
 function onAtoChange(idx,val) {
@@ -5148,6 +5218,7 @@ function clearFpl() {
   ALTS = [];
   if(typeof drawEtops === 'function') drawEtops();
   if(typeof drawPgumRing === 'function') drawPgumRing();
+  if(typeof stopAtoAutoFill === 'function') stopAtoAutoFill();
 }
 
 // =====================================================================
