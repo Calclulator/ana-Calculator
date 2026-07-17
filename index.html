@@ -401,28 +401,12 @@
 <div id="memo-panel" class="panel">
   <div class="bar">
     <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.08em;">MEMO</span>
-    <span id="memo-route-lbl" style="color:#546e7a;margin-left:10px;">----→----</span>
+    <button class="btn" onclick="renderMemoPanel()" style="margin-left:auto;" title="NAVLOGから再生成">↺ 再生成</button>
   </div>
-  <div style="padding:14px 16px;max-width:680px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;line-height:1.7;">
-
-    <!-- 自動抽出 -->
-    <div style="color:#78909c;font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Flight Info</div>
-    <pre id="memo-auto-text" style="margin:0 0 20px 0;padding:12px 14px;background:#080c14;border:1px solid #1e2a38;border-radius:6px;color:#cfd8dc;font-family:inherit;font-size:13px;line-height:1.8;white-space:pre-wrap;word-break:break-word;">（NAVLOGを適用すると自動入力されます）</pre>
-
-    <!-- Turbulence -->
-    <div style="color:#78909c;font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Turbulence</div>
-    <textarea id="memo-turb" rows="3"
-      style="width:100%;box-sizing:border-box;background:#080c14;border:1px solid #1e2a38;border-radius:6px;color:#cfd8dc;font-family:inherit;font-size:13px;padding:10px 12px;resize:vertical;margin-bottom:18px;outline:none;"
-      placeholder="例: FL350-370 MOD turb expected over XXXXXX area"
-      oninput="MEMO_TURB=this.value;" onchange="MEMO_TURB=this.value;"></textarea>
-
-    <!-- WX -->
-    <div style="color:#78909c;font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">WX</div>
-    <textarea id="memo-wx" rows="4"
-      style="width:100%;box-sizing:border-box;background:#080c14;border:1px solid #1e2a38;border-radius:6px;color:#cfd8dc;font-family:inherit;font-size:13px;padding:10px 12px;resize:vertical;outline:none;"
-      placeholder="例: Active CB along route around XXXXX. SIGMET Y1 valid until 1800Z."
-      oninput="MEMO_WX=this.value;" onchange="MEMO_WX=this.value;"></textarea>
-
+  <div style="display:flex;flex-direction:column;height:calc(100% - 44px);padding:12px 14px;box-sizing:border-box;">
+    <textarea id="memo-textarea" spellcheck="false"
+      style="flex:1;width:100%;box-sizing:border-box;background:#080c14;border:1px solid #1e2a38;border-radius:6px;color:#cfd8dc;font-family:'Helvetica Neue',Arial,monospace;font-size:14px;line-height:1.8;padding:12px 14px;resize:none;outline:none;tab-size:20;"
+      placeholder="（NAVLOGを適用すると自動入力されます）&#10;&#10;Turbulence:&#10;&#10;&#10;WX:&#10;"></textarea>
   </div>
 </div>
 
@@ -5273,81 +5257,85 @@ function renderAtmTable() {
   html += '</tbody></table>';
   wrap.innerHTML = html;
 }
-function renderMemoPanel() {
-  var el = document.getElementById('memo-auto-text');
-  if(!el) return;
-
-  function fmtFuel(lbs) {
+function buildMemoText() {
+  function klbs(lbs) {
     if(lbs === null || lbs === undefined) return '—';
-    return (lbs / 1000).toFixed(1) + ' klbs (' + lbs.toLocaleString() + ' lbs)';
+    return (lbs / 1000).toFixed(1);
   }
-  function fmtWt(lbs) {
-    if(lbs === null || lbs === undefined) return '—';
-    return (lbs / 1000).toFixed(1) + ' klbs';
-  }
-
   var lines = [];
 
-  // STD / STA
-  var stdStr = NAV_STD ? (NAV_STD.slice(0,2) + ':' + NAV_STD.slice(2) + 'Z') : '—';
-  var staStr = NAV_STA ? (NAV_STA.slice(0,2) + ':' + NAV_STA.slice(2) + 'Z') : '—';
-  lines.push('• STD: ' + stdStr + ' / STA: ' + staStr);
+  // 1行目: 日付  便名
+  var now = new Date();
+  var dd = now.getUTCFullYear() + '/'
+    + ('0'+(now.getUTCMonth()+1)).slice(-2) + '/'
+    + ('0'+now.getUTCDate()).slice(-2);
+  var fltNo = NAV_FLT_NO || '';
+  lines.push(dd + (fltNo ? ('  ' + fltNo) : ''));
 
-  // B/T, F/T, 差分
+  // 2行目: ROUTE  STD/STA \t B/T / F/T(差)
+  var route = (NAV_DEP && NAV_DEST) ? (NAV_DEP + '→' + NAV_DEST + '  ') : '';
+  var stdStr = NAV_STD ? (NAV_STD.slice(0,2)+':'+NAV_STD.slice(2)+'Z') : '—';
+  var staStr = NAV_STA ? (NAV_STA.slice(0,2)+':'+NAV_STA.slice(2)+'Z') : '—';
+  var timeStr = 'STD: ' + stdStr + ' / STA: ' + staStr;
+  var btft = '';
   if(NAV_BT_STR || NAV_FT_STR) {
     var diffStr = '';
     if(NAV_BT_STR && NAV_FT_STR) {
-      var btParts = NAV_BT_STR.split(':');
-      var ftParts = NAV_FT_STR.split(':');
-      var btMin = parseInt(btParts[0]) * 60 + parseInt(btParts[1]);
-      var ftMin = parseInt(ftParts[0]) * 60 + parseInt(ftParts[1]);
-      var d = btMin - ftMin;
-      diffStr = ' (差: ' + d + 'min)';
+      var bp = NAV_BT_STR.split(':'), fp2 = NAV_FT_STR.split(':');
+      var d = (parseInt(bp[0])*60+parseInt(bp[1])) - (parseInt(fp2[0])*60+parseInt(fp2[1]));
+      diffStr = ' (' + d + 'min)';
     }
-    lines.push('• B/T: ' + (NAV_BT_STR || '—') + ' / F/T: ' + (NAV_FT_STR || '—') + diffStr);
+    btft = '\tB/T: ' + (NAV_BT_STR||'—') + ' / F/T: ' + (NAV_FT_STR||'—') + diffStr;
   }
+  lines.push(route + timeStr + btft);
 
-  // SS / SR
+  // 3行目: SS/SR(あれば)  EDCT(あれば)
+  var line3 = '';
   if(NAV_SS_STR || NAV_SR_STR) {
-    lines.push('• SS: ' + (NAV_SS_STR || 'N/A') + ' / SR: ' + (NAV_SR_STR || 'N/A'));
+    line3 += 'SS: ' + (NAV_SS_STR||'—') + ' / SR: ' + (NAV_SR_STR||'—');
   }
-
-  // EDCT
   if(NAV_EDCT_STR) {
-    lines.push('• EDCT: ' + NAV_EDCT_STR);
+    line3 += (line3 ? '  ' : '') + 'EDCT: ' + NAV_EDCT_STR;
   }
+  if(line3) lines.push(line3);
 
-  // RSV + ALT
+  // 4行目: RSV+ALT (RSV: x / ALT KONT: y)
   if(NAV_RSV_LBS !== null || NAV_ALT_LBS !== null) {
-    var rsvAlt = (NAV_RSV_LBS || 0) + (NAV_ALT_LBS || 0);
-    lines.push('• RSV+ALT: ' + fmtFuel(rsvAlt)
-      + ' (RSV: ' + fmtFuel(NAV_RSV_LBS) + ' / ALT: ' + fmtFuel(NAV_ALT_LBS) + ')');
+    var rsvStr = NAV_RSV_LBS !== null ? klbs(NAV_RSV_LBS) : '—';
+    var altStr = NAV_ALT_LBS !== null ? klbs(NAV_ALT_LBS) : '—';
+    var altApt = NAV_ALT_APT ? (' ' + NAV_ALT_APT) : '';
+    lines.push('RSV+ALT (RSV: ' + rsvStr + ' / ALT' + altApt + ': ' + altStr + ')');
   }
 
-  // FOB
-  if(NAV_FOB_LBS !== null) {
-    lines.push('• FOB: ' + fmtFuel(NAV_FOB_LBS));
+  // 5行目: FOB: x \t FOD: y
+  if(NAV_FOB_LBS !== null || NAV_FOD_LBS !== null) {
+    lines.push('FOB: ' + klbs(NAV_FOB_LBS) + '\tFOD: ' + klbs(NAV_FOD_LBS));
   }
 
-  // FOD
-  if(NAV_FOD_LBS !== null) {
-    lines.push('• FOD: ' + fmtFuel(NAV_FOD_LBS));
-  }
+  // 6行目: PTOW: x \t MLDW: y
+  var ptowVal = NAV_PTOW_LBS !== null ? klbs(NAV_PTOW_LBS) : '—';
+  var mldwVal = NAV_MLDW !== null ? NAV_MLDW.toFixed(1) : '—';  // NAV_MLDWはすでにklbs
+  lines.push('PTOW: ' + ptowVal + '\tMLDW: ' + mldwVal);
 
-  // PAX
-  if(NAV_PAX !== null) {
-    lines.push('• PAX: ' + NAV_PAX);
-  }
+  lines.push('');
+  lines.push('Turbulence:');
+  lines.push('');
+  lines.push('');
+  lines.push('WX:');
+  lines.push('');
 
-  // PTOW / MLDW
-  if(NAV_PTOW !== null) {
-    lines.push('• PTOW: ' + fmtWt(NAV_PTOW));
-  }
-  if(NAV_MLDW !== null) {
-    lines.push('• MLDW: ' + fmtWt(NAV_MLDW * 1000));
-  }
+  return lines.join('\n');
+}
 
-  el.textContent = lines.length ? lines.join('\n') : '（NAVLOGを適用すると自動入力されます）';
+function renderMemoPanel() {
+  var ta = document.getElementById('memo-textarea');
+  if(!ta) return;
+  // NAVLOGが適用されていない場合はテンプレートのみ
+  if(!NAV_DEP && !NAV_DEST) {
+    ta.value = '（NAVLOGを適用すると自動入力されます）\n\nTurbulence:\n\n\nWX:\n\n';
+    return;
+  }
+  ta.value = buildMemoText();
 }
 
 function clearFpl() {
@@ -6833,8 +6821,6 @@ function updateNavFlightInfo() {
   document.getElementById('nav-dep-tz').textContent = 'STD ' + (NAV_STD ? NAV_STD.slice(0,2)+':'+NAV_STD.slice(2,4)+'Z' : '--:--') + ' · ' + depTz.name;
   document.getElementById('nav-arr-time').textContent = NAV_STA ? utcHhmmToLcl(NAV_STA, arrTz.offset) : '--:--';
   document.getElementById('nav-arr-tz').textContent = 'STA ' + (NAV_STA ? NAV_STA.slice(0,2)+':'+NAV_STA.slice(2,4)+'Z' : '--:--') + ' · ' + arrTz.name;
-  var memoLbl = document.getElementById('memo-route-lbl');
-  if(memoLbl && NAV_DEP && NAV_DEST) memoLbl.textContent = NAV_DEP + ' → ' + NAV_DEST;
 }
 setInterval(updateNavClock, 60000);
 updateNavClock();
