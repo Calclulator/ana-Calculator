@@ -8289,17 +8289,14 @@ function drawAvoidLine() {
 }
 
 function openFR24() {
-  var webUrl = 'https://www.flightradar24.com/' + (NAV_FLT_NO ? NAV_FLT_NO.toUpperCase() : '');
-  var t = setTimeout(function() {
-    window.open(webUrl, '_blank');
-  }, 1500);
-  document.addEventListener('visibilitychange', function onHide() {
-    if(document.hidden) {
-      clearTimeout(t);
-      document.removeEventListener('visibilitychange', onHide);
-    }
-  });
-  window.location.href = 'flightradar24://';
+  // 便名の先頭ゼロを除去 (ANA0880 → ANA880, ANA0006 → ANA6)
+  var fltNoWeb = '';
+  if(NAV_FLT_NO) {
+    var m = NAV_FLT_NO.match(/^([A-Z]+)(\d+)$/);
+    fltNoWeb = m ? (m[1] + String(parseInt(m[2], 10))) : NAV_FLT_NO;
+  }
+  var webUrl = 'https://www.flightradar24.com/' + fltNoWeb;
+  window.open(webUrl, '_blank');
 }
 
 function goToAircraft() {
