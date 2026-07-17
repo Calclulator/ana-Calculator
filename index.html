@@ -295,6 +295,7 @@
   <div class="bar wx-ctrl-bar">
     <span class="lbl">OVERLAYS</span>
     <label class="ck"><input type="checkbox" id="oEtops" onchange="toggleEtopsOpts()"> ETOPS rings</label>
+    <label class="ck" id="pgum-ring-lbl" style="display:none;"><input type="checkbox" id="oPgum" checked onchange="drawPgumRing()"> PGUM 250NM</label>
     <span id="etopsOptsWrap" class="etops-opts" style="display:none;">
       <label class="ck" style="font-size:10px;"><input type="checkbox" id="oEtops60" checked onchange="drawEtops()"> 60min</label>
       <label class="ck" style="font-size:10px;"><input type="checkbox" id="oEtops180" onchange="drawEtops()"> 180min</label>
@@ -1104,7 +1105,8 @@ var LY = {
   base:null, sat:null,
   corridor:[], route:null, wpts:[], etops:[], alt:[],
   routeBounds:null,
-  fir:null, sig:null, metar:[], glide:null, ac:null, avoidL:null, avoidR:null
+  fir:null, sig:null, metar:[], glide:null, ac:null, avoidL:null, avoidR:null,
+  pgum:[]
 };
 var lowBw = false;
 var firGeoJSON = null;
@@ -2314,6 +2316,7 @@ function runParse() {
   updateNavFlightInfo();
   drawRoute();
   drawEtops();
+  drawPgumRing();
   frameRoute();
   if(typeof syncFdpFromNavlog === 'function') syncFdpFromNavlog();
 }
@@ -5144,6 +5147,7 @@ function clearFpl() {
   RALT_ICAOS = [];
   ALTS = [];
   if(typeof drawEtops === 'function') drawEtops();
+  if(typeof drawPgumRing === 'function') drawPgumRing();
 }
 
 // =====================================================================
@@ -6827,6 +6831,39 @@ function drawEtops() {
   }
   bringTop();
 }
+
+function drawPgumRing() {
+  var pgumLbl = document.getElementById('pgum-ring-lbl');
+  var isSyd = (typeof NAV_DEST === 'string' && NAV_DEST === 'YSSY');
+  if(pgumLbl) pgumLbl.style.display = isSyd ? '' : 'none';
+  LY.pgum.forEach(function(l){ try { map.removeLayer(l); } catch(e) {} });
+  LY.pgum = [];
+  if(!isSyd) return;
+  var cb = document.getElementById('oPgum');
+  if(!cb || !cb.checked) return;
+  var pgumApt = APT['PGUM'];
+  if(!pgumApt) return;
+  var worldLngOffsets = [-360, 0, 360];
+  for(var wi = 0; wi < worldLngOffsets.length; wi++) {
+    var off = worldLngOffsets[wi];
+    var c = L.circle([pgumApt.lat, pgumApt.lon + off], {
+      radius: 250 * NM,
+      color: 'rgba(79,195,247,0.7)',
+      weight: 1.5,
+      fill: false,
+      dashArray: '6 4'
+    }).addTo(map);
+    c.bindTooltip('PGUM 250NM', { className: 'wxt', sticky: true });
+    LY.pgum.push(c);
+  }
+  var ic = L.divIcon({
+    html: '<span style="font-size:9px;color:rgba(79,195,247,.9);font-family:monospace;'
+        + 'background:rgba(6,10,20,.85);padding:1px 4px;border-radius:2px;">PGUM 250NM</span>',
+    className: '', iconSize: [76, 13], iconAnchor: [38, 6]
+  });
+  LY.pgum.push(L.marker(L.latLng(pgumApt.lat, pgumApt.lon), { icon: ic, interactive: false }).addTo(map));
+  bringTop();
+}
 drawEtops();
 
 // =====================================================================
@@ -8306,6 +8343,7 @@ function bringTop() {
   if(LY.route) try{LY.route.bringToFront();}catch(e){}
   if(LY.avoidL) try{LY.avoidL.bringToFront();}catch(e){}
   if(LY.avoidR) try{LY.avoidR.bringToFront();}catch(e){}
+  LY.pgum.forEach(function(l){try{l.bringToFront();}catch(e){}});
   LY.etops.forEach(function(l){try{l.bringToFront();}catch(e){}});
   LY.alt.forEach(function(l){try{l.bringToFront();}catch(e){}});
   LY.wpts.forEach(function(m){try{m.bringToFront();}catch(e){}});
