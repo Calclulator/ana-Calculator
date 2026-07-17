@@ -397,6 +397,35 @@
 
 </div><!-- wx-panel -->
 
+<!-- ===== MEMO ===== -->
+<div id="memo-panel" class="panel">
+  <div class="bar">
+    <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.08em;">MEMO</span>
+    <span id="memo-route-lbl" style="color:#546e7a;margin-left:10px;">----→----</span>
+  </div>
+  <div style="padding:14px 16px;max-width:680px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;line-height:1.7;">
+
+    <!-- 自動抽出 -->
+    <div style="color:#78909c;font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Flight Info</div>
+    <pre id="memo-auto-text" style="margin:0 0 20px 0;padding:12px 14px;background:#080c14;border:1px solid #1e2a38;border-radius:6px;color:#cfd8dc;font-family:inherit;font-size:13px;line-height:1.8;white-space:pre-wrap;word-break:break-word;">（NAVLOGを適用すると自動入力されます）</pre>
+
+    <!-- Turbulence -->
+    <div style="color:#78909c;font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Turbulence</div>
+    <textarea id="memo-turb" rows="3"
+      style="width:100%;box-sizing:border-box;background:#080c14;border:1px solid #1e2a38;border-radius:6px;color:#cfd8dc;font-family:inherit;font-size:13px;padding:10px 12px;resize:vertical;margin-bottom:18px;outline:none;"
+      placeholder="例: FL350-370 MOD turb expected over XXXXXX area"
+      oninput="MEMO_TURB=this.value;" onchange="MEMO_TURB=this.value;"></textarea>
+
+    <!-- WX -->
+    <div style="color:#78909c;font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">WX</div>
+    <textarea id="memo-wx" rows="4"
+      style="width:100%;box-sizing:border-box;background:#080c14;border:1px solid #1e2a38;border-radius:6px;color:#cfd8dc;font-family:inherit;font-size:13px;padding:10px 12px;resize:vertical;outline:none;"
+      placeholder="例: Active CB along route around XXXXX. SIGMET Y1 valid until 1800Z."
+      oninput="MEMO_WX=this.value;" onchange="MEMO_WX=this.value;"></textarea>
+
+  </div>
+</div>
+
 <!-- ===== FLIGHT PLAN ===== -->
 <div id="fp-panel" class="panel">
   <div class="bar">
@@ -1144,7 +1173,7 @@ var lightningReconnectTimer = null;
 // TABS
 // =====================================================================
 function showTab(name) {
-  ['wx','fp','atm','atm-gfs','crew-rest','fdp'].forEach(function(n) {
+  ['wx','fp','atm','atm-gfs','crew-rest','fdp','memo'].forEach(function(n) {
     document.getElementById(n+'-panel').classList.remove('active');
     var ni=document.getElementById('nav-'+n);
     if(ni) ni.classList.toggle('nav-act', n===name);
@@ -2366,6 +2395,7 @@ function runParse() {
   drawEtops();
   drawPgumRing();
   startAtoAutoFill();
+  if(typeof renderMemoPanel === 'function') renderMemoPanel();
   frameRoute();
   if(typeof syncFdpFromNavlog === 'function') syncFdpFromNavlog();
 }
@@ -5227,6 +5257,83 @@ function renderAtmTable() {
   html += '</tbody></table>';
   wrap.innerHTML = html;
 }
+function renderMemoPanel() {
+  var el = document.getElementById('memo-auto-text');
+  if(!el) return;
+
+  function fmtFuel(lbs) {
+    if(lbs === null || lbs === undefined) return '—';
+    return (lbs / 1000).toFixed(1) + ' klbs (' + lbs.toLocaleString() + ' lbs)';
+  }
+  function fmtWt(lbs) {
+    if(lbs === null || lbs === undefined) return '—';
+    return (lbs / 1000).toFixed(1) + ' klbs';
+  }
+
+  var lines = [];
+
+  // STD / STA
+  var stdStr = NAV_STD ? (NAV_STD.slice(0,2) + ':' + NAV_STD.slice(2) + 'Z') : '—';
+  var staStr = NAV_STA ? (NAV_STA.slice(0,2) + ':' + NAV_STA.slice(2) + 'Z') : '—';
+  lines.push('• STD: ' + stdStr + ' / STA: ' + staStr);
+
+  // B/T, F/T, 差分
+  if(NAV_BT_STR || NAV_FT_STR) {
+    var diffStr = '';
+    if(NAV_BT_STR && NAV_FT_STR) {
+      var btParts = NAV_BT_STR.split(':');
+      var ftParts = NAV_FT_STR.split(':');
+      var btMin = parseInt(btParts[0]) * 60 + parseInt(btParts[1]);
+      var ftMin = parseInt(ftParts[0]) * 60 + parseInt(ftParts[1]);
+      var d = btMin - ftMin;
+      diffStr = ' (差: ' + d + 'min)';
+    }
+    lines.push('• B/T: ' + (NAV_BT_STR || '—') + ' / F/T: ' + (NAV_FT_STR || '—') + diffStr);
+  }
+
+  // SS / SR
+  if(NAV_SS_STR || NAV_SR_STR) {
+    lines.push('• SS: ' + (NAV_SS_STR || 'N/A') + ' / SR: ' + (NAV_SR_STR || 'N/A'));
+  }
+
+  // EDCT
+  if(NAV_EDCT_STR) {
+    lines.push('• EDCT: ' + NAV_EDCT_STR);
+  }
+
+  // RSV + ALT
+  if(NAV_RSV_LBS !== null || NAV_ALT_LBS !== null) {
+    var rsvAlt = (NAV_RSV_LBS || 0) + (NAV_ALT_LBS || 0);
+    lines.push('• RSV+ALT: ' + fmtFuel(rsvAlt)
+      + ' (RSV: ' + fmtFuel(NAV_RSV_LBS) + ' / ALT: ' + fmtFuel(NAV_ALT_LBS) + ')');
+  }
+
+  // FOB
+  if(NAV_FOB_LBS !== null) {
+    lines.push('• FOB: ' + fmtFuel(NAV_FOB_LBS));
+  }
+
+  // FOD
+  if(NAV_FOD_LBS !== null) {
+    lines.push('• FOD: ' + fmtFuel(NAV_FOD_LBS));
+  }
+
+  // PAX
+  if(NAV_PAX !== null) {
+    lines.push('• PAX: ' + NAV_PAX);
+  }
+
+  // PTOW / MLDW
+  if(NAV_PTOW !== null) {
+    lines.push('• PTOW: ' + fmtWt(NAV_PTOW));
+  }
+  if(NAV_MLDW !== null) {
+    lines.push('• MLDW: ' + fmtWt(NAV_MLDW * 1000));
+  }
+
+  el.textContent = lines.length ? lines.join('\n') : '（NAVLOGを適用すると自動入力されます）';
+}
+
 function clearFpl() {
   document.getElementById('fpl-txt').value='';
   document.getElementById('parse-result').textContent='';
@@ -6710,6 +6817,8 @@ function updateNavFlightInfo() {
   document.getElementById('nav-dep-tz').textContent = 'STD ' + (NAV_STD ? NAV_STD.slice(0,2)+':'+NAV_STD.slice(2,4)+'Z' : '--:--') + ' · ' + depTz.name;
   document.getElementById('nav-arr-time').textContent = NAV_STA ? utcHhmmToLcl(NAV_STA, arrTz.offset) : '--:--';
   document.getElementById('nav-arr-tz').textContent = 'STA ' + (NAV_STA ? NAV_STA.slice(0,2)+':'+NAV_STA.slice(2,4)+'Z' : '--:--') + ' · ' + arrTz.name;
+  var memoLbl = document.getElementById('memo-route-lbl');
+  if(memoLbl && NAV_DEP && NAV_DEST) memoLbl.textContent = NAV_DEP + ' → ' + NAV_DEST;
 }
 setInterval(updateNavClock, 60000);
 updateNavClock();
@@ -8577,6 +8686,7 @@ if(WX_GFS_WIND_ON && typeof applyGfsWindLayer === 'function') applyGfsWindLayer(
     <div class="nav-sec">
       <div class="nav-sec-lbl">Planning</div>
       <button class="nav-item" id="nav-fp" onclick="navTo('fp')">📋 FLT PLN</button>
+      <button class="nav-item" id="nav-memo" onclick="navTo('memo')">📝 MEMO</button>
     </div>
     <div class="nav-sec">
       <div class="nav-sec-lbl">Weather</div>
