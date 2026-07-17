@@ -5262,67 +5262,60 @@ function buildMemoText() {
     if(lbs === null || lbs === undefined) return '—';
     return (lbs / 1000).toFixed(1);
   }
+  function hhmm(str) {
+    // "09:35" → "09+35"
+    if(!str) return '—';
+    return str.replace(':', '+');
+  }
   var lines = [];
 
-  // 1行目: 日付  便名
+  // 1行目: 日付  便名 出発→到着
   var now = new Date();
   var dd = now.getUTCFullYear() + '/'
     + ('0'+(now.getUTCMonth()+1)).slice(-2) + '/'
     + ('0'+now.getUTCDate()).slice(-2);
   var fltNo = NAV_FLT_NO || '';
-  lines.push(dd + (fltNo ? ('  ' + fltNo) : ''));
+  var route = (NAV_DEP && NAV_DEST) ? (' ' + NAV_DEP + '→' + NAV_DEST) : '';
+  lines.push(dd + (fltNo ? ('  ' + fltNo) : '') + route);
 
-  // 2行目: ROUTE  STD/STA \t B/T / F/T(差)
-  var route = (NAV_DEP && NAV_DEST) ? (NAV_DEP + '→' + NAV_DEST + '  ') : '';
-  var stdStr = NAV_STD ? (NAV_STD.slice(0,2)+':'+NAV_STD.slice(2)+'Z') : '—';
-  var staStr = NAV_STA ? (NAV_STA.slice(0,2)+':'+NAV_STA.slice(2)+'Z') : '—';
-  var timeStr = 'STD: ' + stdStr + ' / STA: ' + staStr;
-  var btft = '';
-  if(NAV_BT_STR || NAV_FT_STR) {
-    var diffStr = '';
-    if(NAV_BT_STR && NAV_FT_STR) {
-      var bp = NAV_BT_STR.split(':'), fp2 = NAV_FT_STR.split(':');
-      var d = (parseInt(bp[0])*60+parseInt(bp[1])) - (parseInt(fp2[0])*60+parseInt(fp2[1]));
-      diffStr = ' (' + d + 'min)';
-    }
-    btft = '\tB/T: ' + (NAV_BT_STR||'—') + ' / F/T: ' + (NAV_FT_STR||'—') + diffStr;
-  }
-  lines.push(route + timeStr + btft);
+  // 2行目: STD時刻Z タブ STA時刻Z (ラベルなし)
+  var stdStr = NAV_STD ? (NAV_STD.slice(0,2)+NAV_STD.slice(2)+'Z') : '—';
+  var staStr = NAV_STA ? (NAV_STA.slice(0,2)+NAV_STA.slice(2)+'Z') : '—';
+  lines.push(stdStr + '\t' + staStr);
 
-  // 3行目: SS/SR(あれば)  EDCT(あれば)
-  var line3 = '';
-  if(NAV_SS_STR || NAV_SR_STR) {
-    line3 += 'SS: ' + (NAV_SS_STR||'—') + ' / SR: ' + (NAV_SR_STR||'—');
+  // 3行目: B/T(HH+MM) タブ F/T(HH+MM) (差min) タブ×3 SS: x / SR: x
+  var btStr = hhmm(NAV_BT_STR);
+  var ftStr = hhmm(NAV_FT_STR);
+  var diffStr = '';
+  if(NAV_BT_STR && NAV_FT_STR) {
+    var bp = NAV_BT_STR.split(':'), fp2 = NAV_FT_STR.split(':');
+    var d = (parseInt(bp[0])*60+parseInt(bp[1])) - (parseInt(fp2[0])*60+parseInt(fp2[1]));
+    diffStr = ' (' + d + 'min)';
   }
-  if(NAV_EDCT_STR) {
-    line3 += (line3 ? '  ' : '') + 'EDCT: ' + NAV_EDCT_STR;
-  }
-  if(line3) lines.push(line3);
+  var ssStr = 'SS: ' + (NAV_SS_STR || '—') + ' / SR: ' + (NAV_SR_STR || '—');
+  lines.push(btStr + '\t' + ftStr + diffStr + '\t\t\t' + ssStr);
 
-  // 4行目: RSV+ALT (RSV: x / ALT KONT: y)
-  if(NAV_RSV_LBS !== null || NAV_ALT_LBS !== null) {
-    var rsvStr = NAV_RSV_LBS !== null ? klbs(NAV_RSV_LBS) : '—';
-    var altStr = NAV_ALT_LBS !== null ? klbs(NAV_ALT_LBS) : '—';
-    var altApt = NAV_ALT_APT ? (' ' + NAV_ALT_APT) : '';
-    lines.push('RSV+ALT (RSV: ' + rsvStr + ' / ALT' + altApt + ': ' + altStr + ')');
-  }
+  // 4行目: ALT空港名 タブ RSV+ALT合計 (RSV:x/ALT:y)  [EDCT あれば末尾]
+  var rsvVal = klbs(NAV_RSV_LBS);
+  var altVal = klbs(NAV_ALT_LBS);
+  var altApt = NAV_ALT_APT || '—';
+  var rsvAltTotal = (NAV_RSV_LBS !== null && NAV_ALT_LBS !== null)
+    ? ((NAV_RSV_LBS + NAV_ALT_LBS) / 1000).toFixed(1) : '—';
+  var line4 = altApt + '\t' + rsvAltTotal + ' (RSV:' + rsvVal + '/ALT:' + altVal + ')';
+  if(NAV_EDCT_STR) line4 += '  EDCT: ' + NAV_EDCT_STR;
+  lines.push(line4);
 
-  // 5行目: FOB: x \t FOD: y
-  if(NAV_FOB_LBS !== null || NAV_FOD_LBS !== null) {
-    lines.push('FOB: ' + klbs(NAV_FOB_LBS) + '\tFOD: ' + klbs(NAV_FOD_LBS));
-  }
+  // 5行目: FOB: タブ 値 タブ FOD: 値
+  lines.push('FOB:\t' + klbs(NAV_FOB_LBS) + '\tFOD: ' + klbs(NAV_FOD_LBS));
 
-  // 6行目: PTOW: x \t MLDW: y
+  // 6行目: PTOW: 値 タブ MLDW: 値
   var ptowVal = NAV_PTOW_LBS !== null ? klbs(NAV_PTOW_LBS) : '—';
-  var mldwVal = NAV_MLDW !== null ? NAV_MLDW.toFixed(1) : '—';  // NAV_MLDWはすでにklbs
+  var mldwVal = NAV_MLDW !== null ? NAV_MLDW.toFixed(1) : '—';
   lines.push('PTOW: ' + ptowVal + '\tMLDW: ' + mldwVal);
 
-  lines.push('');
+  lines.push('RMK:');
   lines.push('Turbulence:');
-  lines.push('');
-  lines.push('');
   lines.push('WX:');
-  lines.push('');
 
   return lines.join('\n');
 }
@@ -5330,9 +5323,8 @@ function buildMemoText() {
 function renderMemoPanel() {
   var ta = document.getElementById('memo-textarea');
   if(!ta) return;
-  // NAVLOGが適用されていない場合はテンプレートのみ
   if(!NAV_DEP && !NAV_DEST) {
-    ta.value = '（NAVLOGを適用すると自動入力されます）\n\nTurbulence:\n\n\nWX:\n\n';
+    ta.value = '（NAVLOGを適用すると自動入力されます）\n\nRMK:\nTurbulence:\nWX:';
     return;
   }
   ta.value = buildMemoText();
