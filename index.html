@@ -905,17 +905,16 @@ var NAV_MLDW = null;
 var NAV_PZFW = null;
 var NAV_BT_STR = null;      // Block Time 文字列 e.g. "09:35"
 var NAV_FT_STR = null;      // Flight Time 文字列 e.g. "08:49"
-var NAV_SS_STR = null;      // Sunset e.g. "17:33Z" or null
+var NAV_SS_STR = null;      // Sunset e.g. "17:22Z" or null
 var NAV_SR_STR = null;      // Sunrise e.g. "05:12Z" or null
 var NAV_EDCT_STR = null;    // EDCT e.g. "1234Z" or null
-var NAV_RSV_LBS = null;     // RSV fuel (lbs 整数)
-var NAV_ALT_LBS = null;     // ALT fuel (lbs 整数)
-var NAV_FOB_LBS = null;     // FOB (lbs 整数)
-var NAV_FOD_LBS = null;     // FOD (lbs 整数)
+var NAV_RSV_LBS = null;     // RSV fuel (lbs)
+var NAV_ALT_APT = null;     // ALT airport ICAO (larger fuel value)
+var NAV_ALT_LBS = null;     // ALT fuel (lbs, larger value)
+var NAV_FOB_LBS = null;     // FOB (lbs)
+var NAV_FOD_LBS = null;     // FOD (lbs)
 var NAV_PAX = null;         // PAX数
-var NAV_PTOW = null;        // PTOW (lbs 整数)
-var MEMO_TURB = '';         // 手動入力: Turbulence
-var MEMO_WX = '';           // 手動入力: WX
+var NAV_PTOW_LBS = null;    // PTOW (lbs)
 var DEP_ATO_MIN = null;
 var ATO_AUTO_INT = null;
 var DEP_STD_MIN = null;
@@ -2040,23 +2039,40 @@ function runParse() {
   var ftM = txt.match(/F\/T\s+(\d{2})HR(\d{2})MIN/);
   NAV_FT_STR = ftM ? (ftM[1] + ':' + ftM[2]) : null;
 
-  // SS / SR  例: "SS 17:22 / T SR05:12/099T" または "SS : / T SR17:33/099T"
-  var ssM = txt.match(/SS\s+(\d{2}:\d{2})/);
-  NAV_SS_STR = ssM ? (ssM[1] + 'Z') : null;
-  var srM = txt.match(/SR(\d{2}:\d{2})/);
-  NAV_SR_STR = srM ? (srM[1] + 'Z') : null;
+  // SS / SR  例: "SS 17:22 / T SR05:12/099T"
+  var ssM = txt.match(/\bSS\s+(\d{2}):(\d{2})/);
+  NAV_SS_STR = ssM ? (ssM[1] + ':' + ssM[2] + 'Z') : null;
+  var srM = txt.match(/\bSR(\d{2}):(\d{2})/);
+  NAV_SR_STR = srM ? (srM[1] + ':' + srM[2] + 'Z') : null;
 
   // EDCT (値がある場合のみ)
   var edctM = txt.match(/EDCT:\s*(\d{4}Z?)/);
   NAV_EDCT_STR = edctM ? edctM[1] : null;
 
-  // FUEL PLAN: RSV, ALT, FOB, FOD
+  // FUEL PLAN: RSV
   var rsvM = txt.match(/^RSV\s+\d{2}\/\d{2}\s+(\d+)/m);
   NAV_RSV_LBS = rsvM ? parseInt(rsvM[1]) : null;
-  var altFuelM = txt.match(/^ALT\s+[A-Z]*\s*\d{2}\/\d{2}\s+(\d+)/m);
-  NAV_ALT_LBS = altFuelM ? parseInt(altFuelM[1]) : null;
+
+  // FUEL PLAN: ALT (2列ある場合は大きい方の空港と燃料を採用)
+  // 例: "ALT KONT 00/28 009700      00/00 000000"
+  // 例: "ALT KONT 00/28 009700 RJGG 00/20 007200"
+  NAV_ALT_APT = null; NAV_ALT_LBS = null;
+  var altLineM = txt.match(/^ALT\s+([A-Z]{4})\s+\d{2}\/\d{2}\s+(\d+)(?:\s+([A-Z]{4})\s+\d{2}\/\d{2}\s+(\d+))?/m);
+  if(altLineM) {
+    var apt1 = altLineM[1], f1 = parseInt(altLineM[2]);
+    var apt2 = altLineM[3] || null, f2 = altLineM[4] ? parseInt(altLineM[4]) : 0;
+    if(apt2 && f2 > f1) {
+      NAV_ALT_APT = apt2; NAV_ALT_LBS = f2;
+    } else {
+      NAV_ALT_APT = apt1; NAV_ALT_LBS = f1;
+    }
+  }
+
+  // FOB
   var fobM = txt.match(/^FOB\s+\d{2}\/\d{2}\s+(\d+)/m);
   NAV_FOB_LBS = fobM ? parseInt(fobM[1]) : null;
+
+  // FOD
   var fodM = txt.match(/FOD=(\d+)LB/);
   NAV_FOD_LBS = fodM ? parseInt(fodM[1]) : null;
 
@@ -2064,7 +2080,7 @@ function runParse() {
   var paxM = txt.match(/PAX\s+(\d+)\//);
   NAV_PAX = paxM ? parseInt(paxM[1]) : null;
   var ptowM = txt.match(/PTOW\s+(\d+)/);
-  NAV_PTOW = ptowM ? parseInt(ptowM[1]) : null;
+  NAV_PTOW_LBS = ptowM ? parseInt(ptowM[1]) : null;
 
   // FDP Calc 連動: FLT Time / Taxi-out / Taxi-in (サマリー抽出)
   window.NAVLOG = window.NAVLOG || {};
@@ -5365,9 +5381,9 @@ function clearFpl() {
   if(typeof NAV_TAXI_OUT !== 'undefined') NAV_TAXI_OUT = null;
   NAV_BT_STR = null; NAV_FT_STR = null;
   NAV_SS_STR = null; NAV_SR_STR = null; NAV_EDCT_STR = null;
-  NAV_RSV_LBS = null; NAV_ALT_LBS = null;
+  NAV_RSV_LBS = null; NAV_ALT_APT = null; NAV_ALT_LBS = null;
   NAV_FOB_LBS = null; NAV_FOD_LBS = null;
-  NAV_PAX = null; NAV_PTOW = null;
+  NAV_PAX = null; NAV_PTOW_LBS = null;
   if(typeof renderMemoPanel === 'function') renderMemoPanel();
   ACTIVE_ETOPS_KEY = 'NH9D';
   if(typeof syncEtops207Availability === 'function') syncEtops207Availability();
