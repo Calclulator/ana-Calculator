@@ -899,6 +899,7 @@ var NAV_FOB_LBS = null;     // FOB (lbs)
 var NAV_FOD_LBS = null;     // FOD (lbs)
 var NAV_PAX = null;         // PAX数
 var NAV_PTOW_LBS = null;    // PTOW (lbs)
+var NAV_CREW_TOTAL = null;  // Cockpit + Cabin crew 合計
 var DEP_ATO_MIN = null;
 var ATO_AUTO_INT = null;
 var DEP_STD_MIN = null;
@@ -2065,6 +2066,10 @@ function runParse() {
   NAV_PAX = paxM ? parseInt(paxM[1]) : null;
   var ptowM = txt.match(/PTOW\s+(\d+)/);
   NAV_PTOW_LBS = ptowM ? parseInt(ptowM[1]) : null;
+
+  // CREW  例: "CREW 02/09" → Cockpit=2, Cabin=9, Total=11
+  var crewM = txt.match(/CREW\s+(\d+)\/(\d+)/);
+  NAV_CREW_TOTAL = crewM ? (parseInt(crewM[1], 10) + parseInt(crewM[2], 10)) : null;
 
   // FDP Calc 連動: FLT Time / Taxi-out / Taxi-in (サマリー抽出)
   window.NAVLOG = window.NAVLOG || {};
@@ -5257,13 +5262,47 @@ function renderAtmTable() {
   html += '</tbody></table>';
   wrap.innerHTML = html;
 }
+function fetchDestWeather(cb) {
+  if(!NAV_DEST) { cb(''); return; }
+  var apt = typeof APT !== 'undefined' ? APT[NAV_DEST] : null;
+  if(!apt) { cb(''); return; }
+  var url = 'https://wttr.in/' + apt.lat.toFixed(4) + ',' + apt.lon.toFixed(4) + '?format=j1';
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', url, true);
+  xhr.timeout = 5000;
+  xhr.onreadystatechange = function() {
+    if(xhr.readyState !== 4) return;
+    if(xhr.status !== 200) { cb(''); return; }
+    try {
+      var data = JSON.parse(xhr.responseText);
+      var today = data.weather[0];
+      var minC = today.mintempC;
+      var maxC = today.maxtempC;
+      // 昼間(hourly[4]=12:00頃)の天気を参照
+      var desc = (today.hourly && today.hourly[4] && today.hourly[4].weatherDesc && today.hourly[4].weatherDesc[0])
+        ? today.hourly[4].weatherDesc[0].value : '';
+      var dl = desc.toLowerCase();
+      var wx = '○';
+      if(dl.indexOf('rain') >= 0 || dl.indexOf('shower') >= 0 || dl.indexOf('drizzle') >= 0
+          || dl.indexOf('snow') >= 0 || dl.indexOf('sleet') >= 0 || dl.indexOf('thunder') >= 0) {
+        wx = 'R';
+      } else if(dl.indexOf('cloud') >= 0 || dl.indexOf('overcast') >= 0 || dl.indexOf('mist') >= 0
+          || dl.indexOf('fog') >= 0 || dl.indexOf('haze') >= 0 || dl.indexOf('partly') >= 0) {
+        wx = '△';
+      }
+      cb(minC + '/' + maxC + '℃ ' + wx);
+    } catch(e) { cb(''); }
+  };
+  xhr.ontimeout = function() { cb(''); };
+  xhr.send();
+}
+
 function buildMemoText() {
   function klbs(lbs) {
     if(lbs === null || lbs === undefined) return '—';
     return (lbs / 1000).toFixed(1);
   }
   function hhmm(str) {
-    // "09:35" → "09+35"
     if(!str) return '—';
     return str.replace(':', '+');
   }
@@ -5278,12 +5317,12 @@ function buildMemoText() {
   var route = (NAV_DEP && NAV_DEST) ? (' ' + NAV_DEP + '→' + NAV_DEST) : '';
   lines.push(dd + (fltNo ? ('  ' + fltNo) : '') + route);
 
-  // 2行目: STD時刻Z タブ STA時刻Z (ラベルなし)
+  // 2行目: STDhhmZ タブ STAhhmZ
   var stdStr = NAV_STD ? (NAV_STD.slice(0,2)+NAV_STD.slice(2)+'Z') : '—';
   var staStr = NAV_STA ? (NAV_STA.slice(0,2)+NAV_STA.slice(2)+'Z') : '—';
   lines.push(stdStr + '\t' + staStr);
 
-  // 3行目: B/T(HH+MM) タブ F/T(HH+MM) (差min) タブ×3 SS: x / SR: x
+  // 3行目: B/T タブ F/T(差) タブ×3 SS/SR
   var btStr = hhmm(NAV_BT_STR);
   var ftStr = hhmm(NAV_FT_STR);
   var diffStr = '';
@@ -5295,27 +5334,49 @@ function buildMemoText() {
   var ssStr = 'SS: ' + (NAV_SS_STR || '—') + ' / SR: ' + (NAV_SR_STR || '—');
   lines.push(btStr + '\t' + ftStr + diffStr + '\t\t\t' + ssStr);
 
-  // 4行目: ALT空港名 タブ RSV+ALT合計 (RSV:x/ALT:y)  [EDCT あれば末尾]
+  // 4行目: ALT空港 タブ RSV+ALT合計(RSV:x/ALT:y) [EDCT]
   var rsvVal = klbs(NAV_RSV_LBS);
   var altVal = klbs(NAV_ALT_LBS);
   var altApt = NAV_ALT_APT || '—';
-  var rsvAltTotal = (NAV_RSV_LBS !== null && NAV_ALT_LBS !== null)
-    ? ((NAV_RSV_LBS + NAV_ALT_LBS) / 1000).toFixed(1) : '—';
-  var line4 = altApt + '\t' + rsvAltTotal + ' (RSV:' + rsvVal + '/ALT:' + altVal + ')';
+  var rsvAltTotalKlbs = (NAV_RSV_LBS !== null && NAV_ALT_LBS !== null)
+    ? (NAV_RSV_LBS + NAV_ALT_LBS) / 1000 : null;
+  var rsvAltTotalStr = rsvAltTotalKlbs !== null ? rsvAltTotalKlbs.toFixed(1) : '—';
+  var line4 = altApt + '\t' + rsvAltTotalStr + ' (RSV:' + rsvVal + '/ALT:' + altVal + ')';
   if(NAV_EDCT_STR) line4 += '  EDCT: ' + NAV_EDCT_STR;
   lines.push(line4);
 
-  // 5行目: FOB: タブ 値 タブ FOD: 値
-  lines.push('FOB:\t' + klbs(NAV_FOB_LBS) + '\tFOD: ' + klbs(NAV_FOD_LBS));
+  // 5行目: FOB: タブ 値 タブ FOD: 値 タブ (FOD−RSV+ALT差)
+  var fodDiff = '';
+  if(NAV_FOD_LBS !== null && rsvAltTotalKlbs !== null) {
+    var fodKlbs = NAV_FOD_LBS / 1000;
+    fodDiff = '\t' + (fodKlbs - rsvAltTotalKlbs).toFixed(1);
+  }
+  lines.push('FOB:\t' + klbs(NAV_FOB_LBS) + '\tFOD: ' + klbs(NAV_FOD_LBS) + fodDiff);
 
-  // 6行目: PTOW: 値 タブ MLDW: 値
-  var ptowVal = NAV_PTOW_LBS !== null ? klbs(NAV_PTOW_LBS) : '—';
+  // 6行目: PTOW: 値 タブ MLDW: 値 タブ 差(klbs) (繰上げmin)
+  var ptowKlbs = NAV_PTOW_LBS !== null ? NAV_PTOW_LBS / 1000 : null;
+  var ptowVal = ptowKlbs !== null ? ptowKlbs.toFixed(1) : '—';
   var mldwVal = NAV_MLDW !== null ? NAV_MLDW.toFixed(1) : '—';
-  lines.push('PTOW: ' + ptowVal + '\tMLDW: ' + mldwVal);
+  var wtDiffStr = '';
+  if(ptowKlbs !== null && NAV_MLDW !== null) {
+    var wtDiffKlbs = Math.abs(NAV_MLDW - ptowKlbs);
+    var wtDiffLbs = wtDiffKlbs * 1000;
+    var burnMin = Math.ceil(wtDiffLbs / 3000);
+    wtDiffStr = '\t' + wtDiffKlbs.toFixed(1) + ' (' + burnMin + 'min)';
+  }
+  lines.push('PTOW: ' + ptowVal + '\tMLDW: ' + mldwVal + wtDiffStr);
 
-  lines.push('RMK:');
+  // 7行目: RMK (PAX数を転載)
+  var rmkLine = 'RMK:';
+  if(NAV_PAX !== null) rmkLine += ' PAX ' + NAV_PAX;
+  if(NAV_CREW_TOTAL !== null) rmkLine += ' TTL ' + NAV_CREW_TOTAL;
+  lines.push(rmkLine);
+
   lines.push('Turbulence:');
   lines.push('WX:');
+  lines.push('Performance:');
+  lines.push('Return');
+  lines.push('CLB Gradient');
 
   return lines.join('\n');
 }
@@ -5328,6 +5389,18 @@ function renderMemoPanel() {
     return;
   }
   ta.value = buildMemoText();
+  // 天気を非同期取得してWX行を更新
+  fetchDestWeather(function(wxStr) {
+    if(!wxStr) return;
+    var lines = ta.value.split('\n');
+    for(var i = 0; i < lines.length; i++) {
+      if(lines[i] === 'WX:' || lines[i].indexOf('WX:') === 0) {
+        lines[i] = 'WX: ' + wxStr;
+        break;
+      }
+    }
+    ta.value = lines.join('\n');
+  });
 }
 
 function clearFpl() {
@@ -5364,6 +5437,7 @@ function clearFpl() {
   NAV_RSV_LBS = null; NAV_ALT_APT = null; NAV_ALT_LBS = null;
   NAV_FOB_LBS = null; NAV_FOD_LBS = null;
   NAV_PAX = null; NAV_PTOW_LBS = null;
+  NAV_CREW_TOTAL = null;
   if(typeof renderMemoPanel === 'function') renderMemoPanel();
   ACTIVE_ETOPS_KEY = 'NH9D';
   if(typeof syncEtops207Availability === 'function') syncEtops207Availability();
