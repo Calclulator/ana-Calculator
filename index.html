@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -910,6 +910,19 @@ var NAV_ALT_TIME_MIN = null;   // ALT空港までの飛行時間（分）
 var NAV_INIT_FL = null;        // 初期巡航高度（フィート）例: 35000
 var NAV_STEP_CLIMBS = [];      // Step Climb配列 [{fl:37000, wp:'41N50'}, ...]
 var NAV_WINDS_ALOFT = {};      // WIND/TEMP ALOFT データ {wpName: {12000:spd, 18000:spd, ...}}
+var NAV_PZFW_LBS = null;    // Planned Zero Fuel Weight (lbs)
+var NAV_ACFT_CODE = null;   // JetPlan 機材コード (例: 'NH8A')
+var NAV_TAX_LBS = null;     // TAX燃料 (lbs)
+var DUMP_PARAMS = {
+  'NH8A': { name: 'B787-8',     mainCapLbs: 79094,  centerRate: 3000, mainRate: 1250, canDump: true  },
+  'NH8C': { name: 'B787-9',     mainCapLbs: 78384,  centerRate: 3000, mainRate: 1250, canDump: true  },
+  'NH9K': { name: 'B777-300ER', mainCapLbs: 199000, centerRate: 4500, mainRate: 2300, canDump: true  },
+  'NHXK': { name: 'B777-300ER', mainCapLbs: 199000, centerRate: 4500, mainRate: 2300, canDump: true  },
+  'NH9D': { name: 'B777-200',   mainCapLbs: 148000, centerRate: 4500, mainRate: 2300, canDump: true  },
+  'NH7E': { name: 'B767',       mainCapLbs: 0,      centerRate: 0,    mainRate: 0,    canDump: false },
+  'NH7K': { name: 'B767',       mainCapLbs: 0,      centerRate: 0,    mainRate: 0,    canDump: false }
+};
+// ※ B777のレートは暫定値。実機マニュアルで要確認。
 var DEP_ATO_MIN = null;
 var ATO_AUTO_INT = null;
 var DEP_STD_MIN = null;
@@ -2077,6 +2090,18 @@ function runParse() {
   NAV_PAX = paxM ? parseInt(paxM[1]) : null;
   var ptowM = txt.match(/PTOW\s+(\d+)/);
   NAV_PTOW_LBS = ptowM ? parseInt(ptowM[1]) : null;
+
+  // PZFW
+  var pzfwMDump = txt.match(/PZFW\s+(\d+)/);
+  NAV_PZFW_LBS = pzfwMDump ? parseInt(pzfwMDump[1], 10) : null;
+
+  // TAX燃料 (6桁数値, 例: TAX      002400)
+  var taxFuelM = txt.match(/^TAX\s+(\d{6})/m);
+  NAV_TAX_LBS = taxFuelM ? parseInt(taxFuelM[1], 10) : null;
+
+  // 機材コード (JetPlan内部コード: NH8A, NH8C, NH9K, ...)
+  var acftM = txt.match(/\b(NH8A|NH8C|NH9K|NH9D|NHXK|NH7E|NH7K|NH7L|NH7S|NHTR)\b/);
+  NAV_ACFT_CODE = acftM ? acftM[1] : null;
 
   // CREW  例: "CREW 02/09" → Cockpit=2, Cabin=9, Total=11
   var crewM = txt.match(/CREW\s+(\d+)\/(\d+)/);
@@ -5928,8 +5953,10 @@ function clearFpl() {
   NAV_CREW_TOTAL = null;
   NAV_TAXI_MIN = null; NAV_ALT_TIME_MIN = null;
   NAV_INIT_FL = null; NAV_STEP_CLIMBS = []; NAV_WINDS_ALOFT = {};
+  NAV_PZFW_LBS = null; NAV_ACFT_CODE = null; NAV_TAX_LBS = null;
   if(typeof renderMemoPanel === 'function') renderMemoPanel();
   if(typeof renderCcBrfgPanel === 'function') renderCcBrfgPanel();
+  if(typeof renderDumpPanel === 'function') renderDumpPanel();
   ACTIVE_ETOPS_KEY = 'NH9D';
   if(typeof syncEtops207Availability === 'function') syncEtops207Availability();
   if(typeof updateNavFlightInfo === 'function') updateNavFlightInfo();
