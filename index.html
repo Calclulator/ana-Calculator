@@ -900,6 +900,11 @@ var NAV_FOD_LBS = null;     // FOD (lbs)
 var NAV_PAX = null;         // PAX数
 var NAV_PTOW_LBS = null;    // PTOW (lbs)
 var NAV_CREW_TOTAL = null;  // Cockpit + Cabin crew 合計
+var NAV_TAXI_MIN = null;       // 離陸前TAXI時間（分）= B/T - F/T
+var NAV_ALT_TIME_MIN = null;   // ALT空港までの飛行時間（分）
+var NAV_INIT_FL = null;        // 初期巡航高度（フィート）例: 35000
+var NAV_STEP_CLIMBS = [];      // Step Climb配列 [{fl:37000, wp:'41N50'}, ...]
+var NAV_WINDS_ALOFT = {};      // WIND/TEMP ALOFT データ {wpName: {12000:spd, 18000:spd, ...}}
 var DEP_ATO_MIN = null;
 var ATO_AUTO_INT = null;
 var DEP_STD_MIN = null;
@@ -2070,6 +2075,73 @@ function runParse() {
   // CREW  例: "CREW 02/09" → Cockpit=2, Cabin=9, Total=11
   var crewM = txt.match(/CREW\s+(\d+)\/(\d+)/);
   NAV_CREW_TOTAL = crewM ? (parseInt(crewM[1], 10) + parseInt(crewM[2], 10)) : null;
+
+  // TAXI OUT = B/T - F/T (ブロックタイム - 飛行時間 = 総タクシー時間)
+  NAV_TAXI_MIN = null;
+  if(NAV_BT_STR && NAV_FT_STR) {
+    var btParts = NAV_BT_STR.split(':');
+    var ftParts = NAV_FT_STR.split(':');
+    var btTotalMin = parseInt(btParts[0], 10) * 60 + parseInt(btParts[1], 10);
+    var ftTotalMin = parseInt(ftParts[0], 10) * 60 + parseInt(ftParts[1], 10);
+    NAV_TAXI_MIN = btTotalMin - ftTotalMin;
+  }
+
+  // ALT空港への飛行時間: "ALT KONT 00/28 009700" → 28分
+  NAV_ALT_TIME_MIN = null;
+  var altTimeM = txt.match(/^ALT\s+[A-Z]{4}\s+(\d{2})\/(\d{2})/m);
+  if(altTimeM) {
+    NAV_ALT_TIME_MIN = parseInt(altTimeM[1], 10) * 60 + parseInt(altTimeM[2], 10);
+  }
+
+  // Step Climb: "STEP CLIMB 350/41N50 370/41N40 390/"
+  NAV_STEP_CLIMBS = [];
+  var scM = txt.match(/STEP\s+CLIMB\s+([\d\/\w\s]+)/);
+  if(scM) {
+    var scParts = scM[1].trim().split(/\s+/);
+    for(var sci = 0; sci < scParts.length; sci++) {
+      var scPair = scParts[sci].match(/^(\d{3})\/(\S+)?$/);
+      if(scPair && scPair[1]) {
+        NAV_STEP_CLIMBS.push({
+          fl: parseInt(scPair[1], 10) * 100,
+          wp: scPair[2] || ''
+        });
+      }
+    }
+  }
+
+  // WINDS/TEMP ALOFT FCST パース
+  // 形式: "WPTNAME  2655M06 2877M14 2895M27 7843M36 7863M43 7870M53 7850M62"
+  // 各カラムは固定高度: 12000 18000 24000 30000 34000 39000 45000
+  NAV_WINDS_ALOFT = {};
+  var aloftAltsFt = [12000, 18000, 24000, 30000, 34000, 39000, 45000];
+  var aloftSection = txt.match(/-WINDS\/TEMP ALOFT FCST[\s\S]*$/i);
+  if(aloftSection) {
+    var aloftLines = aloftSection[0].split('\n');
+    for(var ai = 0; ai < aloftLines.length; ai++) {
+      var aloftLine = aloftLines[ai].trim();
+      // WP名＋7つの風値が並ぶ行
+      var aloftRowM = aloftLine.match(/^([A-Z0-9]{2,8})\s+((?:[0-9]{4}[MP][0-9]{2}\s*){3,7})/);
+      if(!aloftRowM) continue;
+      var aloftWp = aloftRowM[1];
+      var aloftVals = aloftRowM[2].trim().split(/\s+/);
+      var wpData = {};
+      for(var avi = 0; avi < aloftVals.length && avi < aloftAltsFt.length; avi++) {
+        var aloftVal = aloftVals[avi];
+        // 風向: 最初の2桁 (x10), 風速: 次の2桁 (特殊: dir>=50→dir-50, spd+100)
+        var dirRaw = parseInt(aloftVal.slice(0, 2), 10);
+        var spdRaw = parseInt(aloftVal.slice(2, 4), 10);
+        var windSpd;
+        if(dirRaw >= 50) { windSpd = spdRaw + 100; }
+        else { windSpd = spdRaw; }
+        if(aloftVal.slice(0,4) === '9900') { windSpd = 0; }
+        wpData[aloftAltsFt[avi]] = windSpd;
+      }
+      NAV_WINDS_ALOFT[aloftWp] = wpData;
+    }
+  }
+
+  // 初期巡航高度: FP_ROWSのTOCエントリから取得 (パース後に設定)
+  // → renderCcBrfgPanel() 内で FP_ROWS を参照して取得
 
   // FDP Calc 連動: FLT Time / Taxi-out / Taxi-in (サマリー抽出)
   window.NAVLOG = window.NAVLOG || {};
@@ -5438,7 +5510,10 @@ function clearFpl() {
   NAV_FOB_LBS = null; NAV_FOD_LBS = null;
   NAV_PAX = null; NAV_PTOW_LBS = null;
   NAV_CREW_TOTAL = null;
+  NAV_TAXI_MIN = null; NAV_ALT_TIME_MIN = null;
+  NAV_INIT_FL = null; NAV_STEP_CLIMBS = []; NAV_WINDS_ALOFT = {};
   if(typeof renderMemoPanel === 'function') renderMemoPanel();
+  if(typeof renderCcBrfgPanel === 'function') renderCcBrfgPanel();
   ACTIVE_ETOPS_KEY = 'NH9D';
   if(typeof syncEtops207Availability === 'function') syncEtops207Availability();
   if(typeof updateNavFlightInfo === 'function') updateNavFlightInfo();
