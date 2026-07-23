@@ -397,6 +397,11 @@
 
 </div><!-- wx-panel -->
 
+<!-- ===== HOLDING ===== -->
+<div id="holding-panel" class="panel">
+  <!-- renderHoldingPanel() によって動的生成 -->
+</div>
+
 <!-- ===== CURFEW CALCULATOR ===== -->
 <div id="curfew-panel" class="panel">
   <!-- renderCurfewPanel() によって動的生成 -->
@@ -1257,6 +1262,7 @@ function navTo(tab){
   if(tab === 'ccbrfg') renderCcBrfgPanel();
   if(tab === 'dump') renderDumpPanel();
   if(tab === 'curfew') renderCurfewPanel();
+  if(tab === 'holding') renderHoldingPanel();
 }
 
 // 起動時: 一瞬 WX で地図初期化 → Flight Plan に切替
@@ -2521,6 +2527,7 @@ function runParse() {
   if(typeof renderCcBrfgPanel === 'function') renderCcBrfgPanel();
   if(typeof renderDumpPanel === 'function') renderDumpPanel();
   if(typeof renderCurfewPanel === 'function') renderCurfewPanel();
+  if(typeof renderHoldingPanel === 'function') renderHoldingPanel();
   frameRoute();
   if(typeof syncFdpFromNavlog === 'function') syncFdpFromNavlog();
 }
@@ -9991,6 +9998,7 @@ if(WX_GFS_WIND_ON && typeof applyGfsWindLayer === 'function') applyGfsWindLayer(
       <div class="nav-sec-lbl">Planning</div>
       <button class="nav-item" id="nav-fp" onclick="navTo('fp')">📋 FLT PLN</button>
       <button class="nav-item" id="nav-memo" onclick="navTo('memo')">📝 MEMO</button>
+      <button class="nav-item" id="nav-holding" onclick="navTo('holding')">✈ Holding</button>
       <button class="nav-item" id="nav-ccbrfg" onclick="navTo('ccbrfg')">👩‍✈️ CC BRFG</button>
     </div>
     <div class="nav-sec">
