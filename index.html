@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -396,6 +396,11 @@
   </div>
 
 </div><!-- wx-panel -->
+
+<!-- ===== TIME TO DUMP ===== -->
+<div id="dump-panel" class="panel">
+  <!-- renderDumpPanel() によって動的生成 -->
+</div>
 
 <!-- ===== CC BRFG ===== -->
 <div id="ccbrfg-panel" class="panel">
@@ -1180,7 +1185,7 @@ var lightningReconnectTimer = null;
 // TABS
 // =====================================================================
 function showTab(name) {
-  ['wx','fp','atm','atm-gfs','crew-rest','fdp','memo','ccbrfg'].forEach(function(n) {
+  ['wx','fp','atm','atm-gfs','crew-rest','fdp','memo','ccbrfg','dump'].forEach(function(n) {
     document.getElementById(n+'-panel').classList.remove('active');
     var ni=document.getElementById('nav-'+n);
     if(ni) ni.classList.toggle('nav-act', n===name);
@@ -1243,6 +1248,7 @@ function navTo(tab){
     }
   }
   if(tab === 'ccbrfg') renderCcBrfgPanel();
+  if(tab === 'dump') renderDumpPanel();
 }
 
 // 起動時: 一瞬 WX で地図初期化 → Flight Plan に切替
@@ -2505,6 +2511,7 @@ function runParse() {
   startAtoAutoFill();
   if(typeof renderMemoPanel === 'function') renderMemoPanel();
   if(typeof renderCcBrfgPanel === 'function') renderCcBrfgPanel();
+  if(typeof renderDumpPanel === 'function') renderDumpPanel();
   frameRoute();
   if(typeof syncFdpFromNavlog === 'function') syncFdpFromNavlog();
 }
@@ -5737,6 +5744,196 @@ function renderTurbulenceChart(canvas, turbData) {
 }
 
 function checkAltBandH(turbData) { return 0; } // プレースホルダー（未使用）
+
+// ── Time to Dump ────────────────────────────────────────────────
+
+// fobLbs: 現在/離陸時燃料 (lbs)
+// params: DUMP_PARAMS[NAV_ACFT_CODE]
+// toRemainLbs: MLDW - ZFW
+// 戻り値: {dumpLbs, centerLbs, mainLbs, centerMin, mainMin, totalMin, afterLbs}
+function calcDumpTime(fobLbs, toRemainLbs, params) {
+  var dumpLbs = fobLbs - toRemainLbs;
+  if(dumpLbs <= 0) return { dumpLbs: 0, totalMin: 0, afterLbs: fobLbs, centerLbs: 0, mainLbs: 0 };
+
+  // センタータンク在庫 = FOB - メインタンク容量（0以上）
+  var centerAvail = Math.max(0, fobLbs - params.mainCapLbs);
+  var centerDump  = Math.min(centerAvail, dumpLbs);
+  var mainDump    = Math.max(0, dumpLbs - centerDump);
+
+  var centerMin = params.centerRate > 0 ? centerDump / params.centerRate : 0;
+  var mainMin   = params.mainRate   > 0 ? mainDump   / params.mainRate   : 0;
+  var totalMin  = centerMin + mainMin;
+
+  return {
+    dumpLbs:   Math.round(dumpLbs),
+    centerLbs: Math.round(centerDump),
+    mainLbs:   Math.round(mainDump),
+    centerMin: centerMin,
+    mainMin:   mainMin,
+    totalMin:  totalMin,
+    afterLbs:  Math.round(fobLbs - dumpLbs)
+  };
+}
+
+function renderDumpResult(containerId, fobLbs, toRemainLbs, params, label) {
+  var el = document.getElementById(containerId);
+  if(!el) return;
+
+  if(fobLbs === null || toRemainLbs === null || !params) {
+    el.innerHTML = '<div style="color:#607d8b;">—</div>'; return;
+  }
+
+  var gw = NAV_PZFW_LBS !== null ? NAV_PZFW_LBS + fobLbs : null;
+  var dumpNeeded = fobLbs > toRemainLbs;
+  var res = dumpNeeded ? calcDumpTime(fobLbs, toRemainLbs, params) : null;
+
+  var aboveLbs = gw !== null && NAV_MLDW !== null ? Math.round(gw - NAV_MLDW * 1000) : null;
+  var aboveStr = (aboveLbs !== null && aboveLbs > 0)
+    ? '<span style="color:#ff9800;">' + aboveLbs.toLocaleString() + ' lbs above MLDW</span>'
+    : '<span style="color:#66bb6a;">MLDW以下 — ダンプ不要</span>';
+
+  var html =
+    '<div style="font-size:12px;color:#90a4ae;margin-bottom:6px;">' + label + '</div>' +
+    '<div style="color:#cfd8dc;font-size:13px;line-height:1.9;">' +
+      'Fuel on board: ' + fobLbs.toLocaleString() + ' lbs<br>' +
+      (gw !== null ? '総重量: ' + gw.toLocaleString() + ' lbs (' + aboveStr + ')<br>' : '') +
+      'TO REMAIN: ' + toRemainLbs.toLocaleString() + ' lbs' +
+    '</div>';
+
+  if(!dumpNeeded) {
+    html += '<div style="font-size:28px;font-weight:bold;color:#66bb6a;margin:12px 0;">ダンプ不要</div>';
+  } else if(res) {
+    html +=
+      '<div style="font-size:32px;font-weight:bold;color:#eceff1;margin:12px 0;">' +
+        res.totalMin.toFixed(1) + ' min' +
+      '</div>' +
+      '<div style="color:#90a4ae;font-size:12px;line-height:1.8;">' +
+        'ダンプ量: ' + res.dumpLbs.toLocaleString() + ' lbs<br>' +
+        'ダンプ後残燃料: ' + res.afterLbs.toLocaleString() + ' lbs<br>' +
+        (res.centerLbs > 0
+          ? 'セ ' + res.centerLbs.toLocaleString() + ' lbs @3,000lbs/min'
+            + (res.mainLbs > 0 ? '、メ ' + res.mainLbs.toLocaleString() + ' lbs @1,250lbs/min' : '')
+          : 'メイン ' + res.mainLbs.toLocaleString() + ' lbs @1,250lbs/min') +
+      '</div>';
+  }
+
+  el.innerHTML = html;
+}
+
+function renderDumpPanel() {
+  var panel = document.getElementById('dump-panel');
+  if(!panel) return;
+
+  var params = NAV_ACFT_CODE ? DUMP_PARAMS[NAV_ACFT_CODE] : null;
+  var acftName = params ? params.name : (NAV_ACFT_CODE || '—');
+  var toRemainLbs = (NAV_MLDW !== null && NAV_PZFW_LBS !== null)
+    ? Math.round(NAV_MLDW * 1000 - NAV_PZFW_LBS) : null;
+
+  // TAX燃料が取得できた場合はそれを使用、なければ時間×150lbs/minで概算
+  var taxiLbs = NAV_TAX_LBS !== null ? NAV_TAX_LBS
+    : (NAV_TAXI_MIN !== null ? Math.round(NAV_TAXI_MIN * 150) : 0);
+  var fobTakeoffLbs = (NAV_FOB_LBS !== null && taxiLbs !== null)
+    ? NAV_FOB_LBS - taxiLbs : NAV_FOB_LBS;
+
+  var noDump = params && !params.canDump;
+  var notReady = !NAV_DEP && !NAV_DEST;
+
+  panel.innerHTML =
+    '<div class="bar">' +
+      '<span style="color:#4fc3f7;font-weight:bold;letter-spacing:.08em;">Time to Dump</span>' +
+      '<button class="btn" onclick="renderDumpPanel()" style="margin-left:auto;" title="フライトプランから再計算">↺ フライトプランから更新</button>' +
+    '</div>' +
+    '<div style="padding:16px 18px;overflow-y:auto;height:calc(100% - 44px);box-sizing:border-box;">' +
+
+      // 説明文（日本語）
+      '<div style="color:#90a4ae;font-size:12px;line-height:1.7;margin-bottom:16px;">' +
+        'MLW目標燃料（TO REMAIN）までのジェティソン所要時間を推定します。作動させるとまずセンタータンクからダンプし、続いてメインタンクを片側8,700lbsまで調整します。' +
+        'EICASシノプティックの流量目安: センタータンクダンプ中 約3,000lbs/min、メインタンクのみ 約1,250lbs/min。' +
+        'あくまでプランニング用の推定値です。実際のダンプ時間はジェティソンシステム作動後にFuel Synopticに表示されます。' +
+      '</div>' +
+
+      // FLIGHT PLAN DATA
+      '<div style="border:1px solid #1e2a38;border-radius:6px;padding:14px;margin-bottom:14px;">' +
+        '<div style="color:#607d8b;font-size:10px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;">FLIGHT PLAN DATA</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;color:#cfd8dc;">' +
+          '<div><span style="color:#607d8b;font-size:11px;">機材</span><br><strong>' + acftName + '</strong></div>' +
+          '<div><span style="color:#607d8b;font-size:11px;">MLDW</span><br><strong>' +
+            (NAV_MLDW !== null ? (NAV_MLDW * 1000).toLocaleString() + ' lbs' : '—') + '</strong></div>' +
+          '<div><span style="color:#607d8b;font-size:11px;">TO REMAIN (MLW燃料)</span><br><strong>' +
+            (toRemainLbs !== null ? toRemainLbs.toLocaleString() + ' lbs' : '—') + '</strong></div>' +
+          '<div><span style="color:#607d8b;font-size:11px;">ZFW</span><br><strong>' +
+            (NAV_PZFW_LBS !== null ? NAV_PZFW_LBS.toLocaleString() + ' lbs' : '—') + '</strong></div>' +
+          '<div><span style="color:#607d8b;font-size:11px;">離陸時燃料</span><br><strong>' +
+            (fobTakeoffLbs !== null ? fobTakeoffLbs.toLocaleString() + ' lbs' : '—') + '</strong>' +
+            (NAV_FOB_LBS !== null && taxiLbs !== null
+              ? '<div style="font-size:10px;color:#546e7a;">FOB ' + NAV_FOB_LBS.toLocaleString() +
+                ' lbs − タクシー ' + taxiLbs.toLocaleString() + ' lbs</div>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
+      // メインタンク容量注記
+      (params && params.mainCapLbs > 0
+        ? '<div style="color:#546e7a;font-size:11px;margin-bottom:14px;">※ メインタンク容量（' +
+          params.name + '）: ' + params.mainCapLbs.toLocaleString() + ' lbs</div>' : '') +
+
+      // ダンプ不可機材の警告
+      (noDump
+        ? '<div style="color:#ff9800;font-size:13px;padding:12px;background:rgba(255,152,0,.1);border-radius:6px;">' +
+          '⚠ この機材（' + acftName + '）は燃料ダンプシステムを装備していません。</div>'
+        : '') +
+
+      // 2カラム: 離陸時 / 現在燃料入力
+      (!noDump
+        ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">' +
+
+          // 左: 離陸時燃料ベース
+          '<div style="border:1px solid #1e2a38;border-radius:6px;padding:14px;">' +
+            '<div style="color:#607d8b;font-size:10px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">離陸時燃料ベース</div>' +
+            '<div id="dump-result-tof"></div>' +
+          '</div>' +
+
+          // 右: 現在燃料入力
+          '<div style="border:1px solid #1e2a38;border-radius:6px;padding:14px;">' +
+            '<div style="color:#607d8b;font-size:10px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">現在燃料入力</div>' +
+            '<input id="dump-cur-input" type="text" placeholder="例: 52.4 または 52400"' +
+              ' style="width:100%;background:#0d1117;border:1px solid #1e2a38;border-radius:4px;' +
+              'color:#cfd8dc;font-size:13px;padding:6px 8px;box-sizing:border-box;outline:none;"' +
+              ' oninput="onDumpCurInput(this.value)">' +
+            '<div style="color:#546e7a;font-size:11px;margin:6px 0 12px 0;">' +
+              'MLDWを超えている場合の現在残燃料を入力。<br>千単位（52.4）またはlbs（52400）どちらも可。' +
+            '</div>' +
+            '<div style="color:#607d8b;font-size:10px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">現在燃料ベース</div>' +
+            '<div id="dump-result-cur"><div style="color:#607d8b;">燃料を入力してください。</div><div style="color:#607d8b;margin-top:8px;">--</div></div>' +
+          '</div>' +
+
+        '</div>'
+        : '') +
+
+    '</div>';
+
+  // 離陸時燃料ベースの結果を描画
+  if(!noDump && params && fobTakeoffLbs !== null && toRemainLbs !== null) {
+    renderDumpResult('dump-result-tof', fobTakeoffLbs, toRemainLbs, params, 'AT TAKE-OFF FUEL');
+  }
+}
+
+function onDumpCurInput(val) {
+  var params = NAV_ACFT_CODE ? DUMP_PARAMS[NAV_ACFT_CODE] : null;
+  var toRemainLbs = (NAV_MLDW !== null && NAV_PZFW_LBS !== null)
+    ? Math.round(NAV_MLDW * 1000 - NAV_PZFW_LBS) : null;
+  var el = document.getElementById('dump-result-cur');
+  if(!el) return;
+  if(!val || !val.trim()) {
+    el.innerHTML = '<div style="color:#607d8b;">燃料を入力してください。</div><div style="color:#607d8b;margin-top:8px;">--</div>';
+    return;
+  }
+  var num = parseFloat(val.replace(/,/g,''));
+  if(isNaN(num)) { el.innerHTML = '<div style="color:#ef5350;">無効な値です。</div>'; return; }
+  // 1000未満 → 千単位として扱う
+  var lbs = num < 1000 ? Math.round(num * 1000) : Math.round(num);
+  renderDumpResult('dump-result-cur', lbs, toRemainLbs, params, '現在燃料ベース');
+}
 
 function renderCcBrfgPanel() {
   var panel = document.getElementById('ccbrfg-panel');
@@ -9281,6 +9478,7 @@ if(WX_GFS_WIND_ON && typeof applyGfsWindLayer === 'function') applyGfsWindLayer(
     </div>
     <div class="nav-sec">
       <div class="nav-sec-lbl">Calculators</div>
+      <button class="nav-item" id="nav-dump" onclick="navTo('dump')">⛽ Time to Dump</button>
       <button class="nav-item" id="nav-crew-rest" onclick="navTo('crew-rest')">💤 Crew Rest Calculator</button>
       <button class="nav-item" id="nav-fdp" onclick="navTo('fdp')">⏱ FDP Calc</button>
       <button class="nav-item nav-dis">🔔 Curfew Calculator<span class="nav-tag">WIP</span></button>
