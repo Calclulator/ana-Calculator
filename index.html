@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -928,16 +928,16 @@ var NAV_WINDS_ALOFT = {};      // WIND/TEMP ALOFT データ {wpName: {12000:spd,
 var NAV_PZFW_LBS = null;    // Planned Zero Fuel Weight (lbs)
 var NAV_ACFT_CODE = null;   // JetPlan 機材コード (例: 'NH8A')
 var NAV_TAX_LBS = null;     // TAX燃料 (lbs)
-var DUMP_PARAMS = {
-  'NH8A': { name: 'B787-8',     mainCapLbs: 79094,  centerRate: 3000, mainRate: 1250, canDump: true  },
-  'NH8C': { name: 'B787-9',     mainCapLbs: 78384,  centerRate: 3000, mainRate: 1250, canDump: true  },
-  'NH9K': { name: 'B777-300ER', mainCapLbs: 199000, centerRate: 4500, mainRate: 2300, canDump: true  },
-  'NHXK': { name: 'B777-300ER', mainCapLbs: 199000, centerRate: 4500, mainRate: 2300, canDump: true  },
-  'NH9D': { name: 'B777-200',   mainCapLbs: 148000, centerRate: 4500, mainRate: 2300, canDump: true  },
-  'NH7E': { name: 'B767',       mainCapLbs: 0,      centerRate: 0,    mainRate: 0,    canDump: false },
-  'NH7K': { name: 'B767',       mainCapLbs: 0,      centerRate: 0,    mainRate: 0,    canDump: false }
-};
-// ※ B777のレートは暫定値。実機マニュアルで要確認。
+// JetPlan コードのプレフィックスで機材を判定
+// サフィックス(A/C/K等)はエンジン種別のため無視する
+function getDumpParams(acftCode) {
+  if(!acftCode) return null;
+  if(/^NH8/.test(acftCode)) return { name: 'B787-8',  mainCapLbs: 79094, centerRate: 3000, mainRate: 1250, canDump: true  };
+  if(/^NH9/.test(acftCode)) return { name: 'B787-9',  mainCapLbs: 78384, centerRate: 3000, mainRate: 1250, canDump: true  };
+  if(/^NHX/.test(acftCode)) return { name: 'B787-10', mainCapLbs: 78384, centerRate: 3000, mainRate: 1250, canDump: true  };
+  if(/^NH7/.test(acftCode)) return { name: 'B767',    mainCapLbs: 0,     centerRate: 0,    mainRate: 0,    canDump: false };
+  return null;
+}
 var DEP_ATO_MIN = null;
 var ATO_AUTO_INT = null;
 var DEP_STD_MIN = null;
@@ -2119,8 +2119,8 @@ function runParse() {
   var taxFuelM = txt.match(/^TAX\s+(\d{6})/m);
   NAV_TAX_LBS = taxFuelM ? parseInt(taxFuelM[1], 10) : null;
 
-  // 機材コード (JetPlan内部コード: NH8A, NH8C, NH9K, ...)
-  var acftM = txt.match(/\b(NH8A|NH8C|NH9K|NH9D|NHXK|NH7E|NH7K|NH7L|NH7S|NHTR)\b/);
+  // 機材コード: NH8*/NH9*/NHX*/NH7* の4文字コードを汎用的にキャプチャ
+  var acftM = txt.match(/\b(NH[0-9X][A-Z])\b/);
   NAV_ACFT_CODE = acftM ? acftM[1] : null;
 
   // CREW  例: "CREW 02/09" → Cockpit=2, Cabin=9, Total=11
@@ -5764,7 +5764,7 @@ function checkAltBandH(turbData) { return 0; } // プレースホルダー（未
 // ── Time to Dump ────────────────────────────────────────────────
 
 // fobLbs: 現在/離陸時燃料 (lbs)
-// params: DUMP_PARAMS[NAV_ACFT_CODE]
+// params: getDumpParams(NAV_ACFT_CODE)
 // toRemainLbs: MLDW - ZFW
 // 戻り値: {dumpLbs, centerLbs, mainLbs, centerMin, mainMin, totalMin, afterLbs}
 function calcDumpTime(fobLbs, toRemainLbs, params) {
@@ -6355,7 +6355,7 @@ function renderDumpPanel() {
   var panel = document.getElementById('dump-panel');
   if(!panel) return;
 
-  var params = NAV_ACFT_CODE ? DUMP_PARAMS[NAV_ACFT_CODE] : null;
+  var params = getDumpParams(NAV_ACFT_CODE);
   var acftName = params ? params.name : (NAV_ACFT_CODE || '—');
   var toRemainLbs = (NAV_MLDW !== null && NAV_PZFW_LBS !== null)
     ? Math.round(NAV_MLDW * 1000 - NAV_PZFW_LBS) : null;
@@ -6450,7 +6450,7 @@ function renderDumpPanel() {
 }
 
 function onDumpCurInput(val) {
-  var params = NAV_ACFT_CODE ? DUMP_PARAMS[NAV_ACFT_CODE] : null;
+  var params = getDumpParams(NAV_ACFT_CODE);
   var toRemainLbs = (NAV_MLDW !== null && NAV_PZFW_LBS !== null)
     ? Math.round(NAV_MLDW * 1000 - NAV_PZFW_LBS) : null;
   var el = document.getElementById('dump-result-cur');
