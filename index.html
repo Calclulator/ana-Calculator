@@ -5662,6 +5662,7 @@ function buildTurbulenceText(turbData) {
 
 // 乱気流チャート描画 (Canvas)
 function renderTurbulenceChart(canvas, turbData) {
+  var C = getDayColors();
   var ctx = canvas.getContext('2d');
   var W = canvas.width, H = canvas.height;
   var padL = 42, padR = 12, padT = 10, padB = 32;
@@ -5676,7 +5677,7 @@ function renderTurbulenceChart(canvas, turbData) {
   function yOf(altFt) { return padT + chartH - (altFt - altMin) / (altMax - altMin) * chartH; }
 
   // 背景
-  ctx.fillStyle = '#080c14';
+  ctx.fillStyle = C.cBg;
   ctx.fillRect(0, 0, W, H);
 
   // 乱気流セグメント描画
@@ -5698,11 +5699,11 @@ function renderTurbulenceChart(canvas, turbData) {
   }
 
   // グリッド線（高度）
-  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.strokeStyle = C.cGrid;
   ctx.lineWidth = 1;
   var flLabels = [100,150,200,250,300,350,400,450];
   ctx.font = '9px monospace';
-  ctx.fillStyle = '#607d8b';
+  ctx.fillStyle = C.lbl;
   ctx.textAlign = 'right';
   for(var fi = 0; fi < flLabels.length; fi++) {
     var yy = yOf(flLabels[fi] * 100);
@@ -5710,10 +5711,10 @@ function renderTurbulenceChart(canvas, turbData) {
     ctx.fillText('FL' + flLabels[fi], padL - 3, yy + 3);
   }
 
-  // 飛行プロファイル（黒線）
+  // 飛行プロファイル
   var profile = buildFlightProfile();
   if(profile.length > 1) {
-    ctx.strokeStyle = '#ffffff';
+    ctx.strokeStyle = C.cLine;
     ctx.lineWidth = 2;
     ctx.beginPath();
     var started = false;
@@ -5728,18 +5729,18 @@ function renderTurbulenceChart(canvas, turbData) {
   }
 
   // X軸ラベル（1時間ごと）
-  ctx.fillStyle = '#607d8b';
+  ctx.fillStyle = C.lbl;
   ctx.textAlign = 'center';
   ctx.font = '9px monospace';
   var hourCount = Math.floor(totalMin / 60);
   for(var hi = 0; hi <= hourCount; hi++) {
     var hx = xOf(hi * 60);
     ctx.fillText(hi + 'h', hx, H - padB + 14);
-    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.strokeStyle = C.cGrid;
     ctx.beginPath(); ctx.moveTo(hx, padT); ctx.lineTo(hx, padT+chartH); ctx.stroke();
   }
   // 出発・到着ラベル
-  ctx.fillStyle = '#4fc3f7';
+  ctx.fillStyle = C.acc;
   ctx.textAlign = 'left';
   ctx.fillText(NAV_DEP || '', padL, H - padB + 25);
   ctx.textAlign = 'right';
@@ -5751,7 +5752,7 @@ function renderTurbulenceChart(canvas, turbData) {
   for(var li = 0; li < legItems.length; li++) {
     ctx.fillStyle = TURB_COLORS[legItems[li][0]];
     ctx.fillRect(legX, legY, 12, 9);
-    ctx.fillStyle = '#90a4ae';
+    ctx.fillStyle = C.text;
     ctx.font = '9px monospace';
     ctx.textAlign = 'left';
     ctx.fillText(legItems[li][1], legX + 14, legY + 8);
@@ -5840,6 +5841,7 @@ function renderDumpResult(containerId, fobLbs, toRemainLbs, params, label) {
 // ── Curfew Calculator ────────────────────────────────────────────
 
 function calcCurfew() {
+  var C = getDayColors();
   var cHH = parseInt(document.getElementById('curfew-hh').value, 10);
   var cMM = parseInt(document.getElementById('curfew-mm').value, 10);
   var fH  = parseInt(document.getElementById('curfew-fh').value,  10);
@@ -5849,7 +5851,7 @@ function calcCurfew() {
   if(!resultEl) return;
 
   if(isNaN(cHH) || isNaN(cMM) || isNaN(fH) || isNaN(fM)) {
-    resultEl.innerHTML = '<span style="color:#607d8b;">入力値を確認してください。</span>';
+    resultEl.innerHTML = '<span style="color:'+C.lbl+';">入力値を確認してください。</span>';
     return;
   }
   if(cHH < 0 || cHH > 23 || cMM < 0 || cMM > 59) {
@@ -5857,7 +5859,7 @@ function calcCurfew() {
     return;
   }
   if(fH < 0 || fM < 0 || fM > 59 || (fH === 0 && fM === 0)) {
-    resultEl.innerHTML = '<span style="color:#607d8b;">飛行時間を入力してください。</span>';
+    resultEl.innerHTML = '<span style="color:'+C.lbl+';">飛行時間を入力してください。</span>';
     return;
   }
 
@@ -5888,9 +5890,9 @@ function calcCurfew() {
   }
 
   resultEl.innerHTML =
-    '<div style="color:#90a4ae;font-size:12px;margin-bottom:6px;">Wheels Up（UTC）</div>' +
-    '<div style="font-size:40px;font-weight:bold;color:#eceff1;letter-spacing:.05em;">' + wuStr + '</div>' +
-    '<div style="color:#546e7a;font-size:12px;margin-top:6px;">' +
+    '<div style="color:'+C.lbl+';font-size:12px;margin-bottom:6px;">Wheels Up（UTC）</div>' +
+    '<div style="font-size:40px;font-weight:bold;color:'+C.hi+';letter-spacing:.05em;">' + wuStr + '</div>' +
+    '<div style="color:'+C.dim+';font-size:12px;margin-top:6px;">' +
       '空港時刻 ' + pad2(cHH)+':'+pad2(cMM)+'Z − 飛行時間 ' + fH + 'h' + pad2(fM) + 'm' +
     '</div>' +
     stdNote;
@@ -5903,8 +5905,11 @@ function clearCurfew() {
     if(el) el.value = '';
   }
   var resultEl = document.getElementById('curfew-result');
-  if(resultEl) resultEl.innerHTML =
-    '<span style="color:#607d8b;">入力値を入力して Wheels Up 時刻を計算します。</span>';
+  if(resultEl) {
+    var C0 = getDayColors();
+    resultEl.innerHTML =
+      '<span style="color:'+C0.lbl+';">入力値を入力して Wheels Up 時刻を計算します。</span>';
+  }
 }
 
 // ── Holding Speed Calculator ─────────────────────────────────────
@@ -6068,6 +6073,7 @@ var HOLDING_DATA = {
 function renderHoldingPanel() {
   var panel = document.getElementById('holding-panel');
   if(!panel) return;
+  var C = getDayColors();
 
   // FIR プルダウン生成（value は FIR_LIST インデックス）
   var defaultIdx = 3; // Japan (Fukuoka FIR)
@@ -6077,30 +6083,27 @@ function renderHoldingPanel() {
       (fi === defaultIdx ? ' selected' : '') + '>' + FIR_LIST[fi].label + '</option>';
   }
 
-  var selStyle = 'background:#0d1117;border:1px solid #1e2a38;border-radius:4px;' +
-                 'color:#cfd8dc;font-size:13px;padding:6px 10px;width:100%;outline:none;';
-  var inStyle  = 'background:#0d1117;border:1px solid #1e2a38;border-radius:4px;' +
-                 'color:#cfd8dc;font-size:13px;padding:6px 10px;width:100%;box-sizing:border-box;outline:none;';
+  var selStyle = 'background:'+C.bg+';border:1px solid '+C.bdr+';border-radius:4px;color:'+C.text+';font-size:13px;padding:6px 10px;width:100%;outline:none;';
+  var inStyle  = 'background:'+C.bg+';border:1px solid '+C.bdr+';border-radius:4px;color:'+C.text+';font-size:13px;padding:6px 10px;width:100%;box-sizing:border-box;outline:none;';
 
   panel.innerHTML =
     '<div class="bar">' +
-      '<span style="color:#4fc3f7;font-weight:bold;letter-spacing:.08em;">Holding</span>' +
+      '<span style="color:'+C.acc+';font-weight:bold;letter-spacing:.08em;">Holding</span>' +
     '</div>' +
     '<div style="display:flex;height:calc(100% - 44px);">' +
 
       // ── 左ペイン（入力） ──
-      '<div style="width:240px;min-width:200px;padding:16px 14px;box-sizing:border-box;' +
-           'border-right:1px solid #1e2a38;overflow-y:auto;">' +
+      '<div style="width:240px;min-width:200px;padding:16px 14px;box-sizing:border-box;border-right:1px solid '+C.bdr+';overflow-y:auto;">' +
 
-        '<div style="color:#607d8b;font-size:10px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;">FIR</div>' +
+        '<div style="color:'+C.lbl+';font-size:10px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;">FIR</div>' +
         '<select id="hold-fir" style="' + selStyle + '" onchange="updateHoldingTable()">' +
           firOpts +
         '</select>' +
 
-        '<div style="color:#607d8b;font-size:10px;text-transform:uppercase;letter-spacing:.1em;margin:14px 0 6px 0;">Manual Altitude (ft)</div>' +
+        '<div style="color:'+C.lbl+';font-size:10px;text-transform:uppercase;letter-spacing:.1em;margin:14px 0 6px 0;">現在高度（ft）</div>' +
         '<input id="hold-alt" type="number" min="0" max="60000" placeholder="e.g. 18000 — overrides auto"' +
           ' style="' + inStyle + '" oninput="updateHoldingTable()">' +
-        '<div style="color:#546e7a;font-size:11px;margin-top:5px;">現在高度を入力すると該当行をハイライト</div>' +
+        '<div style="color:'+C.dim+';font-size:11px;margin-top:5px;">現在高度を入力すると該当行をハイライト</div>' +
 
         '<div id="hold-auto-alt" style="margin-top:10px;"></div>' +
 
@@ -6139,6 +6142,7 @@ function renderHoldingPanel() {
 function updateHoldingTable() {
   var tableArea = document.getElementById('hold-table-area');
   if(!tableArea) return;
+  var C = getDayColors();
 
   var firSel = document.getElementById('hold-fir');
   var altEl  = document.getElementById('hold-alt');
@@ -6161,30 +6165,29 @@ function updateHoldingTable() {
     }
   }
 
-  var thStyle = 'padding:10px 12px;text-align:left;font-weight:600;font-size:12px;color:#90a4ae;' +
-                'background:#0d1421;border-bottom:2px solid #1e2a38;white-space:nowrap;';
-  var tdBase  = 'padding:10px 12px;font-size:13px;border-bottom:1px solid #0d1421;';
-  var tdNorm  = tdBase + 'color:#cfd8dc;';
-  var tdHL    = tdBase + 'color:#eceff1;';
+  var thStyle = 'padding:10px 12px;text-align:left;font-weight:600;font-size:12px;color:'+C.lbl+';background:'+C.bg3+';border-bottom:2px solid '+C.bdr+';white-space:nowrap;';
+  var tdBase  = 'padding:10px 12px;font-size:13px;border-bottom:1px solid '+C.bg3+';';
+  var tdNorm  = tdBase + 'color:'+C.text+';';
+  var tdHL    = tdBase + 'color:'+C.hi+';';
 
-  var html = '<div style="color:#546e7a;font-size:11px;margin-bottom:10px;">' + data.tableTitle + '</div>';
-  html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;background:#111827;border-radius:8px;overflow:hidden;">';
+  var html = '<div style="color:'+C.dim+';font-size:11px;margin-bottom:10px;">' + data.tableTitle + '</div>';
+  html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;background:'+C.bg2+';border-radius:8px;overflow:hidden;">';
 
   // ──── ICAO IV-1-1 ────
   if(data.type === 'icao') {
     html += '<thead><tr>' +
-      '<th style="' + thStyle + 'width:35%;">Levels<sup>1</sup></th>' +
-      '<th style="' + thStyle + '">Normal conditions</th>' +
-      '<th style="' + thStyle + '">Turbulence conditions</th>' +
+      '<th style="' + thStyle + 'width:35%;">高度帯<sup>1</sup></th>' +
+      '<th style="' + thStyle + '">通常条件</th>' +
+      '<th style="' + thStyle + '">乱気流条件</th>' +
       '</tr></thead><tbody>';
 
     for(var i = 0; i < data.levels.length; i++) {
       var lv   = data.levels[i];
       var isHL = (i === currentLevelIdx);
-      var rowBg = isHL ? 'background:rgba(79,195,247,0.08);' : '';
+      var rowBg = isHL ? 'background:'+C.hlBg+';' : '';
       var td   = isHL ? tdHL : tdNorm;
       var curTag = isHL ?
-        '<div style="color:#4fc3f7;font-size:10px;font-weight:bold;margin-top:3px;">CURRENT ALTITUDE</div>' : '';
+        '<div style="color:'+C.acc+';font-size:10px;font-weight:bold;margin-top:3px;">CURRENT ALTITUDE</div>' : '';
 
       html += '<tr style="' + rowBg + '">' +
         '<td style="' + td + '">' + lv.labelEN + curTag + '</td>' +
@@ -6198,7 +6201,7 @@ function updateHoldingTable() {
     if(data.footnotes.length) {
       html += '<div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;">';
       for(var fn = 0; fn < data.footnotes.length; fn++) {
-        html += '<div style="color:#546e7a;font-size:11px;padding:2px 0;">' + data.footnotes[fn] + '</div>';
+        html += '<div style="color:'+C.dim+';font-size:11px;padding:2px 0;">' + data.footnotes[fn] + '</div>';
       }
       html += '</div>';
     }
@@ -6207,21 +6210,21 @@ function updateHoldingTable() {
   // ──── TAIWAN ────
   else if(data.type === 'taiwan') {
     html += '<thead><tr>' +
-      '<th style="' + thStyle + 'width:55%;">Levels</th>' +
-      '<th style="' + thStyle + '">Air Speed (IAS)</th>' +
+      '<th style="' + thStyle + 'width:55%;">高度帯</th>' +
+      '<th style="' + thStyle + '">速度（IAS）</th>' +
       '</tr></thead><tbody>';
 
     for(var j = 0; j < data.levels.length; j++) {
       var lj   = data.levels[j];
       var isHLj = (j === currentLevelIdx);
-      var rowBgj = isHLj ? 'background:rgba(79,195,247,0.08);' : '';
+      var rowBgj = isHLj ? 'background:'+C.hlBg+';' : '';
       var tdj  = isHLj ? tdHL : tdNorm;
       var curTagj = isHLj ?
-        '<div style="color:#4fc3f7;font-size:10px;font-weight:bold;margin-top:3px;">CURRENT ALTITUDE</div>' : '';
+        '<div style="color:'+C.acc+';font-size:10px;font-weight:bold;margin-top:3px;">CURRENT ALTITUDE</div>' : '';
 
       html += '<tr style="' + rowBgj + '">' +
         '<td style="' + tdj + '">' + lj.labelEN + curTagj + '</td>' +
-        '<td style="' + tdj + 'font-size:18px;font-weight:bold;color:#eceff1;">' + lj.speedHTML + '</td>' +
+        '<td style="' + tdj + 'font-size:18px;font-weight:bold;color:'+C.hi+';">' + lj.speedHTML + '</td>' +
         '</tr>';
     }
     html += '</tbody></table></div>';
@@ -6230,21 +6233,21 @@ function updateHoldingTable() {
   // ──── FAA ────
   else if(data.type === 'faa') {
     html += '<thead><tr>' +
-      '<th style="' + thStyle + 'width:50%;">Altitude (MSL)</th>' +
-      '<th style="' + thStyle + '">Airspeed (KIAS)</th>' +
+      '<th style="' + thStyle + 'width:50%;">高度（MSL）</th>' +
+      '<th style="' + thStyle + '">最大速度（KIAS）</th>' +
       '</tr></thead><tbody>';
 
     for(var k = 0; k < data.levels.length; k++) {
       var lk   = data.levels[k];
       var isHLk = (k === currentLevelIdx);
-      var rowBgk = isHLk ? 'background:rgba(79,195,247,0.08);' : '';
+      var rowBgk = isHLk ? 'background:'+C.hlBg+';' : '';
       var tdk  = isHLk ? tdHL : tdNorm;
       var curTagk = isHLk ?
-        '<div style="color:#4fc3f7;font-size:10px;font-weight:bold;margin-top:3px;">CURRENT ALTITUDE</div>' : '';
+        '<div style="color:'+C.acc+';font-size:10px;font-weight:bold;margin-top:3px;">CURRENT ALTITUDE</div>' : '';
 
       html += '<tr style="' + rowBgk + '">' +
         '<td style="' + tdk + '">' + lk.labelEN + curTagk + '</td>' +
-        '<td style="' + tdk + 'font-size:18px;font-weight:bold;color:#eceff1;">' + lk.faaKt + ' KIAS</td>' +
+        '<td style="' + tdk + 'font-size:18px;font-weight:bold;color:'+C.hi+';">' + lk.faaKt + ' KIAS</td>' +
         '</tr>';
     }
     html += '</tbody></table></div>';
@@ -6262,10 +6265,9 @@ function updateHoldingTable() {
   var allNotes = fir.notes || [];
   if(allNotes.length) {
     html += '<div style="margin-top:14px;">' +
-            '<div style="color:#607d8b;font-size:10px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">Requirements &amp; Notes</div>';
+            '<div style="color:'+C.lbl+';font-size:10px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">適用条件・注意事項</div>';
     for(var ni = 0; ni < allNotes.length; ni++) {
-      html += '<div style="color:#546e7a;font-size:12px;padding:3px 0 3px 10px;' +
-              'border-left:2px solid #1e2a38;margin-bottom:6px;">・ ' + allNotes[ni] + '</div>';
+      html += '<div style="color:'+C.dim+';font-size:12px;padding:3px 0 3px 10px;border-left:2px solid '+C.bdr+';margin-bottom:6px;">・ ' + allNotes[ni] + '</div>';
     }
     html += '</div>';
   }
@@ -6276,6 +6278,7 @@ function updateHoldingTable() {
 function renderCurfewPanel() {
   var panel = document.getElementById('curfew-panel');
   if(!panel) return;
+  var C = getDayColors();
 
   // NAVLOGからフライトタイムを取得
   var autoFH = '', autoFM = '';
@@ -6285,49 +6288,49 @@ function renderCurfewPanel() {
     autoFM = ftParts[1] || '';
   }
 
-  var inStyle = 'background:#0d1117;border:1px solid #1e2a38;border-radius:4px;' +
-                'color:#eceff1;font-size:22px;padding:8px 12px;width:100%;box-sizing:border-box;' +
+  var inStyle = 'background:'+C.bg+';border:1px solid '+C.bdr+';border-radius:4px;' +
+                'color:'+C.hi+';font-size:22px;padding:8px 12px;width:100%;box-sizing:border-box;' +
                 'text-align:center;outline:none;';
 
   panel.innerHTML =
     '<div class="bar">' +
-      '<span style="color:#4fc3f7;font-weight:bold;letter-spacing:.08em;">Curfew Calculator</span>' +
+      '<span style="color:'+C.acc+';font-weight:bold;letter-spacing:.08em;">Curfew Calculator</span>' +
       '<button class="btn" onclick="clearCurfew()" style="margin-left:auto;">Clear data</button>' +
     '</div>' +
     '<div style="padding:20px 24px;max-width:720px;overflow-y:auto;height:calc(100% - 44px);box-sizing:border-box;">' +
 
       // INPUTS
-      '<div style="border:1px solid #1e2a38;border-radius:8px;padding:20px;margin-bottom:16px;">' +
-        '<div style="color:#4fc3f7;font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:16px;">Inputs</div>' +
+      '<div style="border:1px solid '+C.bdr+';border-radius:8px;padding:20px;margin-bottom:16px;">' +
+        '<div style="color:'+C.acc+';font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:16px;">Inputs</div>' +
 
         // 空港開閉時刻
         '<div style="margin-bottom:20px;">' +
-          '<div style="color:#cfd8dc;font-size:14px;font-weight:bold;margin-bottom:8px;">空港の開放・閉鎖時刻（UTC）</div>' +
+          '<div style="color:'+C.text+';font-size:14px;font-weight:bold;margin-bottom:8px;">空港の開放・閉鎖時刻（UTC）</div>' +
           '<div style="display:flex;align-items:center;gap:10px;">' +
             '<input id="curfew-hh" type="number" min="0" max="23" placeholder="0"' +
               ' style="' + inStyle + 'width:120px;" oninput="calcCurfew()">' +
-            '<span style="color:#cfd8dc;font-size:24px;font-weight:bold;">:</span>' +
+            '<span style="color:'+C.text+';font-size:24px;font-weight:bold;">:</span>' +
             '<input id="curfew-mm" type="number" min="0" max="59" placeholder="0"' +
               ' style="' + inStyle + 'width:120px;" oninput="calcCurfew()">' +
           '</div>' +
-          '<div style="color:#546e7a;font-size:11px;margin-top:6px;">時 (00〜23) ：分 (00〜59)</div>' +
+          '<div style="color:'+C.dim+';font-size:11px;margin-top:6px;">時 (00〜23) ：分 (00〜59)</div>' +
         '</div>' +
 
         // フライトタイム
         '<div>' +
-          '<div style="color:#cfd8dc;font-size:14px;font-weight:bold;margin-bottom:4px;">飛行時間の計画値</div>' +
-          '<div style="color:#546e7a;font-size:12px;margin-bottom:8px;">ブロックタイム（Wheels Up〜着陸）' +
-            (autoFH ? '　<span style="color:#4fc3f7;">NAVLOGより自動入力</span>' : '') + '</div>' +
+          '<div style="color:'+C.text+';font-size:14px;font-weight:bold;margin-bottom:4px;">飛行時間の計画値</div>' +
+          '<div style="color:'+C.dim+';font-size:12px;margin-bottom:8px;">ブロックタイム（Wheels Up〜着陸）' +
+            (autoFH ? '　<span style="color:'+C.acc+';">NAVLOGより自動入力</span>' : '') + '</div>' +
           '<div style="display:flex;align-items:center;gap:14px;">' +
             '<div>' +
               '<input id="curfew-fh" type="number" min="0" max="24" placeholder="0"' +
                 ' value="' + autoFH + '" style="' + inStyle + 'width:120px;" oninput="calcCurfew()">' +
-              '<div style="color:#546e7a;font-size:11px;margin-top:4px;text-align:center;">時間</div>' +
+              '<div style="color:'+C.dim+';font-size:11px;margin-top:4px;text-align:center;">時間</div>' +
             '</div>' +
             '<div>' +
               '<input id="curfew-fm" type="number" min="0" max="59" placeholder="0"' +
                 ' value="' + autoFM + '" style="' + inStyle + 'width:120px;" oninput="calcCurfew()">' +
-              '<div style="color:#546e7a;font-size:11px;margin-top:4px;text-align:center;">分</div>' +
+              '<div style="color:'+C.dim+';font-size:11px;margin-top:4px;text-align:center;">分</div>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -6335,14 +6338,14 @@ function renderCurfewPanel() {
       '</div>' + // INPUTS終わり
 
       // RESULT
-      '<div style="border:1px solid #1e2a38;border-radius:8px;padding:20px;min-height:100px;">' +
-        '<div style="color:#4fc3f7;font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px;">Result</div>' +
+      '<div style="border:1px solid '+C.bdr+';border-radius:8px;padding:20px;min-height:100px;">' +
+        '<div style="color:'+C.acc+';font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px;">Result</div>' +
         '<div id="curfew-result">' +
-          '<span style="color:#607d8b;">入力値を入力して Wheels Up 時刻を計算します。</span>' +
+          '<span style="color:'+C.lbl+';">入力値を入力して Wheels Up 時刻を計算します。</span>' +
         '</div>' +
       '</div>' +
 
-      '<div style="color:#546e7a;font-size:11px;margin-top:16px;text-align:center;">' +
+      '<div style="color:'+C.dim+';font-size:11px;margin-top:16px;text-align:center;">' +
         'プランニング用の目安です。実際の運航は会社スケジューリングで確認してください。' +
       '</div>' +
 
@@ -6462,6 +6465,7 @@ function onDumpCurInput(val) {
 function renderCcBrfgPanel() {
   var panel = document.getElementById('ccbrfg-panel');
   if(!panel) return;
+  var C = getDayColors();
 
   // フォーマットヘルパー
   function fmtMin(min) {
@@ -6517,87 +6521,87 @@ function renderCcBrfgPanel() {
 
   panel.innerHTML =
     '<div class="bar">' +
-      '<span style="color:#4fc3f7;font-weight:bold;letter-spacing:.08em;">CC BRFG</span>' +
-      '<span style="margin-left:12px;color:#607d8b;font-size:11px;">Reference information only, for use while cabin doors are open</span>' +
+      '<span style="color:'+C.acc+';font-weight:bold;letter-spacing:.08em;">CC BRFG</span>' +
+      '<span style="margin-left:12px;color:'+C.lbl+';font-size:11px;">Reference information only, for use while cabin doors are open</span>' +
     '</div>' +
     '<div style="display:flex;height:calc(100% - 44px);overflow:hidden;">' +
 
       // ── 左ペイン ──
       '<div style="width:40%;min-width:220px;padding:14px 16px;box-sizing:border-box;' +
-           'border-right:1px solid #1e2a38;overflow-y:auto;">' +
+           'border-right:1px solid '+C.bdr+';overflow-y:auto;">' +
 
         // ルートヘッダー
         '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">' +
           '<div>' +
-            '<div style="font-size:20px;font-weight:bold;color:#eceff1;">' + (NAV_DEP||'—') + '</div>' +
-            '<div style="font-size:11px;color:#607d8b;">STD ' + (NAV_STD ? NAV_STD.slice(0,2)+NAV_STD.slice(2)+'Z' : '—') + '</div>' +
+            '<div style="font-size:20px;font-weight:bold;color:'+C.hi+';">' + (NAV_DEP||'—') + '</div>' +
+            '<div style="font-size:11px;color:'+C.lbl+';">STD ' + (NAV_STD ? NAV_STD.slice(0,2)+NAV_STD.slice(2)+'Z' : '—') + '</div>' +
           '</div>' +
-          '<div style="font-size:18px;color:#4fc3f7;align-self:center;">→</div>' +
+          '<div style="font-size:18px;color:'+C.acc+';align-self:center;">→</div>' +
           '<div style="text-align:right;">' +
-            '<div style="font-size:20px;font-weight:bold;color:#eceff1;">' + (NAV_DEST||'—') + '</div>' +
-            '<div style="font-size:11px;color:#607d8b;">STA ' + (NAV_STA ? NAV_STA.slice(0,2)+NAV_STA.slice(2)+'Z' : '—') + '</div>' +
+            '<div style="font-size:20px;font-weight:bold;color:'+C.hi+';">' + (NAV_DEST||'—') + '</div>' +
+            '<div style="font-size:11px;color:'+C.lbl+';">STA ' + (NAV_STA ? NAV_STA.slice(0,2)+NAV_STA.slice(2)+'Z' : '—') + '</div>' +
           '</div>' +
         '</div>' +
 
-        '<div style="height:1px;background:#1e2a38;margin:10px 0;"></div>' +
+        '<div style="height:1px;background:'+C.bdr+';margin:10px 0;"></div>' +
 
         // フライト情報グリッド
-        '<table style="width:100%;border-collapse:collapse;font-size:12px;color:#cfd8dc;">' +
-          '<tr><td style="color:#607d8b;padding:4px 0;">SPOT / GATE</td>' +
-              '<td><input id="ccbrfg-spot" style="background:transparent;border:none;border-bottom:1px solid #1e2a38;color:#cfd8dc;width:100%;font-size:12px;" placeholder="—"></td></tr>' +
-          '<tr><td style="color:#607d8b;padding:4px 0;">TAXI OUT</td>' +
-              '<td style="color:#eceff1;">' + (NAV_TAXI_MIN !== null ? NAV_TAXI_MIN + ' min' : '—') + '</td></tr>' +
-          '<tr><td style="color:#607d8b;padding:4px 0;">FLIGHT TIME</td>' +
-              '<td style="color:#eceff1;">' + (NAV_FT_STR ? NAV_FT_STR.replace(':','h ')+'min' : '—') + '</td></tr>' +
-          '<tr><td style="color:#607d8b;padding:4px 0;">BLOCK TIME</td>' +
-              '<td style="color:#eceff1;">' + (NAV_BT_STR ? NAV_BT_STR.replace(':','h ')+'min' : '—') + '</td></tr>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:12px;color:'+C.text+';">' +
+          '<tr><td style="color:'+C.lbl+';padding:4px 0;">SPOT / GATE</td>' +
+              '<td><input id="ccbrfg-spot" style="background:transparent;border:none;border-bottom:1px solid '+C.bdr+';color:'+C.text+';width:100%;font-size:12px;" placeholder="—"></td></tr>' +
+          '<tr><td style="color:'+C.lbl+';padding:4px 0;">TAXI OUT</td>' +
+              '<td style="color:'+C.hi+';">' + (NAV_TAXI_MIN !== null ? NAV_TAXI_MIN + ' min' : '—') + '</td></tr>' +
+          '<tr><td style="color:'+C.lbl+';padding:4px 0;">FLIGHT TIME</td>' +
+              '<td style="color:'+C.hi+';">' + (NAV_FT_STR ? NAV_FT_STR.replace(':','h ')+'min' : '—') + '</td></tr>' +
+          '<tr><td style="color:'+C.lbl+';padding:4px 0;">BLOCK TIME</td>' +
+              '<td style="color:'+C.hi+';">' + (NAV_BT_STR ? NAV_BT_STR.replace(':','h ')+'min' : '—') + '</td></tr>' +
         '</table>' +
 
-        '<div style="height:1px;background:#1e2a38;margin:10px 0;"></div>' +
+        '<div style="height:1px;background:'+C.bdr+';margin:10px 0;"></div>' +
 
-        '<div style="color:#607d8b;font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">ALTITUDE</div>' +
-        '<div style="color:#eceff1;font-size:12px;">' + altText + '</div>' +
+        '<div style="color:'+C.lbl+';font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">ALTITUDE</div>' +
+        '<div style="color:'+C.hi+';font-size:12px;">' + altText + '</div>' +
 
-        '<div style="height:1px;background:#1e2a38;margin:10px 0;"></div>' +
+        '<div style="height:1px;background:'+C.bdr+';margin:10px 0;"></div>' +
 
-        '<div style="color:#607d8b;font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">ALTERNATE</div>' +
-        '<div style="color:#eceff1;font-size:12px;">' +
-          (NAV_ALT_APT || '—') + '&nbsp;&nbsp;<span style="color:#607d8b;">' + altTimeStr + '</span>' +
+        '<div style="color:'+C.lbl+';font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">ALTERNATE</div>' +
+        '<div style="color:'+C.hi+';font-size:12px;">' +
+          (NAV_ALT_APT || '—') + '&nbsp;&nbsp;<span style="color:'+C.lbl+';">' + altTimeStr + '</span>' +
         '</div>' +
 
-        '<div style="height:1px;background:#1e2a38;margin:10px 0;"></div>' +
+        '<div style="height:1px;background:'+C.bdr+';margin:10px 0;"></div>' +
 
-        '<div style="color:#607d8b;font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">SEAT BELTS OFF</div>' +
-        '<input id="ccbrfg-sbo" style="width:100%;background:transparent;border:none;border-bottom:1px solid #1e2a38;' +
-               'color:#cfd8dc;font-size:12px;padding:2px 0;" placeholder="e.g. 10–15 min after T/O">' +
+        '<div style="color:'+C.lbl+';font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">SEAT BELTS OFF</div>' +
+        '<input id="ccbrfg-sbo" style="width:100%;background:transparent;border:none;border-bottom:1px solid '+C.bdr+';' +
+               'color:'+C.text+';font-size:12px;padding:2px 0;" placeholder="e.g. 10–15 min after T/O">' +
 
-        '<div style="height:1px;background:#1e2a38;margin:10px 0;"></div>' +
+        '<div style="height:1px;background:'+C.bdr+';margin:10px 0;"></div>' +
 
-        '<div style="color:#607d8b;font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">DG &amp; RADIOACTIVE</div>' +
-        '<input id="ccbrfg-dg" style="width:100%;background:transparent;border:none;border-bottom:1px solid #1e2a38;' +
-               'color:#cfd8dc;font-size:12px;padding:2px 0;" placeholder="Nil">' +
+        '<div style="color:'+C.lbl+';font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">DG &amp; RADIOACTIVE</div>' +
+        '<input id="ccbrfg-dg" style="width:100%;background:transparent;border:none;border-bottom:1px solid '+C.bdr+';' +
+               'color:'+C.text+';font-size:12px;padding:2px 0;" placeholder="Nil">' +
 
-        '<div style="height:1px;background:#1e2a38;margin:10px 0;"></div>' +
+        '<div style="height:1px;background:'+C.bdr+';margin:10px 0;"></div>' +
 
-        '<div style="color:#607d8b;font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">EMERGENCY / HIJACK</div>' +
-        '<div style="color:#eceff1;font-size:12px;">Standard ANA Policy</div>' +
+        '<div style="color:'+C.lbl+';font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">EMERGENCY / HIJACK</div>' +
+        '<div style="color:'+C.hi+';font-size:12px;">Standard ANA Policy</div>' +
 
-        '<div style="height:1px;background:#1e2a38;margin:10px 0;"></div>' +
+        '<div style="height:1px;background:'+C.bdr+';margin:10px 0;"></div>' +
 
-        '<div style="color:#607d8b;font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">COCKPIT ENTRY</div>' +
-        '<div style="color:#eceff1;font-size:12px;">Regular, Hijack and Interphone</div>' +
+        '<div style="color:'+C.lbl+';font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">COCKPIT ENTRY</div>' +
+        '<div style="color:'+C.hi+';font-size:12px;">Regular, Hijack and Interphone</div>' +
 
-        '<div style="height:1px;background:#1e2a38;margin:20px 0 10px 0;"></div>' +
-        '<div style="color:#4fc3f7;font-size:13px;">Have a nice flight! ✈</div>' +
+        '<div style="height:1px;background:'+C.bdr+';margin:20px 0 10px 0;"></div>' +
+        '<div style="color:'+C.acc+';font-size:13px;">Have a nice flight! ✈</div>' +
 
       '</div>' + // 左ペイン終わり
 
       // ── 右ペイン ──
       '<div style="flex:1;padding:14px 16px;box-sizing:border-box;display:flex;flex-direction:column;">' +
-        '<div style="color:#607d8b;font-size:10px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">' +
+        '<div style="color:'+C.lbl+';font-size:10px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">' +
           'ENROUTE WEATHER / TURBULENCE' +
         '</div>' +
-        '<div id="ccbrfg-turb-text" style="color:#cfd8dc;font-size:13px;line-height:1.8;margin-bottom:12px;white-space:pre-line;">' +
+        '<div id="ccbrfg-turb-text" style="color:'+C.text+';font-size:13px;line-height:1.8;margin-bottom:12px;white-space:pre-line;">' +
           (notReady ? '（NAVLOGを適用すると自動表示されます）' : turbText) +
         '</div>' +
         '<canvas id="ccbrfg-canvas" style="width:100%;flex:1;border-radius:4px;" height="320"></canvas>' +
