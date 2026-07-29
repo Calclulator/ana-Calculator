@@ -427,6 +427,10 @@
     <textarea id="memo-textarea" spellcheck="false"
       style="flex:1;width:100%;box-sizing:border-box;background:#080c14;border:1px solid #1e2a38;border-radius:6px;color:#cfd8dc;font-family:'Helvetica Neue',Arial,monospace;font-size:14px;line-height:1.8;padding:12px 14px;resize:none;outline:none;tab-size:20;"
       placeholder="（NAVLOGを適用すると自動入力されます）&#10;&#10;Turbulence:&#10;&#10;&#10;WX:&#10;"></textarea>
+    <div style="margin-top:12px; padding-top:8px; border-top:1px solid #aaa; font-size:13px;">
+      <div style="font-weight:bold; margin-bottom:4px;">TYO WX情報</div>
+      <a href="https://www.tono2.net/" target="_blank" rel="noopener">フライトお天気</a>
+    </div>
   </div>
 </div>
 
@@ -877,6 +881,88 @@ var BASES = {
   light:'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
 };
 
+// ── FLT PLN 永続化 ──────────────────────────────
+var FLT_PLN_STORAGE_KEY = 'ana_calc_flt_pln_v1';
+
+function saveFltPlnToStorage() {
+  try {
+    var data = {
+      WP: WP,
+      ETPS: ETPS,
+      ALTS: ALTS,
+      RALT_ICAOS: RALT_ICAOS,
+      VWS: VWS,
+      VWS_BY_FL: VWS_BY_FL,
+      WFM_DATA: WFM_DATA,
+      FP_ROWS: FP_ROWS,
+      NAV_DEP: NAV_DEP,
+      NAV_DEST: NAV_DEST,
+      NAV_FLT_NO: NAV_FLT_NO,
+      NAV_STD: NAV_STD,
+      NAV_STA: NAV_STA,
+      DEP_STD_MIN: DEP_STD_MIN,
+      DEP_ATO_MIN: DEP_ATO_MIN,
+      NAV_TAXI_OUT: NAV_TAXI_OUT,
+      ACTIVE_ETOPS_KEY: ACTIVE_ETOPS_KEY,
+      acReg: acReg,
+      acIcao: acIcao,
+      NAV_ACFT_CODE: NAV_ACFT_CODE,
+      NAV_MLDW: NAV_MLDW,
+      NAV_FOB_LBS: NAV_FOB_LBS,
+      NAV_BT_STR: NAV_BT_STR,
+      NAV_FT_STR: NAV_FT_STR,
+      NAV_STEP_CLIMBS: NAV_STEP_CLIMBS,
+      NAV_WINDS_ALOFT: NAV_WINDS_ALOFT
+    };
+    localStorage.setItem(FLT_PLN_STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.warn('[FltPln] localStorage save failed:', e);
+  }
+}
+
+function restoreFltPlnFromStorage() {
+  try {
+    var raw = localStorage.getItem(FLT_PLN_STORAGE_KEY);
+    if (!raw) return false;
+    var d = JSON.parse(raw);
+    WP              = d.WP              || [];
+    ETPS            = d.ETPS            || [];
+    ALTS            = d.ALTS            || [];
+    RALT_ICAOS      = d.RALT_ICAOS      || [];
+    VWS             = d.VWS             || {};
+    VWS_BY_FL       = d.VWS_BY_FL       || {};
+    WFM_DATA        = d.WFM_DATA        || {};
+    FP_ROWS         = d.FP_ROWS         || [];
+    NAV_DEP         = d.NAV_DEP         || null;
+    NAV_DEST        = d.NAV_DEST        || null;
+    NAV_FLT_NO      = d.NAV_FLT_NO      || null;
+    NAV_STD         = d.NAV_STD         || null;
+    NAV_STA         = d.NAV_STA         || null;
+    DEP_STD_MIN     = d.DEP_STD_MIN     || null;
+    DEP_ATO_MIN     = d.DEP_ATO_MIN     || null;
+    NAV_TAXI_OUT    = d.NAV_TAXI_OUT    || null;
+    ACTIVE_ETOPS_KEY = d.ACTIVE_ETOPS_KEY || 'NH9D';
+    acReg           = d.acReg           || null;
+    acIcao          = d.acIcao          || null;
+    NAV_ACFT_CODE   = d.NAV_ACFT_CODE   || null;
+    NAV_MLDW        = d.NAV_MLDW        || null;
+    NAV_FOB_LBS     = d.NAV_FOB_LBS     || null;
+    NAV_BT_STR      = d.NAV_BT_STR      || null;
+    NAV_FT_STR      = d.NAV_FT_STR      || null;
+    NAV_STEP_CLIMBS = d.NAV_STEP_CLIMBS || [];
+    NAV_WINDS_ALOFT = d.NAV_WINDS_ALOFT || {};
+    return true;
+  } catch (e) {
+    console.warn('[FltPln] localStorage restore failed:', e);
+    return false;
+  }
+}
+
+function clearFltPlnFromStorage() {
+  try { localStorage.removeItem(FLT_PLN_STORAGE_KEY); } catch (e) {}
+}
+// ────────────────────────────────────────────────
+
 // =====================================================================
 // STATE
 // =====================================================================
@@ -1233,6 +1319,13 @@ function showTab(name) {
   if(name==='fdp') {
     if(typeof syncFdpFromNavlog === 'function') syncFdpFromNavlog();
     else if(typeof refreshFdpCalc === 'function') refreshFdpCalc();
+  }
+  if(name==='memo') {
+    var memoTa = document.getElementById('memo-textarea');
+    if(memoTa) {
+      memoTa.focus();
+      memoTa.select();
+    }
   }
 }
 function openNav(){
@@ -2530,6 +2623,7 @@ function runParse() {
   if(typeof renderHoldingPanel === 'function') renderHoldingPanel();
   frameRoute();
   if(typeof syncFdpFromNavlog === 'function') syncFdpFromNavlog();
+  saveFltPlnToStorage();
 }
 
 // =====================================================================
@@ -2753,6 +2847,8 @@ function renderFpTable() {
       var atoMin = hhmmToMins(row.ato);
       if(atoMin!==null) {
         var diff = atoMin-etoMin;
+        if (diff < -720) { diff += 1440; }
+        if (diff >  720) { diff -= 1440; }
         timeDeltaHtml = '<span class="'+(diff>0?'dn':'dp')+'">'+(diff>=0?'+':'')+diff+' min</span>';
       }
     }
@@ -2966,6 +3062,7 @@ function onAtoChange(idx, val) {
     if(typeof fetchAc === 'function') fetchAc();
   }
   if(typeof renderAtmGfsValidUtcRow === 'function') renderAtmGfsValidUtcRow();
+  saveFltPlnToStorage();
 }
 function onFuelChange(idx,val)  { FP_ROWS[idx].actualFuel=val.trim(); renderFpTable(); }
 function onCrossChange(idx,val) {
@@ -3181,19 +3278,40 @@ function wsPaletteColor(val, mode) {
   return WS_UNIFIED_BG[idx];
 }
 
-function wsLegendGradient(method) {
-  return 'linear-gradient(to bottom,' +
-    wsPaletteColor(20, method) + ' 0%, ' +
-    wsPaletteColor(15, method) + ' 16.66%, ' +
-    wsPaletteColor(11, method) + ' 33.33%, ' +
-    wsPaletteColor(8, method) + ' 50%, ' +
-    wsPaletteColor(5, method) + ' 66.66%, ' +
-    wsPaletteColor(2, method) + ' 100%)';
-}
-
 // 値→色 (方式別)
 function wsColor(val, mode) {
   return wsPaletteColor(val, mode);
+}
+
+// WX Turbulence / FL パネル用: wsPaletteColor に渡す mode 文字列を正規化
+function wsPaletteModeForWxTurb(method) {
+  var m = String(method || 'vws').toLowerCase();
+  if(m === 'b787' || m === 'b787ri') return 'b787';
+  if(m === 'company' || m === 'vws' || m === 'gfs-vws') return 'vws';
+  if(m === 'ti1' || m === 'ellrod' || m === 'ellrod-ti1') return 'ti1';
+  if(m === 'ti2' || m === 'ellrod-ti2') return 'ti2';
+  return m;
+}
+
+function wsLegendGradient(method) {
+  var m = wsPaletteModeForWxTurb(method);
+  var samp;
+  if(m === 'b787') {
+    samp = [0.1, 0.22, 0.27, 0.4, 0.7, 1.2];
+  } else if(m === 'ti1') {
+    samp = [9e-7, 7e-7, 5e-7, 3e-7, 1.5e-7, 0.5e-7];
+  } else if(m === 'ti2') {
+    samp = [11e-7, 9e-7, 7e-7, 5e-7, 3e-7, 1e-7];
+  } else {
+    samp = [20, 15, 11, 8, 5, 2];
+  }
+  return 'linear-gradient(to bottom,' +
+    wsPaletteColor(samp[0], m) + ' 0%, ' +
+    wsPaletteColor(samp[1], m) + ' 16.66%, ' +
+    wsPaletteColor(samp[2], m) + ' 33.33%, ' +
+    wsPaletteColor(samp[3], m) + ' 50%, ' +
+    wsPaletteColor(samp[4], m) + ' 66.66%, ' +
+    wsPaletteColor(samp[5], m) + ' 100%)';
 }
 
 function wsPaletteCell(val, mode) {
@@ -3334,13 +3452,13 @@ function renderWxCorridorLegend() {
       '<div style="color:'+wsPaletteColor(2,'vws')+';">SMT (0-4)</div>';
     labs.style.justifyContent = 'space-between';
   } else {
-    grad.style.background = wsLegendGradient('b787ri');
-    labs.innerHTML = '<div style="color:'+wsPaletteColor(0.1,'b787ri')+';">SEV Ri≤0.2</div>'+
-      '<div style="color:'+wsPaletteColor(0.22,'b787ri')+';">MOD &gt;0.2</div>'+
-      '<div style="color:'+wsPaletteColor(0.27,'b787ri')+';">L+ &gt;0.25</div>'+
-      '<div style="color:'+wsPaletteColor(0.4,'b787ri')+';">L &gt;0.3</div>'+
-      '<div style="color:'+wsPaletteColor(0.7,'b787ri')+';">L- &gt;0.5</div>'+
-      '<div style="color:'+wsPaletteColor(1.2,'b787ri')+';">SMT Ri&gt;1</div>';
+    grad.style.background = wsLegendGradient('b787');
+    labs.innerHTML = '<div style="color:'+wsPaletteColor(0.1,'b787')+';">SEV Ri≤0.2</div>'+
+      '<div style="color:'+wsPaletteColor(0.22,'b787')+';">MOD &gt;0.2</div>'+
+      '<div style="color:'+wsPaletteColor(0.27,'b787')+';">L+ &gt;0.25</div>'+
+      '<div style="color:'+wsPaletteColor(0.4,'b787')+';">L &gt;0.3</div>'+
+      '<div style="color:'+wsPaletteColor(0.7,'b787')+';">L- &gt;0.5</div>'+
+      '<div style="color:'+wsPaletteColor(1.2,'b787')+';">SMT Ri&gt;1</div>';
     labs.style.justifyContent = 'space-between';
   }
 
@@ -3417,6 +3535,7 @@ function onWxTurbMethodChange() {
   WX_TURB_METHOD = sel.value;
   renderWxCorridorLegend();
   drawRoute();
+  if(typeof updateWxFlPanel === 'function') updateWxFlPanel();
 }
 
 function onWxGfsCorrToggle() {
@@ -5545,11 +5664,13 @@ function buildMemoText() {
   if(NAV_EDCT_STR) line4 += '  EDCT: ' + NAV_EDCT_STR;
   lines.push(line4);
 
-  // 5行目: FOB: タブ 値 タブ FOD: 値 タブ (FOD−RSV+ALT差)
+  // 5行目: FOB: タブ 値 タブ FOD: 値 タブ (FOD−RSV+ALT差) + Hold 時間
   var fodDiff = '';
   if(NAV_FOD_LBS !== null && rsvAltTotalKlbs !== null) {
     var fodKlbs = NAV_FOD_LBS / 1000;
-    fodDiff = '\t' + (fodKlbs - rsvAltTotalKlbs).toFixed(1);
+    var diff = fodKlbs - rsvAltTotalKlbs;
+    var holdMin = Math.round(diff / 0.2);
+    fodDiff = '\t（差は' + diff.toFixed(1) + '。Hold約' + holdMin + '分）';
   }
   lines.push('FOB:\t' + klbs(NAV_FOB_LBS) + '\tFOD: ' + klbs(NAV_FOD_LBS) + fodDiff);
 
@@ -5623,9 +5744,10 @@ function getTurbAtWp(wpName, altFt) {
 
 // FP_ROWSから各WPの飛行時間(分)と高度を返すヘルパー
 function buildFlightProfile() {
-  // [{ctme, altFt, wpName}, ...]
+  // [{ctme, altFt, name, turb}, ...]  turb: 0-5 VWS bucket, -1=データなし
   var profile = [];
   if(typeof FP_ROWS === 'undefined' || !FP_ROWS) return profile;
+  var hasWfm = typeof WFM_DATA !== 'undefined' && WFM_DATA && Object.keys(WFM_DATA).length > 0;
   for(var i = 0; i < FP_ROWS.length; i++) {
     var row = FP_ROWS[i];
     if(!row || row.ctme === null || row.ctme === undefined) continue;
@@ -5633,7 +5755,17 @@ function buildFlightProfile() {
     if(row.alt && String(row.alt).match(/^\d+$/)) {
       altFt = parseInt(String(row.alt), 10);
     }
-    profile.push({ ctme: row.ctme, altFt: altFt, name: row.id || '' });
+    var wpName = row.id || '';
+    var turb = -1;
+    if(hasWfm && wpName) {
+      var altForVws = altFt || 35000;
+      var flTen = Math.round(altForVws / 100);
+      var cHi = getWfmInterpolatedCell(wpName, flTen);
+      var cLo = getWfmInterpolatedCell(wpName, flTen - 10);
+      var vws = (cHi && cLo) ? vwsValue(cLo, cHi, 1000) : null;
+      turb = (vws !== null && vws >= 0) ? wsPaletteBucketIndex(vws, 'vws') : -1;
+    }
+    profile.push({ ctme: row.ctme, altFt: altFt, name: wpName, turb: turb });
   }
   return profile;
 }
@@ -5644,13 +5776,22 @@ function buildTurbulenceData() {
   var profile = buildFlightProfile();
   var checkAlts = [12000, 18000, 24000, 30000, 34000, 39000, 45000];
   var result = { segments: [], totalMin: 0, turbPct: {} };
-  var turbCount = [0, 0, 0, 0, 0]; // Smooth,LM,L,L+,M のセグメント数
+  var turbCount = [0, 0, 0, 0, 0, 0]; // SMT, L-, L, L+, MOD, SEV
 
   if(!profile.length) return result;
   result.totalMin = profile[profile.length-1].ctme;
 
-  // WINDS/TEMP ALOFTデータがある場合
-  var hasWindsAloft = Object.keys(NAV_WINDS_ALOFT).length > 0;
+  var hasWfm = typeof WFM_DATA !== 'undefined' && WFM_DATA && Object.keys(WFM_DATA).length > 0;
+
+  function vwsBucketForWpAlt(wpName, altFtVal) {
+    if(!hasWfm || !wpName) return -1;
+    var flTen = Math.round(altFtVal / 100);
+    var cHi = getWfmInterpolatedCell(wpName, flTen);
+    var cLo = getWfmInterpolatedCell(wpName, flTen - 10);
+    var vws = (cHi && cLo) ? vwsValue(cLo, cHi, 1000) : null;
+    if(vws === null || vws < 0 || isNaN(vws)) return -1;
+    return wsPaletteBucketIndex(vws, 'vws');
+  }
 
   for(var i = 0; i < profile.length - 1; i++) {
     var seg = profile[i];
@@ -5659,23 +5800,16 @@ function buildTurbulenceData() {
     var segDur = ctme2 - ctme1;
     if(segDur <= 0) continue;
 
-    // 各高度レベルのturb
     for(var ai = 0; ai < checkAlts.length; ai++) {
       var altFt = checkAlts[ai];
-      var turb = TURB_SMOOTH;
-      if(hasWindsAloft && seg.name) {
-        turb = getTurbAtWp(seg.name, altFt);
-      }
-      result.segments.push({ ctme1: ctme1, ctme2: ctme2, altFt: altFt, turb: turb });
+      var bandTurb = vwsBucketForWpAlt(seg.name, altFt);
+      result.segments.push({ ctme1: ctme1, ctme2: ctme2, altFt: altFt, turb: bandTurb });
     }
 
-    // 巡航高度の乱気流をパス%計算に使用
-    var cruiseAltFt = seg.altFt || 35000;
-    var pathTurb = TURB_SMOOTH;
-    if(hasWindsAloft && seg.name) {
-      pathTurb = getTurbAtWp(seg.name, cruiseAltFt);
+    var pathTurb = seg.turb;
+    if(pathTurb >= 0 && pathTurb <= 5) {
+      turbCount[pathTurb] += segDur;
     }
-    turbCount[pathTurb] += segDur;
   }
 
   var totalCounted = turbCount.reduce(function(a, b) { return a + b; }, 0);
@@ -5687,48 +5821,52 @@ function buildTurbulenceData() {
 
 // 乱気流サマリーテキストを生成
 function buildTurbulenceText(turbData) {
+  var VWS_TURB_LABELS = ['SMT', 'L-', 'L', 'L+', 'MOD', 'SEV'];
   var parts = [];
-  var labels = ['Smooth', 'Light Minus', 'Light', 'Light Plus', 'Moderate'];
-  for(var i = 0; i < labels.length; i++) {
+  for(var i = 0; i < VWS_TURB_LABELS.length; i++) {
     var pct = turbData.turbPct[i] || 0;
-    if(pct > 0) parts.push(labels[i] + ' ' + pct + '%');
+    if(pct > 0) parts.push(VWS_TURB_LABELS[i] + ' ' + pct + '%');
   }
-  var txt = parts.join(', ') + ' of path.';
+  var txt = parts.length ? parts.join(', ') + ' of path.' : 'of path.';
 
-  // L以上(turb>=2)の連続区間を10分単位で丸めて記載
+  // L- 以上(bucket>=1)の連続区間を10分単位で丸めて記載
   var profile = buildFlightProfile();
-  var lSegs = []; // {start, end} in ctme minutes
-  var inL = false, lStart = 0;
+  var lSegs = [];
+  var inL = false, lStart = 0, lTurbMax = -1;
   for(var j = 0; j < profile.length - 1; j++) {
     var seg = profile[j];
-    var cruiseAlt = seg.altFt || 35000;
-    var hasWA = Object.keys(NAV_WINDS_ALOFT).length > 0;
-    var turb = (hasWA && seg.name) ? getTurbAtWp(seg.name, cruiseAlt) : TURB_SMOOTH;
-    if(turb >= TURB_L && !inL) { inL = true; lStart = seg.ctme; }
-    if(turb < TURB_L && inL)  { inL = false; lSegs.push({s: lStart, e: seg.ctme}); }
+    var turb = seg.turb;
+    if(turb === -1) {
+      if(inL) { inL = false; lSegs.push({s: lStart, e: seg.ctme, turb: lTurbMax}); }
+      continue;
+    }
+    if(turb >= 1 && !inL) { inL = true; lStart = seg.ctme; lTurbMax = turb; }
+    else if(inL && turb >= 1 && turb > lTurbMax) { lTurbMax = turb; }
+    if(turb < 1 && inL)  { inL = false; lSegs.push({s: lStart, e: seg.ctme, turb: lTurbMax}); }
   }
-  if(inL && profile.length) lSegs.push({s: lStart, e: profile[profile.length-1].ctme});
+  if(inL && profile.length) lSegs.push({s: lStart, e: profile[profile.length-1].ctme, turb: lTurbMax});
 
-  // 近接セグメントをマージ（10分以内）
   var merged = [];
   for(var k = 0; k < lSegs.length; k++) {
     if(merged.length && lSegs[k].s - merged[merged.length-1].e <= 10) {
       merged[merged.length-1].e = lSegs[k].e;
+      if(lSegs[k].turb > merged[merged.length-1].turb) merged[merged.length-1].turb = lSegs[k].turb;
     } else {
-      merged.push({s: lSegs[k].s, e: lSegs[k].e});
+      merged.push({s: lSegs[k].s, e: lSegs[k].e, turb: lSegs[k].turb});
     }
   }
 
-  // フォーマット: X時間Y0分 (start=floor10, end=ceil10)
   function fmt10(min) {
     var h = Math.floor(min / 60);
     var m = min % 60;
     return h + '時間' + m + '分';
   }
   for(var m = 0; m < merged.length; m++) {
+    if(merged[m].turb < 0) continue;
     var startRounded = Math.floor(merged[m].s / 10) * 10;
     var endRounded   = Math.ceil(merged[m].e / 10) * 10;
-    txt += '\n' + fmt10(startRounded) + 'から' + fmt10(endRounded) + 'まで L の揺れ';
+    var turbLbl = VWS_TURB_LABELS[merged[m].turb] || 'SMT';
+    txt += '\n' + fmt10(startRounded) + 'から' + fmt10(endRounded) + 'まで ' + turbLbl + ' の揺れ';
   }
   return txt;
 }
@@ -5758,8 +5896,8 @@ function renderTurbulenceChart(canvas, turbData) {
   var checkAlts = [12000, 18000, 24000, 30000, 34000, 39000, 45000];
   for(var si = 0; si < turbData.segments.length; si++) {
     var seg = turbData.segments[si];
-    if(seg.turb === TURB_SMOOTH) continue;
-    var color = TURB_COLORS[seg.turb];
+    if(seg.turb === undefined || seg.turb === null || seg.turb < 1) continue;
+    var color = (seg.turb >= 0 && seg.turb <= 5) ? WS_UNIFIED_BG[seg.turb] : null;
     if(!color) continue;
     ctx.fillStyle = color;
     var x1 = xOf(seg.ctme1), x2 = xOf(seg.ctme2);
@@ -5819,17 +5957,17 @@ function renderTurbulenceChart(canvas, turbData) {
   ctx.textAlign = 'right';
   ctx.fillText(NAV_DEST || '', padL + chartW, H - padB + 25);
 
-  // レジェンド
+  // レジェンド（WX Radar VWS と同一）
   var legX = padL + 4, legY = padT + 4;
-  var legItems = [[TURB_LM,'LM'], [TURB_L,'L'], [TURB_LP,'L+'], [TURB_MOD,'M']];
-  for(var li = 0; li < legItems.length; li++) {
-    ctx.fillStyle = TURB_COLORS[legItems[li][0]];
+  var legLabels = ['SMT', 'L-', 'L', 'L+', 'MOD', 'SEV'];
+  for(var li = 0; li < legLabels.length; li++) {
+    ctx.fillStyle = WS_UNIFIED_BG[li];
     ctx.fillRect(legX, legY, 12, 9);
     ctx.fillStyle = C.text;
     ctx.font = '9px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(legItems[li][1], legX + 14, legY + 8);
-    legX += 32;
+    ctx.fillText(legLabels[li], legX + 14, legY + 8);
+    legX += 36;
   }
 }
 
@@ -6715,6 +6853,7 @@ function renderMemoPanel() {
 }
 
 function clearFpl() {
+  clearFltPlnFromStorage();
   document.getElementById('fpl-txt').value='';
   document.getElementById('parse-result').textContent='';
   var prh = document.getElementById('parse-hint-red');
@@ -7392,7 +7531,7 @@ function drawRoute() {
     var bNorm = normalizePoint(b);
     if(!au || !bu || !aNorm || !bNorm) continue;
     var segVal = turbOn ? corridorShearValue(a.id) : null;
-    var col = turbOn ? wsColor(segVal, turbMode === 'b787' ? 'b787' : turbMode) : 'transparent';
+    var col = turbOn ? wsColor(segVal, wsPaletteModeForWxTurb(turbMode)) : 'transparent';
     var brg = bearing(au.lat,au.lng,bu.lat,bu.lng);
 
     if(turbOn && col !== 'transparent') {
@@ -8018,6 +8157,18 @@ function preloadGfsRadarPoints(routePts, options, done) {
 drawRoute();
 var NAV_DEP = null, NAV_DEST = null, NAV_STD = null, NAV_STA = null;
 var NAV_FLT_NO = null;
+
+if (restoreFltPlnFromStorage()) {
+  syncWpEtoUtcFromSchedule();
+  gfsRadarInvalidateRoutePointsMemo();
+  renderFpTable();
+  updateNavFlightInfo();
+  drawRoute();
+  drawEtops();
+  drawPgumRing();
+  frameRoute();
+  console.log('[FltPln] FLT PLN を localStorage から復元しました');
+}
 
 // Intl.DateTimeFormat を使ってタイムゾーンの現在オフセット(時間)と略称を取得
 function _tzInfo(tzName) {
@@ -9756,7 +9907,7 @@ function updateWxFlPanel() {
   var html = '';
   flList.forEach(function(fl) {
     var agg = corridorAggMetricForFl(fl);
-    var col = wsColor(agg, mode === 'b787' ? 'b787' : mode);
+    var col = wsColor(agg, wsPaletteModeForWxTurb(mode));
     var isSel = (fl === curFL);
     var borderCol = (agg !== null && !isNaN(agg)) ? col : '#455a64';
     html += '<div class="wx-fl-btn" onclick="setFlFromRvsm('+fl+')" style="'
