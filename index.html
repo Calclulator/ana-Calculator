@@ -1307,6 +1307,10 @@ function showTab(name) {
         }
       }, delay);
     });
+    // タブ復帰・再表示時に RTE / WP 名を再描画（iPad バックグラウンド破棄対策）
+    if(typeof WP !== 'undefined' && WP && WP.length >= 2 && typeof drawRoute === 'function') {
+      drawRoute();
+    }
     if(typeof drawEtops === 'function') {
       var etCb = document.getElementById('oEtops');
       if(etCb && etCb.checked) drawEtops();
@@ -5583,36 +5587,30 @@ function renderAtmTable() {
 }
 function fetchDestWeather(cb) {
   if(!NAV_DEST) { cb(''); return; }
-  var apt = typeof APT !== 'undefined' ? APT[NAV_DEST] : null;
-  if(!apt) { cb(''); return; }
-  var url = 'https://wttr.in/' + apt.lat.toFixed(4) + ',' + apt.lon.toFixed(4) + '?format=j1';
+  var icao = String(NAV_DEST).toUpperCase();
+  var url = 'https://wttr.in/' + encodeURIComponent(icao) + '?format=j1';
   var xhr = new XMLHttpRequest();
   xhr.open('GET', url, true);
-  xhr.timeout = 5000;
+  xhr.timeout = 8000;
   xhr.onreadystatechange = function() {
     if(xhr.readyState !== 4) return;
     if(xhr.status !== 200) { cb(''); return; }
     try {
       var data = JSON.parse(xhr.responseText);
-      var today = data.weather[0];
-      var minC = today.mintempC;
-      var maxC = today.maxtempC;
-      // 昼間(hourly[4]=12:00頃)の天気を参照
-      var desc = (today.hourly && today.hourly[4] && today.hourly[4].weatherDesc && today.hourly[4].weatherDesc[0])
-        ? today.hourly[4].weatherDesc[0].value : '';
-      var dl = desc.toLowerCase();
-      var wx = '○';
-      if(dl.indexOf('rain') >= 0 || dl.indexOf('shower') >= 0 || dl.indexOf('drizzle') >= 0
-          || dl.indexOf('snow') >= 0 || dl.indexOf('sleet') >= 0 || dl.indexOf('thunder') >= 0) {
-        wx = 'R';
-      } else if(dl.indexOf('cloud') >= 0 || dl.indexOf('overcast') >= 0 || dl.indexOf('mist') >= 0
-          || dl.indexOf('fog') >= 0 || dl.indexOf('haze') >= 0 || dl.indexOf('partly') >= 0) {
-        wx = '△';
-      }
-      cb(minC + '/' + maxC + '℃ ' + wx);
+      var cur = data && data.current_condition && data.current_condition[0];
+      if(!cur) { cb(''); return; }
+      var desc = (cur.weatherDesc && cur.weatherDesc[0] && cur.weatherDesc[0].value)
+        ? cur.weatherDesc[0].value : '';
+      var tempC = cur.temp_C != null ? cur.temp_C : '';
+      var windDir = cur.winddirDegree != null ? cur.winddirDegree : '';
+      var windKmh = parseFloat(cur.windspeedKmph);
+      var windKt = (!isNaN(windKmh)) ? Math.round(windKmh / 1.852) : '';
+      var vis = cur.visibility != null ? cur.visibility : '';
+      cb(icao + '：' + desc + ' ' + tempC + '°C Wind ' + windDir + '°/' + windKt + 'kt Vis ' + vis + 'm');
     } catch(e) { cb(''); }
   };
   xhr.ontimeout = function() { cb(''); };
+  xhr.onerror = function() { cb(''); };
   xhr.send();
 }
 
@@ -6712,15 +6710,50 @@ function renderCcBrfgPanel() {
   // ALT飛行時間テキスト
   var altTimeStr = NAV_ALT_TIME_MIN !== null ? fmtMin(NAV_ALT_TIME_MIN) : '—';
 
-  // 高度テキスト生成
-  var altText = initFL ? fmtFL(initFL) : '—';
-  if(NAV_STEP_CLIMBS && NAV_STEP_CLIMBS.length) {
-    for(var si = 0; si < NAV_STEP_CLIMBS.length; si++) {
-      var sc = NAV_STEP_CLIMBS[si];
-      if(sc.fl && sc.fl > 0) {
-        altText += ', step to ' + fmtFL(sc.fl) + (sc.wp ? ' at ' + sc.wp : '');
+  // 高度テキスト生成（Step Climb あり: FL330 +1:23→FL390 形式）
+  function findWpCtme(wpName) {
+    if(!wpName || typeof FP_ROWS === 'undefined' || !FP_ROWS) return null;
+    var u = String(wpName).toUpperCase();
+    for(var fi = 0; fi < FP_ROWS.length; fi++) {
+      var fr = FP_ROWS[fi];
+      if(!fr || !fr.id) continue;
+      if(String(fr.id).toUpperCase() === u && fr.ctme !== null && fr.ctme !== undefined) {
+        return fr.ctme;
       }
     }
+    return null;
+  }
+  function fmtElapsed(min) {
+    var m = Math.max(0, Math.round(min));
+    return Math.floor(m / 60) + ':' + ('0' + (m % 60)).slice(-2);
+  }
+  var altText = '—';
+  if(NAV_STEP_CLIMBS && NAV_STEP_CLIMBS.length) {
+    var scValid = [];
+    for(var svi = 0; svi < NAV_STEP_CLIMBS.length; svi++) {
+      if(NAV_STEP_CLIMBS[svi] && NAV_STEP_CLIMBS[svi].fl > 0) scValid.push(NAV_STEP_CLIMBS[svi]);
+    }
+    var altLines = [];
+    if(scValid.length >= 2) {
+      for(var si = 0; si < scValid.length - 1; si++) {
+        var fromFl = scValid[si].fl;
+        var toFl = scValid[si + 1].fl;
+        var scWp = scValid[si].wp || '';
+        var ctme = findWpCtme(scWp);
+        if(ctme !== null) {
+          altLines.push(fmtFL(fromFl) + ' +' + fmtElapsed(ctme) + '→' + fmtFL(toFl));
+        } else {
+          altLines.push(fmtFL(fromFl) + ' →' + fmtFL(toFl) + (scWp ? ' at ' + scWp : ''));
+        }
+      }
+    } else if(scValid.length === 1) {
+      altLines.push(fmtFL(scValid[0].fl));
+    } else if(initFL) {
+      altLines.push(fmtFL(initFL));
+    }
+    if(altLines.length) altText = altLines.join('<br>');
+  } else {
+    altText = initFL ? fmtFL(initFL) : '—';
   }
 
   // 乱気流データ
@@ -6761,7 +6794,7 @@ function renderCcBrfgPanel() {
           '<tr><td style="color:'+C.lbl+';padding:4px 0;">SPOT / GATE</td>' +
               '<td><input id="ccbrfg-spot" style="background:transparent;border:none;border-bottom:1px solid '+C.bdr+';color:'+C.text+';width:100%;font-size:12px;" placeholder="—"></td></tr>' +
           '<tr><td style="color:'+C.lbl+';padding:4px 0;">TAXI OUT</td>' +
-              '<td style="color:'+C.hi+';">' + (NAV_TAXI_MIN !== null ? NAV_TAXI_MIN + ' min' : '—') + '</td></tr>' +
+              '<td style="color:'+C.hi+';">' + (NAV_TAXI_OUT !== null ? NAV_TAXI_OUT + ' min' : '—') + '</td></tr>' +
           '<tr><td style="color:'+C.lbl+';padding:4px 0;">FLIGHT TIME</td>' +
               '<td style="color:'+C.hi+';">' + (NAV_FT_STR ? NAV_FT_STR.replace(':','h ')+'min' : '—') + '</td></tr>' +
           '<tr><td style="color:'+C.lbl+';padding:4px 0;">BLOCK TIME</td>' +
@@ -8167,6 +8200,13 @@ if (restoreFltPlnFromStorage()) {
   drawEtops();
   drawPgumRing();
   frameRoute();
+  // マップサイズ確定後にもう一度ルート描画（iPad 再読込対策）
+  setTimeout(function() {
+    if(typeof WP !== 'undefined' && WP && WP.length >= 2 && typeof drawRoute === 'function') {
+      drawRoute();
+      if(typeof frameRoute === 'function') frameRoute();
+    }
+  }, 300);
   console.log('[FltPln] FLT PLN を localStorage から復元しました');
 }
 
