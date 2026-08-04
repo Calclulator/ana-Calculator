@@ -1014,6 +1014,7 @@ var NAV_WINDS_ALOFT = {};      // WIND/TEMP ALOFT データ {wpName: {12000:spd,
 var NAV_PZFW_LBS = null;    // Planned Zero Fuel Weight (lbs)
 var NAV_ACFT_CODE = null;   // JetPlan 機材コード (例: 'NH8A')
 var NAV_TAX_LBS = null;     // TAX燃料 (lbs)
+var DUMP_TIME_MIN = null;   // Time to Dump 算出の所要時間(分)。未計算は null
 // JetPlan コードのプレフィックスで機材を判定
 // サフィックス(A/C/K等)はエンジン種別のため無視する
 function getDumpParams(acftCode) {
@@ -5672,16 +5673,17 @@ function buildMemoText() {
   }
   lines.push('FOB:\t' + klbs(NAV_FOB_LBS) + '\tFOD: ' + klbs(NAV_FOD_LBS) + fodDiff);
 
-  // 6行目: PTOW: 値 タブ MLDW: 値 タブ 差(klbs) (繰上げmin)
+  // 6行目: PTOW: 値 タブ MLDW: 値 タブ 差(klbs) （Dump約N分）
   var ptowKlbs = NAV_PTOW_LBS !== null ? NAV_PTOW_LBS / 1000 : null;
   var ptowVal = ptowKlbs !== null ? ptowKlbs.toFixed(1) : '—';
   var mldwVal = NAV_MLDW !== null ? NAV_MLDW.toFixed(1) : '—';
   var wtDiffStr = '';
   if(ptowKlbs !== null && NAV_MLDW !== null) {
     var wtDiffKlbs = Math.abs(NAV_MLDW - ptowKlbs);
-    var wtDiffLbs = wtDiffKlbs * 1000;
-    var burnMin = Math.ceil(wtDiffLbs / 3000);
-    wtDiffStr = '\t' + wtDiffKlbs.toFixed(1) + ' (' + burnMin + 'min)';
+    var dumpMinLabel = (typeof DUMP_TIME_MIN === 'number' && DUMP_TIME_MIN > 0)
+      ? ('（Dump約' + Math.round(DUMP_TIME_MIN) + '分）')
+      : '（Dump時間未計算）';
+    wtDiffStr = '\t' + wtDiffKlbs.toFixed(1) + ' ' + dumpMinLabel;
   }
   lines.push('PTOW: ' + ptowVal + '\tMLDW: ' + mldwVal + wtDiffStr);
 
@@ -6001,6 +6003,21 @@ function calcDumpTime(fobLbs, toRemainLbs, params) {
   };
 }
 
+function refreshMemoDumpLabel() {
+  var memoPanel = document.getElementById('memo-panel');
+  if(!memoPanel || !memoPanel.classList.contains('active')) return;
+  if(typeof renderMemoPanel === 'function') renderMemoPanel();
+}
+
+function updateDumpTimeMinGlobal(res, dumpNeeded) {
+  if(dumpNeeded && res && typeof res.totalMin === 'number' && res.totalMin > 0) {
+    DUMP_TIME_MIN = res.totalMin;
+  } else {
+    DUMP_TIME_MIN = null;
+  }
+  refreshMemoDumpLabel();
+}
+
 function renderDumpResult(containerId, fobLbs, toRemainLbs, params, label) {
   var el = document.getElementById(containerId);
   if(!el) return;
@@ -6013,6 +6030,7 @@ function renderDumpResult(containerId, fobLbs, toRemainLbs, params, label) {
   var gw = NAV_PZFW_LBS !== null ? NAV_PZFW_LBS + fobLbs : null;
   var dumpNeeded = fobLbs > toRemainLbs;
   var res = dumpNeeded ? calcDumpTime(fobLbs, toRemainLbs, params) : null;
+  updateDumpTimeMinGlobal(res, dumpNeeded);
 
   var aboveLbs = gw !== null && NAV_MLDW !== null ? Math.round(gw - NAV_MLDW * 1000) : null;
   var aboveStr = (aboveLbs !== null && aboveLbs > 0)
@@ -6651,6 +6669,8 @@ function renderDumpPanel() {
 
   if(!noDump && params && fobTakeoffLbs !== null && toRemainLbs !== null) {
     renderDumpResult('dump-result-tof', fobTakeoffLbs, toRemainLbs, params, 'AT TAKE-OFF FUEL');
+  } else {
+    DUMP_TIME_MIN = null;
   }
 }
 
@@ -6663,6 +6683,18 @@ function onDumpCurInput(val) {
   var C = getDayColors();
   if(!val || !val.trim()) {
     el.innerHTML = '<div style="color:'+C.lbl+';">燃料を入力してください。</div>';
+    // 現在燃料クリア時は離陸時ベースに戻す
+    var taxiLbsClr = NAV_TAX_LBS !== null ? NAV_TAX_LBS
+      : (NAV_TAXI_MIN !== null ? Math.round(NAV_TAXI_MIN * 150) : 0);
+    var fobTof = (NAV_FOB_LBS !== null) ? NAV_FOB_LBS - taxiLbsClr : null;
+    if(params && fobTof !== null && toRemainLbs !== null && params.canDump) {
+      var dumpNeededTof = fobTof > toRemainLbs;
+      var resTof = dumpNeededTof ? calcDumpTime(fobTof, toRemainLbs, params) : null;
+      updateDumpTimeMinGlobal(resTof, dumpNeededTof);
+    } else {
+      DUMP_TIME_MIN = null;
+      refreshMemoDumpLabel();
+    }
     return;
   }
   var num = parseFloat(val.replace(/,/g, ''));
@@ -6924,6 +6956,7 @@ function clearFpl() {
   NAV_TAXI_MIN = null; NAV_ALT_TIME_MIN = null;
   NAV_INIT_FL = null; NAV_STEP_CLIMBS = []; NAV_WINDS_ALOFT = {};
   NAV_PZFW_LBS = null; NAV_ACFT_CODE = null; NAV_TAX_LBS = null;
+  DUMP_TIME_MIN = null;
   if(typeof renderMemoPanel === 'function') renderMemoPanel();
   if(typeof renderCcBrfgPanel === 'function') renderCcBrfgPanel();
   if(typeof renderDumpPanel === 'function') renderDumpPanel();
