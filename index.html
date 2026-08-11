@@ -1315,10 +1315,10 @@ function showTab(name) {
         if(delay === 200 && typeof reloadSatLayer === 'function') {
           reloadSatLayer();
         }
-        // 1000ms後: drawRouteは呼ばずbringTopのみ
-        // drawRoute→drawAlt→loadMetarsの二重呼び出しによるMETARクリアを防ぐ
+        // 1000ms後: invalidateSize 後に WP/RTE を再描画（METAR は再取得しない）
         if(delay === 1000) {
-          if(typeof bringTop === 'function') bringTop();
+          if(typeof drawRoute === 'function') drawRoute(true);
+          else if(typeof bringTop === 'function') bringTop();
         }
       }, delay);
     });
@@ -7627,16 +7627,23 @@ function drawAlt() {
   try { if(map && map.closePopup) map.closePopup(); } catch(e) {}
   try { if(typeof closeMetarPanel === 'function') closeMetarPanel(); } catch(e) {}
 
-  if(!document.getElementById('oMetar').checked) {
+  var metarCb = document.getElementById('oMetar');
+  if(!metarCb || !metarCb.checked) {
     renderApNoCoordList([]);
     return;
   }
-  // WPが未確定でも、NAV_DEP/NAV_DEST や RALT_ICAOS / ALTS から METAR 候補を集められる
-  // ため、従来の WP.length ガードでデータが出ない問題を避ける。
+  var hasRoute = WP && WP.length >= 2;
+  var hasApTarget = (typeof NAV_DEP === 'string' && NAV_DEP) ||
+    (typeof NAV_DEST === 'string' && NAV_DEST) ||
+    (typeof RALT_ICAOS !== 'undefined' && RALT_ICAOS && RALT_ICAOS.length) ||
+    (typeof ALTS !== 'undefined' && ALTS && ALTS.length);
+  if(!hasRoute && !hasApTarget) return;
   loadMetars();
 }
 
-function drawRoute() {
+function drawRoute(skipAlt) {
+  if(typeof map === 'undefined' || !map) return;
+  if(typeof WP === 'undefined' || !WP) WP = [];
   // 既存レイヤー削除
   LY.corridor.forEach(function(l){map.removeLayer(l);}); LY.corridor=[];
   if(LY.route) { map.removeLayer(LY.route); LY.route = null; }
@@ -7648,7 +7655,8 @@ function drawRoute() {
   var routeCoords = getUnwrappedLatLngs(WP);
   var worldLngOffsets = [-360, 0, 360];
 
-  var turbOn = document.getElementById('oTurb').checked;
+  var turbEl = document.getElementById('oTurb');
+  var turbOn = turbEl && turbEl.checked;
   var turbMode = WX_TURB_METHOD;
 
   for(var i=0;i<WP.length-1;i++) {
@@ -7733,7 +7741,7 @@ function drawRoute() {
     }
   });
 
-  drawAlt();
+  if(!skipAlt) drawAlt();
   bringTop();
   console.log('[DL-debug] LY.route ctor:', LY.route && LY.route.constructor && LY.route.constructor.name);
   console.log('[DL-debug] getLatLngs:', LY.route && LY.route.getLatLngs && LY.route.getLatLngs());
