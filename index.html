@@ -1298,6 +1298,10 @@ function showTab(name) {
     // 複数回 invalidateSize を呼ぶ(描画完了タイミングが端末で異なるため)
     [50, 200, 500, 1000].forEach(function(delay){
       setTimeout(function(){
+        // WXパネルが非アクティブなら全処理をスキップ
+        // （非表示状態でinvalidateSizeするとLeafletがマーカー位置を0,0にリセットする）
+        var wxPanelEl = document.getElementById('wx-panel');
+        if(!wxPanelEl || !wxPanelEl.classList.contains('active')) return;
         if(typeof map !== 'undefined' && map) {
           try {
             map.invalidateSize(true);
@@ -1306,13 +1310,10 @@ function showTab(name) {
         if(delay === 200 && typeof reloadSatLayer === 'function') {
           reloadSatLayer();
         }
-        // 全非同期処理完了後にWaypointを再描画してbringTopで最前面へ
+        // 1000ms後: drawRouteは呼ばずbringTopのみ
+        // drawRoute→drawAlt→loadMetarsの二重呼び出しによるMETARクリアを防ぐ
         if(delay === 1000) {
-          if(typeof WP !== 'undefined' && WP && WP.length >= 2 && typeof drawRoute === 'function') {
-            drawRoute();
-          } else if(typeof bringTop === 'function') {
-            bringTop();
-          }
+          if(typeof bringTop === 'function') bringTop();
         }
       }, delay);
     });
@@ -2629,9 +2630,9 @@ function runParse() {
   drawEtops();
   drawPgumRing();
   startAtoAutoFill();
+  if(typeof renderDumpPanel === 'function') renderDumpPanel();
   if(typeof renderMemoPanel === 'function') renderMemoPanel();
   if(typeof renderCcBrfgPanel === 'function') renderCcBrfgPanel();
-  if(typeof renderDumpPanel === 'function') renderDumpPanel();
   if(typeof renderCurfewPanel === 'function') renderCurfewPanel();
   if(typeof renderHoldingPanel === 'function') renderHoldingPanel();
   frameRoute();
@@ -6063,7 +6064,7 @@ function updateDumpTimeMinGlobal(res, dumpNeeded) {
   refreshMemoDumpLabel();
 }
 
-function renderDumpResult(containerId, fobLbs, toRemainLbs, params, label) {
+function renderDumpResult(containerId, fobLbs, toRemainLbs, params, label, skipGlobal) {
   var el = document.getElementById(containerId);
   if(!el) return;
 
@@ -6075,7 +6076,7 @@ function renderDumpResult(containerId, fobLbs, toRemainLbs, params, label) {
   var gw = NAV_PZFW_LBS !== null ? NAV_PZFW_LBS + fobLbs : null;
   var dumpNeeded = fobLbs > toRemainLbs;
   var res = dumpNeeded ? calcDumpTime(fobLbs, toRemainLbs, params) : null;
-  updateDumpTimeMinGlobal(res, dumpNeeded);
+  if(!skipGlobal) updateDumpTimeMinGlobal(res, dumpNeeded);
 
   var aboveLbs = gw !== null && NAV_MLDW !== null ? Math.round(gw - NAV_MLDW * 1000) : null;
   var aboveStr = (aboveLbs !== null && aboveLbs > 0)
@@ -6745,7 +6746,7 @@ function onDumpCurInput(val) {
   var num = parseFloat(val.replace(/,/g, ''));
   if(isNaN(num)) { el.innerHTML = '<div style="color:#ef5350;">無効な値です。</div>'; return; }
   var lbs = num < 1000 ? Math.round(num * 1000) : Math.round(num);
-  renderDumpResult('dump-result-cur', lbs, toRemainLbs, params, '現在燃料ベース');
+  renderDumpResult('dump-result-cur', lbs, toRemainLbs, params, '現在燃料ベース', true);
 }
 
 function renderCcBrfgPanel() {
