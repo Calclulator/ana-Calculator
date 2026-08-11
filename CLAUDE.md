@@ -3,6 +3,11 @@
 ANA パイロット向けのフライトプランニング補助ツール。
 GitHub Pages で公開: https://calclulator.github.io/ana-Calculator/
 
+## Cowork セッション設定
+
+**セッション開始時に毎回実行**: `C:\Users\nomad\OneDrive\ドキュメント\GitHub\ana-Calculator` をCoworkフォルダとして接続する。
+proxy も必要な場合は `C:\Users\nomad\OneDrive\ドキュメント\GitHub\ana-Calculator-gfs-proxy` も接続する。
+
 ## ファイル構成
 
 `index.html` 一枚で完結する SPA。外部 JS/CSS ファイルは持たない(全て inline)。
@@ -38,13 +43,15 @@ ana-Calculator/
 - 表示時は `/1000` して小数1桁(例: 380000 → 380.0)
 
 ### 機材コード
-JetPlan 内部コード → ICAO の対応:
-- `NH8A` = B788
-- `NH8C` = B789
-- `NH9K` = B77W / B773
-- `NH9D` = B772
-- `NHXK` = B77W (別系統)
-- `NH7E` 等もあり(詳細は仕様書参照)
+JetPlan 内部コード はプレフィックスで機体型式を、サフィックス(A/C/K等)でエンジン種別を示す:
+- `NH8*` (NH8A, NH8C 等) = B787-8、メインタンク容量 79,094 lbs
+- `NH9*` (NH9A, NH9C, NH9K, NH9D 等) = B787-9、メインタンク容量 78,384 lbs
+- `NHX*` (NHXK, NHXA 等) = B787-10、メインタンク容量 78,384 lbs（B787-9 と同値）
+- `NH7*` (NH7E, NH7K 等) = B767（燃料ダンプ不可）
+- B777 は当面使用予定なし
+
+コード判定は正規表現 `/^NH8/`, `/^NH9/`, `/^NHX/`, `/^NH7/` でプレフィックスマッチする。
+NAVLOGパースの正規表現: `/\b(NH[0-9X][A-Z])\b/`
 
 ## コード規約
 
@@ -78,13 +85,34 @@ GitHub Desktop で commit → push すると数分で GitHub Pages に反映。
 - [ ] NEXRAD Radar の SAT TIME 対応(現在は最新のみ表示)
 - [ ] BOM Radar の SAT TIME 対応(表示が不安定)
 
+### Cursor 実装待ち（指示書あり）
+
+以下の指示書が `docs/` に用意済み。index.html への実装は Cursor で行う:
+
+- [ ] `docs/instructions-holding-calc.md` — Holding Calculator 全面刷新
+  - ICAO TABLE IV-1-1（Normal/Turbulence 2列）に修正
+  - Taiwan を独立テーブル（FL別・1列）として分離
+  - 全文日本語化、Day mode 対応
+- [ ] `docs/instructions-day-mode-panels.md` — 動的パネルの Day mode 対応
+  - `getDayColors()` ヘルパー追加
+  - Holding / Dump / Curfew / CC BRFG 各パネルの再描画に適用
+  - `toggleMode()` でアクティブパネルを再描画
+- [ ] `docs/instructions-ccbrfg-move.md` — CC BRFG をメニュー移設
+  - Planning → Briefings & Tools へ移動
+  - WIP ボタンを機能ボタンに置換
+- [ ] `docs/instructions-ato-recalc.md` — ATO 手動編集時の後続 WP 再計算
+  - `recalcSubsequentAtos()` 関数追加
+  - `onAtoChange()` から呼び出し
+- [ ] `docs/instructions-time-to-dump.md` — Time to Dump 機材コード修正
+  - `DUMP_PARAMS` オブジェクト削除 → `getDumpParams()` 関数に置換
+  - NH8C=B787-8、NH9K/NH9D=B787-9、NHXK=B787-10 に修正
+  - NAV_ACFT_CODE 正規表現を汎用化
+
 ## 未着手の機能
 
 - Atmosphere Analysis ページ
 - SAT View ページ
 - Crew Rest Calculator
-- Curfew Calculator
-- Cabin Crew BRFG
 
 ## 既知の挙動
 
