@@ -1306,6 +1306,14 @@ function showTab(name) {
         if(delay === 200 && typeof reloadSatLayer === 'function') {
           reloadSatLayer();
         }
+        // 全非同期処理完了後にWaypointを再描画してbringTopで最前面へ
+        if(delay === 1000) {
+          if(typeof WP !== 'undefined' && WP && WP.length >= 2 && typeof drawRoute === 'function') {
+            drawRoute();
+          } else if(typeof bringTop === 'function') {
+            bringTop();
+          }
+        }
       }, delay);
     });
     // タブ復帰・再表示時に RTE / WP 名を再描画（iPad バックグラウンド破棄対策）
@@ -5598,16 +5606,35 @@ function fetchDestWeather(cb) {
     if(xhr.status !== 200) { cb(''); return; }
     try {
       var data = JSON.parse(xhr.responseText);
-      var cur = data && data.current_condition && data.current_condition[0];
-      if(!cur) { cb(''); return; }
-      var desc = (cur.weatherDesc && cur.weatherDesc[0] && cur.weatherDesc[0].value)
-        ? cur.weatherDesc[0].value : '';
-      var tempC = cur.temp_C != null ? cur.temp_C : '';
-      var windDir = cur.winddirDegree != null ? cur.winddirDegree : '';
-      var windKmh = parseFloat(cur.windspeedKmph);
-      var windKt = (!isNaN(windKmh)) ? Math.round(windKmh / 1.852) : '';
-      var vis = cur.visibility != null ? cur.visibility : '';
-      cb(icao + '：' + desc + ' ' + tempC + '°C Wind ' + windDir + '°/' + windKt + 'kt Vis ' + vis + 'm');
+      var today = data && data.weather && data.weather[0];
+      if(!today) { cb(''); return; }
+      var minC = today.mintempC != null ? today.mintempC : '?';
+      var maxC = today.maxtempC != null ? today.maxtempC : '?';
+
+      // STA時刻に最も近いhourlyスロットの天気説明を取得
+      var desc = '';
+      if(today.hourly && today.hourly.length > 0) {
+        var targetMin = 0;
+        if(NAV_STA) {
+          var staH = parseInt(NAV_STA.slice(0, 2), 10);
+          var staM2 = parseInt(NAV_STA.slice(2), 10);
+          if(!isNaN(staH) && !isNaN(staM2)) targetMin = staH * 60 + staM2;
+        }
+        var bestSlot = null;
+        var bestDiff = Infinity;
+        var hi;
+        for(hi = 0; hi < today.hourly.length; hi++) {
+          var slotH = Math.floor(parseInt(String(today.hourly[hi].time || '0'), 10) / 100);
+          var slotMin = slotH * 60;
+          var diff = Math.abs(targetMin - slotMin);
+          if(diff < bestDiff) { bestDiff = diff; bestSlot = today.hourly[hi]; }
+        }
+        if(bestSlot && bestSlot.weatherDesc && bestSlot.weatherDesc[0]) {
+          desc = bestSlot.weatherDesc[0].value || '';
+        }
+      }
+
+      cb(icao + '：' + minC + '/' + maxC + '°C ' + desc);
     } catch(e) { cb(''); }
   };
   xhr.ontimeout = function() { cb(''); };
@@ -5680,6 +5707,24 @@ function buildMemoText() {
   var wtDiffStr = '';
   if(ptowKlbs !== null && NAV_MLDW !== null) {
     var wtDiffKlbs = Math.abs(NAV_MLDW - ptowKlbs);
+    // DUMP_TIME_MIN が未計算ならオンデマンドで計算（Dumpページ未訪問でも正しく表示）
+    if(DUMP_TIME_MIN === null) {
+      var _dmParams = getDumpParams(NAV_ACFT_CODE);
+      var _dmToRemain = (NAV_MLDW !== null && NAV_PZFW_LBS !== null)
+        ? Math.round(NAV_MLDW * 1000 - NAV_PZFW_LBS) : null;
+      var _dmTaxi = NAV_TAX_LBS !== null ? NAV_TAX_LBS
+        : (NAV_TAXI_MIN !== null ? Math.round(NAV_TAXI_MIN * 150) : 0);
+      var _dmFobTof = (NAV_FOB_LBS !== null) ? NAV_FOB_LBS - _dmTaxi : null;
+      if(_dmParams && _dmParams.canDump && _dmFobTof !== null && _dmToRemain !== null) {
+        var _dmNeeded = _dmFobTof > _dmToRemain;
+        if(_dmNeeded) {
+          var _dmRes = calcDumpTime(_dmFobTof, _dmToRemain, _dmParams);
+          if(_dmRes && typeof _dmRes.totalMin === 'number' && _dmRes.totalMin > 0) {
+            DUMP_TIME_MIN = _dmRes.totalMin;
+          }
+        }
+      }
+    }
     var dumpMinLabel = (typeof DUMP_TIME_MIN === 'number' && DUMP_TIME_MIN > 0)
       ? ('（Dump約' + Math.round(DUMP_TIME_MIN) + '分）')
       : '（Dump時間未計算）';
@@ -8933,6 +8978,14 @@ function applyLandmarkFromInput() {
 // =====================================================================
 // METAR
 // =====================================================================
+// A/P円用SVGレンダラー（使い回しで DOM 蓄積を防止）
+var _apCircSvgRenderer = null;
+function apGetCircRenderer() {
+  if(!_apCircSvgRenderer) {
+    _apCircSvgRenderer = L.svg({ padding: 0.5 });
+  }
+  return _apCircSvgRenderer;
+}
 var AP_CHECKWX_HEADERS = { headers: { 'X-API-Key': 'eb52e4c6ca254584842adb8dc574b4f8' } };
 
 function apFetchCheckwxJson(url, opt, tag) {
@@ -9206,7 +9259,7 @@ function apDrawAirportMarker(opts) {
 function renderRaltPlaceholderMarkers() {
   if(typeof map === 'undefined' || !map) return;
   if(typeof RALT_ICAOS === 'undefined' || !RALT_ICAOS || !RALT_ICAOS.length) return;
-  var apCircRenderer = L.svg({ padding: 0.5 });
+  var apCircRenderer = apGetCircRenderer();
   var apCircRadiusM = 3 * NM;
   var ri, icao, apt;
   for(ri = 0; ri < RALT_ICAOS.length; ri++) {
@@ -9231,7 +9284,7 @@ function renderRaltPlaceholderMarkers() {
 function renderMetarMarkers(metarList, headers) {
   if(typeof map === 'undefined' || !map) return;
   var CAT = { VFR: '#43a047', MVFR: '#1565c0', IFR: '#e53935', LIFR: '#ab47bc' };
-  var apCircRenderer = L.svg({ padding: 0.5 });
+  var apCircRenderer = apGetCircRenderer();
   var apCircRadiusM = 3 * NM;
   var noCoordMetars = [];
   var seenMetar = {};
