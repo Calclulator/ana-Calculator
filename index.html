@@ -304,6 +304,7 @@
     <label class="ck" id="glide-b787-toggle" style="display:none;"><input type="checkbox" id="oGlide" onchange="updateGlide()"> Glide (B787)</label>
     <label class="ck"><input type="checkbox" id="oFir" checked onchange="drawFir()"> FIR</label>
     <label class="ck"><input type="checkbox" id="oSig" checked onchange="loadSigmets()"> SIGMETs</label>
+    <label class="ck"><input type="checkbox" id="oNotam" onchange="toggleNotamLayer()"> NOTAM</label>
     <label class="ck"><input type="checkbox" id="oMetar" onchange="onApOverlayToggle()" oninput="onApOverlayToggle()" onclick="onApOverlayToggle()"> A/P</label>
     <button type="button" class="btn" id="ap-metar-refresh" onclick="onApMetarRefreshClicked()" disabled title="METAR/TAF を再取得">(METAR更新)</button>
     <span id="ap-nocoord-wrap" style="display:none;align-items:center;flex-wrap:wrap;gap:2px;"></span>
@@ -451,9 +452,12 @@
         <button class="btn" onclick="clearFpl()">✕ Clear</button>
       </div>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <span id="parse-result" style="color:#66bb6a;"></span>
       <span id="fpl-info" style="color:#4fc3f7;"></span>
+      <input type="file" id="notam-pdf-file" accept=".pdf" style="display:none;" onchange="loadNotamPdf(this)">
+      <button class="btn" onclick="document.getElementById('notam-pdf-file').click()" style="font-size:11px;padding:2px 8px;">📋 NOTAM PDF</button>
+      <span id="notam-status" style="color:#ffa726;font-size:0.9em;"></span>
     </div>
     <div><span id="parse-hint-red" style="color:#ef5350;font-size:0.95em;"></span></div>
   </div>
@@ -1015,6 +1019,7 @@ var NAV_PZFW_LBS = null;    // Planned Zero Fuel Weight (lbs)
 var NAV_ACFT_CODE = null;   // JetPlan 機材コード (例: 'NH8A')
 var NAV_TAX_LBS = null;     // TAX燃料 (lbs)
 var DUMP_TIME_MIN = null;   // Time to Dump 算出の所要時間(分)。未計算は null
+var NOTAM_DATA = [];   // パース済みエリア NOTAM の配列
 // JetPlan コードのプレフィックスで機材を判定
 // サフィックス(A/C/K等)はエンジン種別のため無視する
 function getDumpParams(acftCode) {
@@ -1258,7 +1263,7 @@ var LY = {
   corridor:[], route:null, wpts:[], etops:[], alt:[],
   routeBounds:null,
   fir:null, sig:null, metar:[], glide:null, ac:null, avoidL:null, avoidR:null,
-  pgum:[]
+  pgum:[], notam:[]
 };
 var lowBw = false;
 var firGeoJSON = null;
@@ -6965,6 +6970,16 @@ function renderMemoPanel() {
 
 function clearFpl() {
   clearFltPlnFromStorage();
+  // NOTAM クリア
+  NOTAM_DATA = [];
+  if(typeof LY !== 'undefined' && LY.notam) {
+    LY.notam.forEach(function(l){ try{ map.removeLayer(l); }catch(e){} });
+    LY.notam = [];
+  }
+  var notamInput = document.getElementById('notam-pdf-file');
+  if(notamInput) notamInput.value = '';
+  var notamStatus = document.getElementById('notam-status');
+  if(notamStatus) notamStatus.textContent = '';
   document.getElementById('fpl-txt').value='';
   document.getElementById('parse-result').textContent='';
   var prh = document.getElementById('parse-hint-red');
@@ -8867,6 +8882,191 @@ function fetchSigmetGeojsonBypassCache() {
     });
 }
 
+// =====================================================================
+// NOTAM PDF OVERLAY
+// =====================================================================
+
+// NOTAM座標文字列 (例: "412500N1412945E" / "023000.00N1051628.72E") をパース
+function parseNotamCoord(coordStr) {
+  var m = coordStr.match(
+    /^(\d{2})(\d{2})(\d{2}(?:\.\d+)?)([NS])(\d{3})(\d{2})(\d{2}(?:\.\d+)?)([EW])$/
+  );
+  if(!m) return null;
+  var lat = parseInt(m[1],10) + parseInt(m[2],10)/60 + parseFloat(m[3])/3600;
+  var lon = parseInt(m[5],10) + parseInt(m[6],10)/60 + parseFloat(m[7])/3600;
+  if(m[4]==='S') lat = -lat;
+  if(m[8]==='W') lon = -lon;
+  return [lat, lon];
+}
+
+// テキスト全体から座標列を含むエリア NOTAM を抽出
+function parseNotamText(rawText) {
+  NOTAM_DATA = [];
+  // 検出用正規表現: DDMMSS[.ss]N + DDDMMSS[.ss]E が隣接する形式
+  var detectRe = /\d{6}(?:\.\d+)?[NS]\d{7}(?:\.\d+)?[EW]/g;
+  var all = [];
+  var mm;
+  while((mm = detectRe.exec(rawText)) !== null) {
+    all.push({ idx: mm.index, raw: mm[0] });
+  }
+  if(!all.length) return;
+
+  // 前後 200文字以内の座標を同一エリアとしてグループ化
+  var groups = [];
+  var cur = [all[0]];
+  var i;
+  for(i = 1; i < all.length; i++) {
+    if(all[i].idx - all[i-1].idx < 300) {
+      cur.push(all[i]);
+    } else {
+      if(cur.length >= 2) groups.push(cur.slice());
+      cur = [all[i]];
+    }
+  }
+  if(cur.length >= 2) groups.push(cur);
+
+  var g, group, firstIdx, lastIdx, before, titleM, title, after, tilM, validity, fullText, coords, ci, ll;
+  for(g = 0; g < groups.length; g++) {
+    group = groups[g];
+    firstIdx = group[0].idx;
+    lastIdx  = group[group.length-1].idx + group[group.length-1].raw.length;
+
+    // タイトル: 座標直前の最大 400文字から末尾のキーワード行を抽出
+    before = rawText.substring(Math.max(0, firstIdx - 500), firstIdx);
+    titleM = before.match(
+      /((?:JASDF\s+)?(?:EXER\s+ACT|DANGER\s+AREA|WARNING[\s\-]+EXER|MISSILE[^\n]{0,40}LAUNCH|RESTRICTED\s+AREA|LASER[^\n]{0,30})[^\n]{0,80})\s*$/i
+    );
+    title = titleM ? titleM[1].replace(/\s+/g,' ').trim() : 'AREA NOTAM';
+
+    // 有効期限: 座標後の 400文字から TIL-MM/DD または TIL-MM/DD を検索
+    after = rawText.substring(lastIdx, lastIdx + 500);
+    tilM  = after.match(/TIL[\-\s]*(\d{2}\/\d{2}(?:\s+\d{4})?)/);
+    validity = tilM ? 'TIL ' + tilM[1] : '';
+
+    // NOTAM全文 (前後 500文字)
+    fullText = rawText.substring(Math.max(0, firstIdx - 500), lastIdx + 500).trim();
+
+    // 座標変換
+    coords = [];
+    for(ci = 0; ci < group.length; ci++) {
+      ll = parseNotamCoord(group[ci].raw);
+      if(ll) coords.push(ll);
+    }
+
+    if(coords.length >= 2) {
+      NOTAM_DATA.push({
+        title:    title,
+        validity: validity,
+        fullText: fullText,
+        coords:   coords
+      });
+    }
+  }
+}
+
+// NOTAM レイヤーをマップに描画
+function renderNotamLayer() {
+  if(LY.notam) {
+    LY.notam.forEach(function(l){ try{ map.removeLayer(l); }catch(e){} });
+    LY.notam = [];
+  }
+  var cb = document.getElementById('oNotam');
+  if(!cb || !cb.checked) return;
+  if(!NOTAM_DATA || !NOTAM_DATA.length) return;
+  if(typeof map === 'undefined' || !map) return;
+
+  var escN = function(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  var color = '#ffa726';  // オレンジ（警告系）
+
+  NOTAM_DATA.forEach(function(notam) {
+    var popHtml =
+      '<div style="font-family:monospace;font-size:12px;min-width:380px;max-width:520px;' +
+      'background:#fff;color:#1a1a1a;padding:8px;border-radius:4px;">' +
+        '<div style="font-weight:bold;margin-bottom:6px;color:#e65100;font-size:13px;">' +
+          escN(notam.title) + '</div>' +
+        (notam.validity ?
+          '<div style="color:#888;font-size:11px;margin-bottom:6px;">' + escN(notam.validity) + '</div>' : '') +
+        '<pre style="white-space:pre-wrap;margin:0;color:#263238;font-size:11px;">' +
+          escN(notam.fullText) + '</pre>' +
+      '</div>';
+
+    var layer;
+    if(notam.coords.length >= 3) {
+      layer = L.polygon(notam.coords, {
+        color: color, weight: 2, fillOpacity: 0.12, fillColor: color, interactive: true
+      });
+    } else {
+      layer = L.circle(notam.coords[0], {
+        radius: 9260,  // 5NM
+        color: color, weight: 2, fillOpacity: 0.12, fillColor: color, interactive: true
+      });
+    }
+    layer.bindPopup(popHtml, { maxWidth: 560, minWidth: 400 });
+    layer.bindTooltip(escN(notam.title), { className: 'sgx', sticky: true, direction: 'auto' });
+    layer.addTo(map);
+    LY.notam.push(layer);
+  });
+
+  if(typeof bringTop === 'function') bringTop();
+}
+
+// NOTAM チェックボックス onchange
+function toggleNotamLayer() {
+  var cb = document.getElementById('oNotam');
+  if(!cb) return;
+  if(cb.checked) {
+    renderNotamLayer();
+  } else {
+    if(LY.notam) {
+      LY.notam.forEach(function(l){ try{ map.removeLayer(l); }catch(e){} });
+      LY.notam = [];
+    }
+  }
+}
+
+// NOTAM PDF アップロードハンドラ
+function loadNotamPdf(input) {
+  var file = input && input.files && input.files[0];
+  if(!file) return;
+  var statusEl = document.getElementById('notam-status');
+  if(statusEl) statusEl.textContent = 'NOTAM 解析中...';
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var typedArray = new Uint8Array(e.target.result);
+    pdfjsLib.getDocument({ data: typedArray }).promise.then(function(pdf) {
+      var promises = [];
+      var pi;
+      for(pi = 1; pi <= pdf.numPages; pi++) {
+        (function(pageNum) {
+          promises.push(
+            pdf.getPage(pageNum).then(function(page) {
+              return page.getTextContent().then(function(content) {
+                // テキストアイテムを空白で結合（改行は保持しない）
+                return content.items.map(function(item){ return item.str; }).join(' ');
+              });
+            })
+          );
+        })(pi);
+      }
+      return Promise.all(promises).then(function(pages) {
+        var fullText = pages.join('\n');
+        parseNotamText(fullText);
+        if(statusEl) {
+          statusEl.textContent = NOTAM_DATA.length
+            ? NOTAM_DATA.length + ' area NOTAMs loaded'
+            : '(エリア NOTAM なし)';
+        }
+        var cb = document.getElementById('oNotam');
+        if(cb && cb.checked) renderNotamLayer();
+      });
+    }).catch(function(err) {
+      if(statusEl) statusEl.textContent = 'NOTAM PDF 読み込みエラー';
+    });
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 function renderSigmetLayerFromCache() {
   if(LY.sig) { try { map.removeLayer(LY.sig); } catch(_eRm) {} LY.sig = null; }
   if(!document.getElementById('oSig').checked) return;
@@ -10260,6 +10460,7 @@ function toggleLightning() {
 
 function bringTop() {
   if(LY.sig)   try{LY.sig.bringToFront();}catch(e){}
+  if(LY.notam) LY.notam.forEach(function(l){ try{l.bringToFront();}catch(e){} });
   if(LY.sat)   try{LY.sat.bringToFront();}catch(e){}
   if(LY.fir)   try{LY.fir.bringToFront();}catch(e){}
   if(LY.glide) try{LY.glide.bringToFront();}catch(e){}
