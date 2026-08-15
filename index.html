@@ -6398,6 +6398,27 @@ var APCH_LEVELS = [
 ];
 var APCH_DISTS = [200, 150, 100, 50, 0];
 
+function apchEscAttr(v) {
+  return String(v).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+}
+function apchSvgOpen(tag, attrs) {
+  var s = '<' + tag;
+  var k;
+  for (k in attrs) {
+    if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+    if (attrs[k] == null) continue;
+    s += ' ' + k + "='" + apchEscAttr(attrs[k]) + "'";
+  }
+  return s + '>';
+}
+function apchSvgVoid(tag, attrs) {
+  var open = apchSvgOpen(tag, attrs);
+  return open.slice(0, open.length - 1) + '/>';
+}
+function apchSvgText(attrs, text) {
+  return apchSvgOpen('text', attrs) + (text == null ? '' : String(text)) + '</text>';
+}
+
 function apchPad2(n) {
   n = Math.round(Number(n) || 0);
   return (n < 10 ? '0' : '') + n;
@@ -6748,41 +6769,60 @@ function renderCrossSection(wxData, points) {
   var W = leftPad + nCol * cellW + rightPad;
   var H = topPad + nRow * cellH + botPad;
   var svg = [];
-  var r, c, x, y, cell, spd, dir, cloudy, rot, lbl, fill;
-  svg.push(`<svg viewBox='0 0 ${W} ${H}' width='100%' style='max-width:${W}px;display:block;'>`);
-  svg.push(`<text x='${leftPad + nCol * cellW / 2}' y='12' text-anchor='middle' fill='${C.acc}' font-size='12' font-weight='bold' letter-spacing='0.08em'>高度断面図</text>`);
+  var r, c, x, y, cell, spd, dir, cloudy, rot, lbl, fill, vb;
+  vb = '0 0 ' + W + ' ' + H;
+  svg.push(apchSvgOpen('svg', {
+    xmlns: 'http://www.w3.org/2000/svg',
+    viewBox: vb,
+    width: '100%',
+    style: 'max-width:' + W + 'px;display:block'
+  }));
+  svg.push(apchSvgText({
+    x: leftPad + nCol * cellW / 2, y: 12, 'text-anchor': 'middle',
+    fill: C.acc, 'font-size': 12, 'font-weight': 'bold', 'letter-spacing': '0.08em'
+  }, '高度断面図'));
 
   for(r = 0; r < nRow; r++) {
     y = topPad + r * cellH;
-    svg.push(`<text x='${leftPad - 8}' y='${y + cellH / 2 + 4}' text-anchor='end' fill='${C.lbl}' font-size='10'>${APCH_LEVELS[r].fl}</text>`);
+    svg.push(apchSvgText({
+      x: leftPad - 8, y: y + cellH / 2 + 4, 'text-anchor': 'end',
+      fill: C.lbl, 'font-size': 10
+    }, APCH_LEVELS[r].fl));
     for(c = 0; c < nCol; c++) {
       x = leftPad + c * cellW;
       cell = (wxData && wxData[c] && wxData[c][r]) ? wxData[c][r] : null;
       cloudy = cell && cell.cloudcover > 50;
       fill = cloudy ? ((typeof DAY_MODE !== 'undefined' && DAY_MODE) ? 'rgba(120,128,140,.28)' : 'rgba(180,190,200,.22)') : 'transparent';
-      svg.push(`<rect x='${x}' y='${y}' width='${cellW}' height='${cellH}' fill='${fill}' stroke='${C.bdr}' stroke-width='1'/>`);
+      svg.push(apchSvgVoid('rect', {
+        x: x, y: y, width: cellW, height: cellH, fill: fill, stroke: C.bdr, 'stroke-width': 1
+      }));
       if(cell && cell.windspeed != null && !isNaN(cell.windspeed)) {
         spd = Math.round(Number(cell.windspeed));
         dir = (cell.winddir != null && !isNaN(cell.winddir)) ? Number(cell.winddir) : 0;
         rot = dir;
-        svg.push(`<g transform='translate(${x + cellW / 2},${y + cellH / 2})'>`);
-        svg.push(`<text y='-7' text-anchor='middle' fill='${C.hi}' font-size='11' font-weight='bold'>${spd}</text>`);
-        svg.push(`<g transform='rotate(${rot})'>`);
-        svg.push(`<text y='14' text-anchor='middle' fill='${C.acc}' font-size='12'>▲</text>`);
+        svg.push(apchSvgOpen('g', { transform: 'translate(' + (x + cellW / 2) + ',' + (y + cellH / 2) + ')' }));
+        svg.push(apchSvgText({ y: -7, 'text-anchor': 'middle', fill: C.hi, 'font-size': 11, 'font-weight': 'bold' }, spd));
+        svg.push(apchSvgOpen('g', { transform: 'rotate(' + rot + ')' }));
+        svg.push(apchSvgText({ y: 14, 'text-anchor': 'middle', fill: C.acc, 'font-size': 12 }, '▲'));
         svg.push('</g></g>');
       } else {
-        svg.push(`<text x='${x + cellW / 2}' y='${y + cellH / 2 + 4}' text-anchor='middle' fill='${C.dim}' font-size='11'>—</text>`);
+        svg.push(apchSvgText({
+          x: x + cellW / 2, y: y + cellH / 2 + 4, 'text-anchor': 'middle',
+          fill: C.dim, 'font-size': 11
+        }, '—'));
       }
     }
   }
   for(c = 0; c < nCol; c++) {
     x = leftPad + c * cellW + cellW / 2;
     lbl = (points && points[c] && points[c].dist === 0) ? 'APT' : (APCH_DISTS[c] + 'NM');
-    svg.push(`<text x='${x}' y='${H - 10}' text-anchor='middle' fill='${C.lbl}' font-size='10'>${lbl}</text>`);
+    svg.push(apchSvgText({ x: x, y: H - 10, 'text-anchor': 'middle', fill: C.lbl, 'font-size': 10 }, lbl));
   }
   svg.push('</svg>');
-  svg.push(`<div style='color:${C.dim};font-size:10px;margin-top:4px;'>風速 kt ／ ▲ は風の吹いてくる方向（FROM）。雲量 50%超のセルはグレー。</div>`);
+  svg.push('<div style="color:' + C.dim + ';font-size:10px;margin-top:4px;">風速 kt ／ ▲ は風の吹いてくる方向（FROM）。雲量 50%超のセルはグレー。</div>');
   host.innerHTML = svg.join('');
+  var svgRoot = host.querySelector('svg');
+  if(svgRoot) svgRoot.setAttribute('viewBox', vb);
 }
 
 function renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate) {
@@ -6818,19 +6858,35 @@ function renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate) {
     return { prev: a, ovl: b };
   }
 
-  svg.push(`<svg viewBox='0 0 ${W} ${H}' width='100%' style='max-width:${W}px;display:block;'>`);
-  svg.push(`<text x='${leftPad + barW / 2}' y='14' text-anchor='middle' fill='${C.acc}' font-size='12' font-weight='bold' letter-spacing='0.08em'>TAFタイムライン</text>`);
+  svg.push(apchSvgOpen('svg', {
+    xmlns: 'http://www.w3.org/2000/svg',
+    viewBox: '0 0 ' + W + ' ' + H,
+    width: '100%',
+    style: 'max-width:' + W + 'px;display:block'
+  }));
+  svg.push(apchSvgText({
+    x: leftPad + barW / 2, y: 14, 'text-anchor': 'middle',
+    fill: C.acc, 'font-size': 12, 'font-weight': 'bold', 'letter-spacing': '0.08em'
+  }, 'TAFタイムライン'));
 
   for(i = 0; i < rows.length; i++) {
     row = rows[i];
     y = topPad + i * (barH + gap);
-    svg.push(`<text x='${leftPad - 8}' y='${y + barH / 2 + 4}' text-anchor='end' fill='${C.lbl}' font-size='10'>${i === 0 ? 'DEST ' : 'ALT '}${String(row.icao)}</text>`);
-    svg.push(`<rect x='${leftPad}' y='${y}' width='${barW}' height='${barH}' fill='${C.bg3}' stroke='${C.bdr}' rx='3'/>`);
+    svg.push(apchSvgText({
+      x: leftPad - 8, y: y + barH / 2 + 4, 'text-anchor': 'end',
+      fill: C.lbl, 'font-size': 10
+    }, (i === 0 ? 'DEST ' : 'ALT ') + String(row.icao)));
+    svg.push(apchSvgVoid('rect', {
+      x: leftPad, y: y, width: barW, height: barH, fill: C.bg3, stroke: C.bdr, rx: 3
+    }));
     segs = splitSegs(row.segs);
     prev = segs.prev;
     ovl = segs.ovl;
     if(!prev.length && !ovl.length) {
-      svg.push(`<text x='${leftPad + barW / 2}' y='${y + barH / 2 + 4}' text-anchor='middle' fill='${C.dim}' font-size='10'>TAF N/A</text>`);
+      svg.push(apchSvgText({
+        x: leftPad + barW / 2, y: y + barH / 2 + 4, 'text-anchor': 'middle',
+        fill: C.dim, 'font-size': 10
+      }, 'TAF N/A'));
     }
     for(j = 0; j < prev.length; j++) {
       s = prev[j];
@@ -6838,9 +6894,14 @@ function renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate) {
       x2 = xOf(s.to);
       w = x2 - x1;
       if(w < 1) w = 1;
-      svg.push(`<rect x='${x1}' y='${y}' width='${w}' height='${barH}' fill='${apchCatColor(s.cat)}' opacity='0.85'/>`);
+      svg.push(apchSvgVoid('rect', {
+        x: x1, y: y, width: w, height: barH, fill: apchCatColor(s.cat), opacity: 0.85
+      }));
       if(w >= 36) {
-        svg.push(`<text x='${x1 + w / 2}' y='${y + barH / 2 + 4}' text-anchor='middle' fill='#ffffff' font-size='9' font-weight='bold'>${s.cat}</text>`);
+        svg.push(apchSvgText({
+          x: x1 + w / 2, y: y + barH / 2 + 4, 'text-anchor': 'middle',
+          fill: '#ffffff', 'font-size': 9, 'font-weight': 'bold'
+        }, s.cat));
       }
     }
     for(j = 0; j < ovl.length; j++) {
@@ -6849,32 +6910,44 @@ function renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate) {
       x2 = xOf(s.to);
       w = x2 - x1;
       if(w < 1) w = 1;
-      svg.push(`<rect x='${x1}' y='${y + 4}' width='${w}' height='${barH - 8}' fill='${apchCatColor(s.cat)}' opacity='0.55' stroke='#fff' stroke-width='0.5' stroke-dasharray='3 2'/>`);
+      svg.push(apchSvgVoid('rect', {
+        x: x1, y: y + 4, width: w, height: barH - 8,
+        fill: apchCatColor(s.cat), opacity: 0.55,
+        stroke: '#fff', 'stroke-width': 0.5, 'stroke-dasharray': '3 2'
+      }));
     }
   }
 
   var etaX = xOf(eta);
-  svg.push(`<line x1='${etaX}' y1='${topPad - 2}' x2='${etaX}' y2='${topPad + rows.length * (barH + gap) - gap}' stroke='#ffffff' stroke-width='1.5' stroke-dasharray='4 3'/>`);
-  svg.push(`<text x='${etaX}' y='${H - 8}' text-anchor='middle' fill='${C.hi}' font-size='9'>ETA</text>`);
+  svg.push(apchSvgVoid('line', {
+    x1: etaX, y1: topPad - 2, x2: etaX, y2: topPad + rows.length * (barH + gap) - gap,
+    stroke: '#ffffff', 'stroke-width': 1.5, 'stroke-dasharray': '4 3'
+  }));
+  svg.push(apchSvgText({ x: etaX, y: H - 8, 'text-anchor': 'middle', fill: C.hi, 'font-size': 9 }, 'ETA'));
 
   for(tick = t0; tick <= t1 + 1000; tick += 3600000) {
     tx = xOf(tick);
     lab = apchPad2(new Date(tick).getUTCHours()) + 'Z';
-    svg.push(`<line x1='${tx}' y1='${H - 26}' x2='${tx}' y2='${H - 22}' stroke='${C.dim}'/>`);
+    svg.push(apchSvgVoid('line', {
+      x1: tx, y1: H - 26, x2: tx, y2: H - 22, stroke: C.dim
+    }));
     if(Math.abs(tick - eta) > 20 * 60 * 1000) {
-      svg.push(`<text x='${tx}' y='${H - 8}' text-anchor='middle' fill='${C.dim}' font-size='9'>${lab}</text>`);
+      svg.push(apchSvgText({ x: tx, y: H - 8, 'text-anchor': 'middle', fill: C.dim, 'font-size': 9 }, lab));
     }
   }
   svg.push('</svg>');
 
   var legend = ['VFR', 'MVFR', 'IFR', 'LIFR'];
-  var lg = `<div style='display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;font-size:10px;color:${C.lbl};'>`;
+  var lg = '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;font-size:10px;color:' + C.lbl + ';">';
   for(i = 0; i < legend.length; i++) {
     cat = legend[i];
-    lg += `<span style='display:inline-flex;align-items:center;gap:4px;'><span style='width:12px;height:12px;background:${apchCatColor(cat)};border-radius:2px;display:inline-block;'></span>${cat}</span>`;
+    lg += '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;background:' +
+      apchCatColor(cat) + ';border-radius:2px;display:inline-block;"></span>' + cat + '</span>';
   }
   lg += '<span>破線枠 = TEMPO/PROB</span></div>';
   host.innerHTML = svg.join('') + lg;
+  var tafSvg = host.querySelector('svg');
+  if(tafSvg) tafSvg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
 }
 
 function runApchBrief() {
@@ -7207,11 +7280,13 @@ function renderCurfewPanel() {
             (autoFH ? '　<span style="color:'+C.acc+';">NAVLOGより自動入力</span>' : '') + '</div>' +
           '<div style="display:flex;align-items:center;gap:14px;">' +
             '<div>' +
-              `<input id='curfew-fh' type='number' min='0' max='24' placeholder='0' value='${autoFH}' style='${inStyle}width:120px;' oninput='calcCurfew()'>` +
+              '<input id="curfew-fh" type="number" min="0" max="24" placeholder="0"' +
+                ' style="' + inStyle + 'width:120px;" oninput="calcCurfew()">' +
               '<div style="color:'+C.dim+';font-size:11px;margin-top:4px;text-align:center;">時間</div>' +
             '</div>' +
             '<div>' +
-              `<input id='curfew-fm' type='number' min='0' max='59' placeholder='0' value='${autoFM}' style='${inStyle}width:120px;' oninput='calcCurfew()'>` +
+              '<input id="curfew-fm" type="number" min="0" max="59" placeholder="0"' +
+                ' style="' + inStyle + 'width:120px;" oninput="calcCurfew()">' +
               '<div style="color:'+C.dim+';font-size:11px;margin-top:4px;text-align:center;">分</div>' +
             '</div>' +
           '</div>' +
@@ -7233,7 +7308,11 @@ function renderCurfewPanel() {
 
     '</div>';
 
-  // NAVLOGが適用済みなら即計算
+  // NAVLOGが適用済みなら値をDOMにセットして即計算
+  var fhEl = document.getElementById('curfew-fh');
+  var fmEl = document.getElementById('curfew-fm');
+  if(fhEl && autoFH) fhEl.value = autoFH;
+  if(fmEl && autoFM) fmEl.value = autoFM;
   if(autoFH && autoFM) { calcCurfew(); }
 }
 
@@ -10725,30 +10804,30 @@ function mpField(label,val,col){
 }
 
 function buildWindSvg(deg){
-  var s=`<svg width='100' height='100' viewBox='0 0 100 100'>`;
-  s+=`<circle cx='50' cy='50' r='38' fill='none' stroke='#1e2a38' stroke-width='1.5'/>`;
+  var s = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">';
+  s += '<circle cx="50" cy="50" r="38" fill="none" stroke="#1e2a38" stroke-width="1.5"/>';
   for(var i=0;i<36;i++){
     var a=i*10*Math.PI/180;
     var tl=(i%9===0)?8:(i%3===0)?5:2;
     var x1=(50+37.5*Math.sin(a)).toFixed(1),y1=(50-37.5*Math.cos(a)).toFixed(1);
     var x2=(50+(37.5-tl)*Math.sin(a)).toFixed(1),y2=(50-(37.5-tl)*Math.cos(a)).toFixed(1);
-    s+=`<line x1='${x1}' y1='${y1}' x2='${x2}' y2='${y2}' stroke='#2a3a4e' stroke-width='1'/>`;
+    s += '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="#2a3a4e" stroke-width="1"/>';
   }
-  s+=`<text x='50' y='8' text-anchor='middle' fill='#546e7a' font-size='9' font-family='Helvetica Neue,Arial,sans-serif'>N</text>`;
-  s+=`<text x='93' y='54' text-anchor='middle' fill='#546e7a' font-size='9' font-family='Helvetica Neue,Arial,sans-serif'>E</text>`;
-  s+=`<text x='50' y='98' text-anchor='middle' fill='#546e7a' font-size='9' font-family='Helvetica Neue,Arial,sans-serif'>S</text>`;
-  s+=`<text x='7' y='54' text-anchor='middle' fill='#546e7a' font-size='9' font-family='Helvetica Neue,Arial,sans-serif'>W</text>`;
+  s += '<text x="50" y="8" text-anchor="middle" fill="#546e7a" font-size="9" font-family="Helvetica Neue,Arial,sans-serif">N</text>';
+  s += '<text x="93" y="54" text-anchor="middle" fill="#546e7a" font-size="9" font-family="Helvetica Neue,Arial,sans-serif">E</text>';
+  s += '<text x="50" y="98" text-anchor="middle" fill="#546e7a" font-size="9" font-family="Helvetica Neue,Arial,sans-serif">S</text>';
+  s += '<text x="7" y="54" text-anchor="middle" fill="#546e7a" font-size="9" font-family="Helvetica Neue,Arial,sans-serif">W</text>';
   if(deg!=null){
     var rad=deg*Math.PI/180;
     var ax=(50+30*Math.sin(rad)).toFixed(1),ay=(50-30*Math.cos(rad)).toFixed(1);
-    s+=`<line x1='50' y1='50' x2='${ax}' y2='${ay}' stroke='#4fc3f7' stroke-width='2.5' stroke-linecap='round'/>`;
+    s += '<line x1="50" y1="50" x2="'+ax+'" y2="'+ay+'" stroke="#4fc3f7" stroke-width="2.5" stroke-linecap="round"/>';
     var a1=(deg+150)*Math.PI/180,a2=(deg-150)*Math.PI/180;
     var hx1=(+ax+8*Math.sin(a1)).toFixed(1),hy1=(+ay-8*Math.cos(a1)).toFixed(1);
     var hx2=(+ax+8*Math.sin(a2)).toFixed(1),hy2=(+ay-8*Math.cos(a2)).toFixed(1);
-    s+=`<polygon points='${ax},${ay} ${hx1},${hy1} ${hx2},${hy2}' fill='#4fc3f7'/>`;
-    s+=`<circle cx='50' cy='50' r='3' fill='#4fc3f7'/>`;
+    s += '<polygon points="'+ax+','+ay+' '+hx1+','+hy1+' '+hx2+','+hy2+'" fill="#4fc3f7"/>';
+    s += '<circle cx="50" cy="50" r="3" fill="#4fc3f7"/>';
   } else {
-    s+=`<text x='50' y='54' text-anchor='middle' fill='#4fc3f7' font-size='11' font-family='Helvetica Neue,Arial,sans-serif'>VRB</text>`;
+    s += '<text x="50" y="54" text-anchor="middle" fill="#4fc3f7" font-size="11" font-family="Helvetica Neue,Arial,sans-serif">VRB</text>';
   }
   return s+'</svg>';
 }
