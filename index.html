@@ -402,6 +402,11 @@
 
 </div><!-- wx-panel -->
 
+<!-- ===== APCH PREPARATION ===== -->
+<div id="apch-panel" class="panel">
+  <!-- renderApchPanel() によって動的生成 -->
+</div>
+
 <!-- ===== HOLDING ===== -->
 <div id="holding-panel" class="panel">
   <!-- renderHoldingPanel() によって動的生成 -->
@@ -1293,7 +1298,7 @@ var lightningReconnectTimer = null;
 // TABS
 // =====================================================================
 function showTab(name) {
-  ['wx','fp','atm','atm-gfs','crew-rest','fdp','memo','ccbrfg','dump','curfew','holding'].forEach(function(n) {
+  ['wx','fp','atm','atm-gfs','crew-rest','fdp','memo','ccbrfg','dump','curfew','holding','apch'].forEach(function(n) {
     var p = document.getElementById(n+'-panel');
     if(p) p.classList.remove('active');
     var ni=document.getElementById('nav-'+n);
@@ -1352,6 +1357,9 @@ function showTab(name) {
       memoTa.select();
     }
   }
+  if(name==='apch') {
+    if(typeof renderApchPanel === 'function') renderApchPanel();
+  }
 }
 function openNav(){
   document.getElementById('nav-panel').classList.add('open');
@@ -1381,6 +1389,7 @@ function navTo(tab){
   if(tab === 'dump') renderDumpPanel();
   if(tab === 'curfew') renderCurfewPanel();
   if(tab === 'holding') renderHoldingPanel();
+  if(tab === 'apch') renderApchPanel();
 }
 
 // 起動時: 一瞬 WX で地図初期化 → Flight Plan に切替
@@ -6366,6 +6375,581 @@ var HOLDING_DATA = {
 
 };
 
+// =====================================================================
+// APCH PREPARATION
+// =====================================================================
+var APCH_LAST = null;
+var APCH_LEVELS = [
+  { hPa: 200, fl: 'FL390' },
+  { hPa: 250, fl: 'FL340' },
+  { hPa: 300, fl: 'FL300' },
+  { hPa: 500, fl: 'FL180' },
+  { hPa: 700, fl: 'FL100' },
+  { hPa: 850, fl: 'FL050' },
+  { hPa: 1000, fl: 'SL' }
+];
+var APCH_DISTS = [200, 150, 100, 50, 0];
+
+function apchPad2(n) {
+  n = Math.round(Number(n) || 0);
+  return (n < 10 ? '0' : '') + n;
+}
+
+function getApchInputsFromNavlog() {
+  var destIcao = (typeof NAV_DEST !== 'undefined' && NAV_DEST) ? String(NAV_DEST).toUpperCase() : null;
+  var altIcao = (typeof NAV_ALT_APT !== 'undefined' && NAV_ALT_APT) ? String(NAV_ALT_APT).toUpperCase() : null;
+  var arrivalTC = null;
+  var i, w;
+  if(typeof WP !== 'undefined' && WP && WP.length >= 2) {
+    if(!destIcao) {
+      w = WP[WP.length - 1];
+      if(w && w.id && /^[A-Z]{4}$/.test(String(w.id))) destIcao = String(w.id).toUpperCase();
+    }
+    for(i = WP.length - 2; i >= 0; i--) {
+      if(WP[i].tc != null && !isNaN(WP[i].tc)) {
+        arrivalTC = Math.round(Number(WP[i].tc));
+        if(arrivalTC < 0) arrivalTC = (arrivalTC % 360 + 360) % 360;
+        else arrivalTC = arrivalTC % 360;
+        break;
+      }
+    }
+  }
+  return { destIcao: destIcao, arrivalTC: arrivalTC, altIcao: altIcao };
+}
+
+function fillApchFromNavlog(overwriteEta) {
+  var inp = getApchInputsFromNavlog();
+  var destEl = document.getElementById('apch-dest');
+  var altEl = document.getElementById('apch-alt');
+  var hdgEl = document.getElementById('apch-hdg');
+  var etaEl = document.getElementById('apch-eta');
+  var warnEl = document.getElementById('apch-nav-warn');
+  var runBtn = document.getElementById('apch-run-btn');
+  var hasNav = !!(inp.destIcao && typeof WP !== 'undefined' && WP && WP.length >= 2);
+  if(destEl) destEl.textContent = inp.destIcao || '—';
+  if(altEl) altEl.textContent = inp.altIcao || '—';
+  if(hdgEl) {
+    hdgEl.textContent = (inp.arrivalTC != null) ? (apchPad2(inp.arrivalTC) + '°') : '—';
+  }
+  if(etaEl && (overwriteEta || !etaEl.value)) {
+    if(typeof NAV_STA !== 'undefined' && NAV_STA && String(NAV_STA).length >= 4) {
+      etaEl.value = String(NAV_STA).slice(0, 2) + ':' + String(NAV_STA).slice(2, 4);
+    }
+  }
+  if(warnEl) {
+    warnEl.style.display = hasNav ? 'none' : 'block';
+  }
+  if(runBtn) runBtn.disabled = !hasNav;
+  return inp;
+}
+
+function fetchAirportCoords(icao) {
+  var ic = String(icao || '').toUpperCase();
+  if(!ic) return Promise.reject(new Error('目的地 ICAO がありません'));
+  if(typeof APT !== 'undefined' && APT[ic] && typeof APT[ic].lat === 'number' && typeof APT[ic].lon === 'number') {
+    return Promise.resolve({ lat: APT[ic].lat, lon: APT[ic].lon });
+  }
+  function pickLatLon(json) {
+    var d = json && json.data && json.data[0] ? json.data[0] : null;
+    if(!d) return null;
+    var lat = d.latitude && typeof d.latitude.decimal === 'number' ? d.latitude.decimal : null;
+    var lon = d.longitude && typeof d.longitude.decimal === 'number' ? d.longitude.decimal : null;
+    if(lat == null && d.geometry && d.geometry.coordinates) {
+      lon = d.geometry.coordinates[0];
+      lat = d.geometry.coordinates[1];
+    }
+    if(typeof lat !== 'number' || typeof lon !== 'number') return null;
+    return { lat: lat, lon: lon };
+  }
+  // CheckWX の /v2/airport は 404 のため station API を使用
+  // レスポンスは json.data[0].latitude.decimal / longitude.decimal
+  var urlStn = 'https://api.checkwx.com/station/' + ic;
+  return apFetchCheckwxJson(urlStn, AP_CHECKWX_HEADERS, 'APCH-stn-' + ic).then(function(res) {
+    var coords = pickLatLon(res && res.json);
+    if(!coords) throw new Error(ic + ' の座標を取得できませんでした');
+    return coords;
+  });
+}
+
+function calcApproachPoints(lat, lon, arrivalTC, distances) {
+  var bearingOut = (Number(arrivalTC) + 180) % 360;
+  if(bearingOut < 0) bearingOut += 360;
+  var R = 3440.065;
+  var out = [];
+  var i, d, delta, phi1, lam1, theta, phi2, lam2;
+  for(i = 0; i < distances.length; i++) {
+    d = distances[i];
+    delta = d / R;
+    phi1 = lat * Math.PI / 180;
+    lam1 = lon * Math.PI / 180;
+    theta = bearingOut * Math.PI / 180;
+    phi2 = Math.asin(Math.sin(phi1) * Math.cos(delta) +
+                     Math.cos(phi1) * Math.sin(delta) * Math.cos(theta));
+    lam2 = lam1 + Math.atan2(Math.sin(theta) * Math.sin(delta) * Math.cos(phi1),
+                             Math.cos(delta) - Math.sin(phi1) * Math.sin(phi2));
+    out.push({
+      lat: phi2 * 180 / Math.PI,
+      lon: lam2 * 180 / Math.PI,
+      dist: d
+    });
+  }
+  return out;
+}
+
+function fetchOpenMeteoForPoint(lat, lon, etaIso) {
+  var levels = ['200', '250', '300', '500', '700', '850', '1000'];
+  var i, windspeedVars = '', winddirVars = '';
+  for(i = 0; i < levels.length; i++) {
+    if(i) { windspeedVars += ','; winddirVars += ','; }
+    windspeedVars += 'windspeed_' + levels[i] + 'hPa';
+    winddirVars += 'winddirection_' + levels[i] + 'hPa';
+  }
+  var url = 'https://api.open-meteo.com/v1/forecast'
+    + '?latitude=' + lat + '&longitude=' + lon
+    + '&hourly=' + windspeedVars + ',' + winddirVars
+    + ',cloudcover_low,cloudcover_mid,cloudcover_high'
+    + '&wind_speed_unit=kn'
+    + '&timeformat=unixtime'
+    + '&forecast_days=3';
+  return fetch(url).then(function(res) {
+    if(!res.ok) throw new Error('Open-Meteo 取得失敗 (' + res.status + ')');
+    return res.json();
+  }).then(function(json) {
+    if(!json || !json.hourly || !json.hourly.time || !json.hourly.time.length) {
+      throw new Error('Open-Meteo に時刻データがありません');
+    }
+    var etaTs = new Date(etaIso).getTime() / 1000;
+    var times = json.hourly.time;
+    var idx = 0, best = Math.abs(times[0] - etaTs), di, diff;
+    for(di = 1; di < times.length; di++) {
+      diff = Math.abs(times[di] - etaTs);
+      if(diff < best) { best = diff; idx = di; }
+    }
+    var high = json.hourly.cloudcover_high ? json.hourly.cloudcover_high[idx] : 0;
+    var mid  = json.hourly.cloudcover_mid  ? json.hourly.cloudcover_mid[idx]  : 0;
+    var low  = json.hourly.cloudcover_low  ? json.hourly.cloudcover_low[idx]  : 0;
+    var out = [];
+    var l, hPa, cover, wsArr, wdArr;
+    for(i = 0; i < levels.length; i++) {
+      l = levels[i];
+      hPa = parseInt(l, 10);
+      cover = (hPa <= 300) ? high : (hPa <= 700 ? mid : low);
+      wsArr = json.hourly['windspeed_' + l + 'hPa'];
+      wdArr = json.hourly['winddirection_' + l + 'hPa'];
+      out.push({
+        hPa: hPa,
+        windspeed: wsArr ? wsArr[idx] : null,
+        winddir: wdArr ? wdArr[idx] : null,
+        cloudcover: cover != null ? cover : 0
+      });
+    }
+    return out;
+  });
+}
+
+function apchTafFromTo(f) {
+  var fromStr = null, toStr = null;
+  if(f && f.timestamp) {
+    fromStr = f.timestamp.from || null;
+    toStr = f.timestamp.to || null;
+  }
+  if(!fromStr && f && f.change && f.change.period) {
+    fromStr = f.change.period.from || null;
+    toStr = f.change.period.to || null;
+  }
+  if(!fromStr && f && f.period) {
+    fromStr = f.period.from || null;
+    toStr = f.period.to || null;
+  }
+  return {
+    from: fromStr ? new Date(fromStr).getTime() : NaN,
+    to: toStr ? new Date(toStr).getTime() : NaN
+  };
+}
+
+function apchFlightCategory(f, inheritClouds, inheritVis) {
+  if(f && f.flight_category) return String(f.flight_category).toUpperCase();
+  var visObj = (f && f.visibility) ? f.visibility : inheritVis;
+  var clouds = (f && f.clouds && f.clouds.length) ? f.clouds : inheritClouds;
+  var vis = (visObj && visObj.miles != null) ? Number(visObj.miles) : 10;
+  if(isNaN(vis)) vis = 10;
+  var ceil = 99999;
+  var i, c, code;
+  if(clouds) {
+    for(i = 0; i < clouds.length; i++) {
+      c = clouds[i];
+      code = String(c.code || '').toUpperCase();
+      if(code === 'BKN' || code === 'OVC' || code === 'VV') {
+        if(c.feet != null && Number(c.feet) < ceil) ceil = Number(c.feet);
+      }
+    }
+  }
+  if(ceil < 500 || vis < 1) return 'LIFR';
+  if(ceil < 1000 || vis < 3) return 'IFR';
+  if(ceil <= 3000 || vis <= 5) return 'MVFR';
+  return 'VFR';
+}
+
+function fetchTafTimeline(icao, etaDate) {
+  var ic = String(icao || '').toUpperCase();
+  var url = 'https://api.checkwx.com/v2/taf/' + ic + '/decoded';
+  return apFetchCheckwxJson(url, AP_CHECKWX_HEADERS, 'APCH-taf-' + ic).then(function(res) {
+    var json = res && res.json;
+    var data0 = json && json.data && json.data[0] ? json.data[0] : null;
+    var forecasts = (data0 && data0.forecast) ? data0.forecast : [];
+    var tafTo = (data0 && data0.period && data0.period.to) ? new Date(data0.period.to).getTime() : NaN;
+    var eta = etaDate.getTime();
+    var windowMs = 3 * 3600 * 1000;
+    var winFrom = eta - windowMs;
+    var winTo = eta + windowMs;
+    var items = [];
+    var i, f, tt, code, lastClouds = null, lastVis = null, cat;
+    for(i = 0; i < forecasts.length; i++) {
+      f = forecasts[i];
+      if(f.clouds && f.clouds.length) lastClouds = f.clouds;
+      if(f.visibility) lastVis = f.visibility;
+      tt = apchTafFromTo(f);
+      code = (f.change && f.change.code) ? String(f.change.code).toUpperCase() : 'INITIAL';
+      cat = apchFlightCategory(f, lastClouds, lastVis);
+      items.push({ from: tt.from, to: tt.to, code: code, cat: cat });
+    }
+    var prev = [], ovl = [];
+    for(i = 0; i < items.length; i++) {
+      if(items[i].code === 'TEMPO' || items[i].code.indexOf('PROB') === 0) ovl.push(items[i]);
+      else prev.push(items[i]);
+    }
+    prev.sort(function(a, b) { return a.from - b.from; });
+    for(i = 0; i < prev.length; i++) {
+      if(i < prev.length - 1 && isFinite(prev[i + 1].from)) prev[i].to = prev[i + 1].from;
+      else if(isFinite(tafTo)) prev[i].to = tafTo;
+    }
+    var out = [];
+    function overlap(p) {
+      return isFinite(p.from) && isFinite(p.to) && p.from < winTo && p.to > winFrom;
+    }
+    for(i = 0; i < prev.length; i++) if(overlap(prev[i])) out.push(prev[i]);
+    for(i = 0; i < ovl.length; i++) if(overlap(ovl[i])) out.push(ovl[i]);
+    return out;
+  });
+}
+
+function apchCatColor(cat) {
+  var c = String(cat || '').toUpperCase();
+  if(c === 'VFR') return '#43a047';
+  if(c === 'MVFR') return '#1565c0';
+  if(c === 'IFR') return '#e53935';
+  if(c === 'LIFR') return '#ab47bc';
+  return '#546e7a';
+}
+
+function apchBuildEtaDate(etaStr) {
+  var m = String(etaStr || '').match(/^(\d{1,2}):(\d{2})$/);
+  if(!m) return null;
+  var hh = parseInt(m[1], 10);
+  var mm = parseInt(m[2], 10);
+  if(isNaN(hh) || isNaN(mm) || hh > 23 || mm > 59) return null;
+  var now = new Date();
+  var etaDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hh, mm, 0));
+  if(etaDate.getTime() < now.getTime() - 3600000) {
+    etaDate = new Date(etaDate.getTime() + 86400000);
+  }
+  return etaDate;
+}
+
+function renderApchPanel() {
+  var panel = document.getElementById('apch-panel');
+  if(!panel) return;
+  var C = getDayColors();
+  var modeKey = (typeof DAY_MODE !== 'undefined' && DAY_MODE) ? 'day' : 'night';
+  if(panel.getAttribute('data-mode') === modeKey && document.getElementById('apch-eta')) {
+    fillApchFromNavlog(false);
+    if(APCH_LAST) {
+      renderCrossSection(APCH_LAST.wxData, APCH_LAST.points);
+      renderTafTimeline(APCH_LAST.destIcao, APCH_LAST.destTaf, APCH_LAST.altIcao, APCH_LAST.altTaf, APCH_LAST.etaDate);
+    }
+    return;
+  }
+
+  var prevEta = '';
+  var etaKeep = document.getElementById('apch-eta');
+  if(etaKeep && etaKeep.value) prevEta = etaKeep.value;
+  else if(APCH_LAST && APCH_LAST.etaDate) {
+    prevEta = apchPad2(APCH_LAST.etaDate.getUTCHours()) + ':' + apchPad2(APCH_LAST.etaDate.getUTCMinutes());
+  }
+
+  var inStyle = 'background:' + C.bg + ';border:1px solid ' + C.bdr + ';border-radius:4px;color:' + C.text +
+    ';font-size:14px;padding:6px 10px;width:90px;box-sizing:border-box;outline:none;font-family:inherit;';
+  var runStyle = 'background:' + C.acc + ';border:none;border-radius:4px;color:' + (modeKey === 'day' ? '#fff' : '#0a0c16') +
+    ';font-size:13px;font-weight:bold;padding:8px 16px;cursor:pointer;letter-spacing:.04em;';
+
+  panel.innerHTML =
+    '<div class="bar">' +
+      '<span style="color:' + C.acc + ';font-weight:bold;letter-spacing:.08em;">APCH Preparation</span>' +
+    '</div>' +
+    '<div style="padding:14px 16px;overflow-y:auto;height:calc(100% - 44px);box-sizing:border-box;">' +
+      '<div id="apch-nav-warn" style="display:none;color:#ff9800;font-size:13px;padding:10px 12px;margin-bottom:12px;' +
+        'background:rgba(255,152,0,.12);border-radius:6px;">NAV LOGを先に入力してください</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-bottom:10px;font-size:13px;color:' + C.text + ';">' +
+        '<label style="display:flex;align-items:center;gap:8px;">' +
+          '<span style="color:' + C.lbl + ';font-size:11px;letter-spacing:.06em;">ETA(UTC)</span>' +
+          '<input id="apch-eta" type="text" placeholder="HH:MM" maxlength="5" style="' + inStyle + '">' +
+        '</label>' +
+        '<button type="button" class="btn" onclick="fillApchFromNavlog(true)">Load from NAVLOG</button>' +
+      '</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px 20px;margin-bottom:12px;font-size:13px;color:' + C.text + ';">' +
+        '<div>Dest: <strong id="apch-dest" style="color:' + C.hi + ';">—</strong></div>' +
+        '<div>Arr.HDG: <strong id="apch-hdg" style="color:' + C.hi + ';">—</strong></div>' +
+        '<div>Alt: <strong id="apch-alt" style="color:' + C.hi + ';">—</strong></div>' +
+      '</div>' +
+      '<button type="button" id="apch-run-btn" onclick="runApchBrief()" style="' + runStyle + '">RUN APCH BRIEF</button>' +
+      '<div id="apch-msg" style="margin-top:10px;font-size:12px;color:' + C.lbl + ';"></div>' +
+      '<div id="apch-section" style="margin-top:18px;"></div>' +
+      '<div id="apch-taf" style="margin-top:18px;"></div>' +
+    '</div>';
+
+  panel.setAttribute('data-mode', modeKey);
+  fillApchFromNavlog(!prevEta);
+  if(prevEta) {
+    var etaEl = document.getElementById('apch-eta');
+    if(etaEl) etaEl.value = prevEta;
+  }
+  if(APCH_LAST) {
+    renderCrossSection(APCH_LAST.wxData, APCH_LAST.points);
+    renderTafTimeline(APCH_LAST.destIcao, APCH_LAST.destTaf, APCH_LAST.altIcao, APCH_LAST.altTaf, APCH_LAST.etaDate);
+  }
+}
+
+function renderCrossSection(wxData, points) {
+  var host = document.getElementById('apch-section');
+  if(!host) return;
+  var C = getDayColors();
+  var nCol = APCH_DISTS.length;
+  var nRow = APCH_LEVELS.length;
+  var leftPad = 52, topPad = 18, botPad = 32, rightPad = 10;
+  var cellW = 78, cellH = 40;
+  var W = leftPad + nCol * cellW + rightPad;
+  var H = topPad + nRow * cellH + botPad;
+  var svg = [];
+  var r, c, x, y, cell, spd, dir, cloudy, rot, lbl, fill;
+  svg.push('<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="max-width:' + W + 'px;display:block;">');
+  svg.push('<text x="' + (leftPad + nCol * cellW / 2) + '" y="12" text-anchor="middle" fill="' + C.acc +
+    '" font-size="12" font-weight="bold" letter-spacing="0.08em">高度断面図</text>');
+
+  for(r = 0; r < nRow; r++) {
+    y = topPad + r * cellH;
+    svg.push('<text x="' + (leftPad - 8) + '" y="' + (y + cellH / 2 + 4) +
+      '" text-anchor="end" fill="' + C.lbl + '" font-size="10">' + APCH_LEVELS[r].fl + '</text>');
+    for(c = 0; c < nCol; c++) {
+      x = leftPad + c * cellW;
+      cell = (wxData && wxData[c] && wxData[c][r]) ? wxData[c][r] : null;
+      cloudy = cell && cell.cloudcover > 50;
+      fill = cloudy ? ((typeof DAY_MODE !== 'undefined' && DAY_MODE) ? 'rgba(120,128,140,.28)' : 'rgba(180,190,200,.22)') : 'transparent';
+      svg.push('<rect x="' + x + '" y="' + y + '" width="' + cellW + '" height="' + cellH +
+        '" fill="' + fill + '" stroke="' + C.bdr + '" stroke-width="1"/>');
+      if(cell && cell.windspeed != null && !isNaN(cell.windspeed)) {
+        spd = Math.round(Number(cell.windspeed));
+        dir = (cell.winddir != null && !isNaN(cell.winddir)) ? Number(cell.winddir) : 0;
+        rot = dir;
+        svg.push('<g transform="translate(' + (x + cellW / 2) + ',' + (y + cellH / 2) + ')">');
+        svg.push('<text y="-7" text-anchor="middle" fill="' + C.hi + '" font-size="11" font-weight="bold">' + spd + '</text>');
+        svg.push('<g transform="rotate(' + rot + ')">');
+        svg.push('<text y="14" text-anchor="middle" fill="' + C.acc + '" font-size="12">▲</text>');
+        svg.push('</g></g>');
+      } else {
+        svg.push('<text x="' + (x + cellW / 2) + '" y="' + (y + cellH / 2 + 4) +
+          '" text-anchor="middle" fill="' + C.dim + '" font-size="11">—</text>');
+      }
+    }
+  }
+  for(c = 0; c < nCol; c++) {
+    x = leftPad + c * cellW + cellW / 2;
+    lbl = (points && points[c] && points[c].dist === 0) ? 'APT' : (APCH_DISTS[c] + 'NM');
+    svg.push('<text x="' + x + '" y="' + (H - 10) + '" text-anchor="middle" fill="' + C.lbl + '" font-size="10">' + lbl + '</text>');
+  }
+  svg.push('</svg>');
+  svg.push('<div style="color:' + C.dim + ';font-size:10px;margin-top:4px;">風速 kt ／ ▲ は風の吹いてくる方向（FROM）。雲量 50%超のセルはグレー。</div>');
+  host.innerHTML = svg.join('');
+}
+
+function renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate) {
+  var host = document.getElementById('apch-taf');
+  if(!host) return;
+  var C = getDayColors();
+  var eta = etaDate.getTime();
+  var win = 3 * 3600 * 1000;
+  var t0 = eta - win;
+  var t1 = eta + win;
+  var span = t1 - t0;
+  var leftPad = 86, topPad = 22, barH = 22, gap = 14, botPad = 28, rightPad = 8;
+  var barW = 420;
+  var rows = [{ icao: destIcao || 'DEST', segs: destTaf || [], overlay: true }];
+  if(altIcao) rows.push({ icao: altIcao, segs: altTaf || [], overlay: true });
+  var H = topPad + rows.length * (barH + gap) + botPad;
+  var W = leftPad + barW + rightPad;
+  var svg = [];
+  var i, j, row, y, segs, prev, ovl, s, x1, x2, w, tick, tx, lab, cat;
+
+  function xOf(t) {
+    var p = (t - t0) / span;
+    if(p < 0) p = 0;
+    if(p > 1) p = 1;
+    return leftPad + p * barW;
+  }
+  function splitSegs(list) {
+    var a = [], b = [], k;
+    for(k = 0; k < list.length; k++) {
+      if(list[k].code === 'TEMPO' || (list[k].code && list[k].code.indexOf('PROB') === 0)) b.push(list[k]);
+      else a.push(list[k]);
+    }
+    return { prev: a, ovl: b };
+  }
+
+  svg.push('<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="max-width:' + W + 'px;display:block;">');
+  svg.push('<text x="' + (leftPad + barW / 2) + '" y="14" text-anchor="middle" fill="' + C.acc +
+    '" font-size="12" font-weight="bold" letter-spacing="0.08em">TAFタイムライン</text>');
+
+  for(i = 0; i < rows.length; i++) {
+    row = rows[i];
+    y = topPad + i * (barH + gap);
+    svg.push('<text x="' + (leftPad - 8) + '" y="' + (y + barH / 2 + 4) +
+      '" text-anchor="end" fill="' + C.lbl + '" font-size="10">' +
+      (i === 0 ? 'DEST ' : 'ALT ') + String(row.icao) + '</text>');
+    svg.push('<rect x="' + leftPad + '" y="' + y + '" width="' + barW + '" height="' + barH +
+      '" fill="' + C.bg3 + '" stroke="' + C.bdr + '" rx="3"/>');
+    segs = splitSegs(row.segs);
+    prev = segs.prev;
+    ovl = segs.ovl;
+    if(!prev.length && !ovl.length) {
+      svg.push('<text x="' + (leftPad + barW / 2) + '" y="' + (y + barH / 2 + 4) +
+        '" text-anchor="middle" fill="' + C.dim + '" font-size="10">TAF N/A</text>');
+    }
+    for(j = 0; j < prev.length; j++) {
+      s = prev[j];
+      x1 = xOf(s.from);
+      x2 = xOf(s.to);
+      w = x2 - x1;
+      if(w < 1) w = 1;
+      svg.push('<rect x="' + x1 + '" y="' + y + '" width="' + w + '" height="' + barH +
+        '" fill="' + apchCatColor(s.cat) + '" opacity="0.85"/>');
+      if(w >= 36) {
+        svg.push('<text x="' + (x1 + w / 2) + '" y="' + (y + barH / 2 + 4) +
+          '" text-anchor="middle" fill="#ffffff" font-size="9" font-weight="bold">' + s.cat + '</text>');
+      }
+    }
+    for(j = 0; j < ovl.length; j++) {
+      s = ovl[j];
+      x1 = xOf(s.from);
+      x2 = xOf(s.to);
+      w = x2 - x1;
+      if(w < 1) w = 1;
+      svg.push('<rect x="' + x1 + '" y="' + (y + 4) + '" width="' + w + '" height="' + (barH - 8) +
+        '" fill="' + apchCatColor(s.cat) + '" opacity="0.55" stroke="#fff" stroke-width="0.5" stroke-dasharray="3 2"/>');
+    }
+  }
+
+  var etaX = xOf(eta);
+  svg.push('<line x1="' + etaX + '" y1="' + (topPad - 2) + '" x2="' + etaX + '" y2="' + (topPad + rows.length * (barH + gap) - gap) +
+    '" stroke="#ffffff" stroke-width="1.5" stroke-dasharray="4 3"/>');
+  svg.push('<text x="' + etaX + '" y="' + (H - 8) + '" text-anchor="middle" fill="' + C.hi + '" font-size="9">ETA</text>');
+
+  for(tick = t0; tick <= t1 + 1000; tick += 3600000) {
+    tx = xOf(tick);
+    lab = apchPad2(new Date(tick).getUTCHours()) + 'Z';
+    svg.push('<line x1="' + tx + '" y1="' + (H - 26) + '" x2="' + tx + '" y2="' + (H - 22) + '" stroke="' + C.dim + '"/>');
+    if(Math.abs(tick - eta) > 20 * 60 * 1000) {
+      svg.push('<text x="' + tx + '" y="' + (H - 8) + '" text-anchor="middle" fill="' + C.dim + '" font-size="9">' + lab + '</text>');
+    }
+  }
+  svg.push('</svg>');
+
+  var legend = ['VFR', 'MVFR', 'IFR', 'LIFR'];
+  var lg = '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;font-size:10px;color:' + C.lbl + ';">';
+  for(i = 0; i < legend.length; i++) {
+    cat = legend[i];
+    lg += '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;background:' +
+      apchCatColor(cat) + ';border-radius:2px;display:inline-block;"></span>' + cat + '</span>';
+  }
+  lg += '<span>破線枠 = TEMPO/PROB</span></div>';
+  host.innerHTML = svg.join('') + lg;
+}
+
+function runApchBrief() {
+  var btn = document.getElementById('apch-run-btn');
+  var msgEl = document.getElementById('apch-msg');
+  var etaEl = document.getElementById('apch-eta');
+  function setMsg(t, isErr) {
+    if(!msgEl) return;
+    msgEl.textContent = t || '';
+    msgEl.style.color = isErr ? '#ef5350' : '#90a4ae';
+  }
+  var inp = getApchInputsFromNavlog();
+  if(!inp.destIcao || typeof WP === 'undefined' || !WP || WP.length < 2) {
+    setMsg('NAV LOGを先に入力してください', true);
+    return;
+  }
+  if(inp.arrivalTC == null) {
+    setMsg('最終レグの TC を取得できませんでした', true);
+    return;
+  }
+  var etaStr = etaEl ? String(etaEl.value || '').trim() : '';
+  var etaDate = apchBuildEtaDate(etaStr);
+  if(!etaDate) {
+    setMsg('ETA を HH:MM（UTC）で入力してください', true);
+    return;
+  }
+  var now = Date.now();
+  if(etaDate.getTime() - now > 72 * 3600 * 1000) {
+    setMsg('ETA が 72 時間を超えています。Open-Meteo の予報範囲外です。', true);
+    return;
+  }
+  var etaIso = etaDate.toISOString();
+  if(btn) {
+    btn.disabled = true;
+    btn.textContent = 'LOADING…';
+  }
+  setMsg('気象データを取得しています…', false);
+
+  fetchAirportCoords(inp.destIcao).then(function(coords) {
+    var points = calcApproachPoints(coords.lat, coords.lon, inp.arrivalTC, APCH_DISTS);
+    var wxJobs = [];
+    var pi;
+    for(pi = 0; pi < points.length; pi++) {
+      wxJobs.push(fetchOpenMeteoForPoint(points[pi].lat, points[pi].lon, etaIso));
+    }
+    var tafJobs = [
+      fetchTafTimeline(inp.destIcao, etaDate).catch(function() { return []; }),
+      inp.altIcao ? fetchTafTimeline(inp.altIcao, etaDate).catch(function() { return []; }) : Promise.resolve([])
+    ];
+    return Promise.all([Promise.all(wxJobs), Promise.all(tafJobs)]).then(function(all) {
+      var wxData = all[0];
+      var destTaf = all[1][0] || [];
+      var altTaf = all[1][1] || [];
+      APCH_LAST = {
+        wxData: wxData,
+        points: points,
+        destIcao: inp.destIcao,
+        destTaf: destTaf,
+        altIcao: inp.altIcao,
+        altTaf: altTaf,
+        etaDate: etaDate
+      };
+      renderCrossSection(wxData, points);
+      renderTafTimeline(inp.destIcao, destTaf, inp.altIcao, altTaf, etaDate);
+      setMsg('', false);
+    });
+  }).catch(function(err) {
+    console.error('[APCH]', err);
+    setMsg((err && err.message) ? err.message : String(err), true);
+  }).then(function() {
+    if(btn) {
+      btn.disabled = false;
+      btn.textContent = 'RUN APCH BRIEF';
+      var stillNoNav = !(inp.destIcao && WP && WP.length >= 2);
+      if(stillNoNav) btn.disabled = true;
+    }
+  });
+}
+
 function renderHoldingPanel() {
   var panel = document.getElementById('holding-panel');
   if(!panel) return;
@@ -8665,6 +9249,7 @@ function toggleMode() {
   if(activePanel && activePanel.id) {
     var tid = activePanel.id.replace('-panel', '');
     if(tid === 'holding' && typeof renderHoldingPanel === 'function') renderHoldingPanel();
+    else if(tid === 'apch'    && typeof renderApchPanel    === 'function') renderApchPanel();
     else if(tid === 'dump'    && typeof renderDumpPanel    === 'function') renderDumpPanel();
     else if(tid === 'curfew'  && typeof renderCurfewPanel  === 'function') renderCurfewPanel();
     else if(tid === 'ccbrfg'  && typeof renderCcBrfgPanel  === 'function') renderCcBrfgPanel();
@@ -10902,6 +11487,7 @@ if(WX_GFS_WIND_ON && typeof applyGfsWindLayer === 'function') applyGfsWindLayer(
       <div class="nav-sec-lbl">Planning</div>
       <button class="nav-item" id="nav-fp" onclick="navTo('fp')">📋 FLT PLN</button>
       <button class="nav-item" id="nav-memo" onclick="navTo('memo')">📝 MEMO</button>
+      <button class="nav-item" id="nav-apch" onclick="navTo('apch')">🛬 APCH Preparation</button>
       <button class="nav-item" id="nav-holding" onclick="navTo('holding')">✈ Holding</button>
     </div>
     <div class="nav-sec">
