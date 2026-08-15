@@ -9474,7 +9474,8 @@ function apCacheMetarRows(rows) {
 function apFetchCheckwxMetarList(icaos) {
   if(!icaos || !icaos.length) return Promise.resolve([]);
   var headers = AP_CHECKWX_HEADERS;
-  var chunks = apChunkIcaos(icaos, 25);
+  // CheckWX プラン上限対策: 1リクエスト最大5 ICAO
+  var chunks = apChunkIcaos(icaos, 5);
   var reqs = chunks.map(function(chunk, idx) {
     var metarUrl = 'https://api.checkwx.com/v2/metar/' + chunk.join(',') + '/decoded';
     return apFetchCheckwxJson(metarUrl, headers, 'METAR-batch-' + (idx + 1))
@@ -9957,7 +9958,7 @@ function apPopupMetarTafHtml(metar, tafRaw) {
 
 function prefetchApTafBatchesPromise(icaos, headers) {
   ensureApWxCache();
-  var chunks = apChunkIcaos(icaos, 25);
+  var chunks = apChunkIcaos(icaos, 5);
   if(!chunks.length) return Promise.resolve();
   var reqs = chunks.map(function(chunk, idx) {
     var tafUrl = 'https://api.checkwx.com/v2/taf/' + chunk.join(',') + '/decoded';
