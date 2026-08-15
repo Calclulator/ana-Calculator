@@ -6397,6 +6397,8 @@ var APCH_LEVELS = [
   { hPa: 1000, fl: 'SL' }
 ];
 var APCH_DISTS = [200, 150, 100, 50, 0];
+var LAYER_ALT_FT = [39000, 34000, 30000, 18000, 10000, 5000, 0];
+var VWS_THRESHOLD = 7.0;
 
 function apchSvgEl(tag, attrs, text) {
   var NS = 'http://www.w3.org/2000/svg';
@@ -6411,6 +6413,11 @@ function apchSvgEl(tag, attrs, text) {
   }
   if(text != null && text !== '') n.appendChild(document.createTextNode(String(text)));
   return n;
+}
+
+function calcVws(wspd_upper, wspd_lower, dAlt_ft) {
+  if(dAlt_ft == null || dAlt_ft === 0 || isNaN(dAlt_ft)) return 0;
+  return Math.abs(Number(wspd_upper) - Number(wspd_lower)) / dAlt_ft * 1000;
 }
 
 function apchPad2(n) {
@@ -6759,12 +6766,36 @@ function renderCrossSection(wxData, points) {
   var C = getDayColors();
   var nCol = APCH_DISTS.length;
   var nRow = APCH_LEVELS.length;
-  var leftPad = 52, topPad = 18, botPad = 32, rightPad = 10;
+  var leftPad = 52, topPad = 18, botPad = 52, rightPad = 10;
   var cellW = 78, cellH = 40;
   var W = leftPad + nCol * cellW + rightPad;
   var H = topPad + nRow * cellH + botPad;
   var r, c, x, y, cell, spd, dir, cloudy, rot, lbl, fill;
-  var g, g2, svg;
+  var g, g2, svg, upper, lower, dAlt, vws;
+  var shearCell = [];
+  var shearBound = [];
+
+  for(c = 0; c < nCol; c++) {
+    shearCell[c] = [];
+    shearBound[c] = [];
+    for(r = 0; r < nRow; r++) {
+      shearCell[c][r] = false;
+      shearBound[c][r] = false;
+    }
+    for(r = 0; r < nRow - 1; r++) {
+      upper = (wxData && wxData[c] && wxData[c][r]) ? wxData[c][r] : null;
+      lower = (wxData && wxData[c] && wxData[c][r + 1]) ? wxData[c][r + 1] : null;
+      if(!upper || !lower || upper.windspeed == null || lower.windspeed == null) continue;
+      if(isNaN(upper.windspeed) || isNaN(lower.windspeed)) continue;
+      dAlt = LAYER_ALT_FT[r] - LAYER_ALT_FT[r + 1];
+      vws = calcVws(upper.windspeed, lower.windspeed, dAlt);
+      if(vws >= VWS_THRESHOLD) {
+        shearBound[c][r] = true;
+        shearCell[c][r] = true;
+        shearCell[c][r + 1] = true;
+      }
+    }
+  }
 
   while(host.firstChild) host.removeChild(host.firstChild);
 
@@ -6791,7 +6822,13 @@ function renderCrossSection(wxData, points) {
       x = leftPad + c * cellW;
       cell = (wxData && wxData[c] && wxData[c][r]) ? wxData[c][r] : null;
       cloudy = cell && cell.cloudcover > 50;
-      fill = cloudy ? ((typeof DAY_MODE !== 'undefined' && DAY_MODE) ? 'rgba(120,128,140,.28)' : 'rgba(180,190,200,.22)') : 'none';
+      if(shearCell[c] && shearCell[c][r]) {
+        fill = 'rgba(255,140,0,0.25)';
+      } else if(cloudy) {
+        fill = (typeof DAY_MODE !== 'undefined' && DAY_MODE) ? 'rgba(120,128,140,.28)' : 'rgba(180,190,200,.22)';
+      } else {
+        fill = 'none';
+      }
       svg.appendChild(apchSvgEl('rect', {
         x: x, y: y, width: cellW, height: cellH, fill: fill, stroke: C.bdr, 'stroke-width': 1
       }));
@@ -6817,13 +6854,43 @@ function renderCrossSection(wxData, points) {
       }
     }
   }
+
+  for(c = 0; c < nCol; c++) {
+    for(r = 0; r < nRow - 1; r++) {
+      if(!shearBound[c][r]) continue;
+      y = topPad + (r + 1) * cellH;
+      svg.appendChild(apchSvgEl('line', {
+        x1: leftPad + c * cellW,
+        y1: y,
+        x2: leftPad + (c + 1) * cellW,
+        y2: y,
+        stroke: '#FF8C00',
+        'stroke-width': 2.5,
+        'stroke-dasharray': '4,2'
+      }));
+    }
+  }
+
   for(c = 0; c < nCol; c++) {
     x = leftPad + c * cellW + cellW / 2;
     lbl = (points && points[c] && points[c].dist === 0) ? 'APT' : (APCH_DISTS[c] + 'NM');
     svg.appendChild(apchSvgEl('text', {
-      x: x, y: H - 10, 'text-anchor': 'middle', fill: C.lbl, 'font-size': 10
+      x: x, y: topPad + nRow * cellH + 14, 'text-anchor': 'middle', fill: C.lbl, 'font-size': 10
     }, lbl));
   }
+
+  y = topPad + nRow * cellH + 36;
+  svg.appendChild(apchSvgEl('line', {
+    x1: leftPad, y1: y, x2: leftPad + 22, y2: y,
+    stroke: '#FF8C00', 'stroke-width': 2.5, 'stroke-dasharray': '4,2'
+  }));
+  svg.appendChild(apchSvgEl('rect', {
+    x: leftPad + 28, y: y - 6, width: 12, height: 12,
+    fill: 'rgba(255,140,0,0.25)', stroke: '#FF8C00', 'stroke-width': 1
+  }));
+  svg.appendChild(apchSvgEl('text', {
+    x: leftPad + 44, y: y + 4, fill: C.lbl, 'font-size': 10
+  }, '垂直風速シアー 7kt/1000ft以上'));
 
   host.appendChild(svg);
   var note = document.createElement('div');
