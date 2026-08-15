@@ -468,7 +468,7 @@
           <th>Waypoint</th>
           <th>ZTME</th>
           <th>ETO</th>
-          <th>ATO</th>
+          <th>ATO <button onclick="tickAtoAutoFill();if(typeof renderFpTable==='function')renderFpTable();" style="font-size:9px;padding:1px 5px;margin-left:3px;background:#1a3a4a;color:#4fc3f7;border:1px solid #4fc3f7;border-radius:3px;cursor:pointer;vertical-align:middle;" title="現在時刻に基づいてATOを自動入力">反映</button></th>
           <th>Time Δ</th>
           <th>Plan fuel</th>
           <th>Actual fuel</th>
@@ -2976,6 +2976,18 @@ function startAtoAutoFill() {
   if(typeof FP_ROWS === 'undefined' || !FP_ROWS || FP_ROWS.length < 2) return;
   ATO_AUTO_INT = setInterval(tickAtoAutoFill, 30000);
   tickAtoAutoFill();
+  // バックグラウンドから復帰した瞬間にATOを反映する
+  if(!window._atoVisibilityListenerAdded) {
+    window._atoVisibilityListenerAdded = true;
+    document.addEventListener('visibilitychange', function() {
+      if(document.visibilityState === 'visible') {
+        if(typeof FP_ROWS !== 'undefined' && FP_ROWS && FP_ROWS.length >= 2) {
+          tickAtoAutoFill();
+          if(typeof renderFpTable === 'function') renderFpTable();
+        }
+      }
+    });
+  }
 }
 
 function stopAtoAutoFill() {
@@ -7721,7 +7733,7 @@ function drawRoute(skipAlt) {
       if(w.t || KEY_WP[w.id]) {
         m.bindTooltip('<span style="font-size:'+WP_FONT_SIZE+'px">'+w.id+'</span>',{permanent:true, direction:'top', className:'wxt', offset:[0,-4]});
       } else {
-        m.bindTooltip(w.id,{permanent:false, direction:'top', className:'wxt-wp', offset:[0,-4]});
+        m.bindTooltip('<span style="font-size:9px;opacity:.75">'+w.id+'</span>',{permanent:true, direction:'top', className:'wxt-wp', offset:[0,-3]});
       }
       LY.wpts.push(m);
     }
@@ -9252,6 +9264,62 @@ function apFetchCheckwxJson(url, opt, tag) {
     });
 }
 
+// aviationweather.gov METAR フォールバック
+// CheckWX が空の場合に呼ばれる。ICAOリストを25件ごとに分割してフェッチ。
+// 戻り値: CheckWX互換形式 {icao, flight_category, raw_text, ...} の配列を resolve する Promise
+function apFetchAvwxMetar(icaos) {
+  if(!icaos || !icaos.length) return Promise.resolve([]);
+  var chunks = apChunkIcaos(icaos, 25);
+  var reqs = chunks.map(function(chunk) {
+    var url = 'https://aviationweather.gov/api/data/metar?ids=' + chunk.join(',') + '&format=json&hours=2';
+    return fetch(url)
+      .then(function(r) { return r.ok ? r.json() : []; })
+      .catch(function() { return []; });
+  });
+  return Promise.all(reqs).then(function(results) {
+    var merged = [];
+    var i;
+    for(i = 0; i < results.length; i++) {
+      if(Array.isArray(results[i])) merged = merged.concat(results[i]);
+    }
+    // aviationweather.gov の JSON を CheckWX 互換形式に変換
+    return merged.map(function(row) {
+      if(!row || !row.icaoId) return null;
+      var cat = row.flightCategory || '';
+      // flight_category マッピング
+      var fcMap = { VFR: 'VFR', MVFR: 'MVFR', IFR: 'IFR', LIFR: 'LIFR' };
+      return {
+        icao: String(row.icaoId).toUpperCase(),
+        raw_text: row.rawOb || '',
+        flight_category: fcMap[cat] || cat,
+        temperature: { celsius: (typeof row.temp === 'number' ? row.temp : null) },
+        dewpoint:    { celsius: (typeof row.dewp === 'number' ? row.dewp : null) },
+        wind: {
+          speed_kts:   (typeof row.wspd === 'number' ? row.wspd : null),
+          degrees:     (typeof row.wdir === 'number' ? row.wdir : null),
+          gust_kts:    (typeof row.wgst === 'number' ? row.wgst : null)
+        },
+        visibility: { miles: (typeof row.visib === 'string' ? parseFloat(row.visib) : null) },
+        ceiling: (row.clouds && row.clouds.length ? (function() {
+          var c;
+          for(var ci = 0; ci < row.clouds.length; ci++) {
+            c = row.clouds[ci];
+            if(c.cover === 'BKN' || c.cover === 'OVC') {
+              return { feet_agl: (typeof c.base === 'number' ? c.base * 100 : null), code: c.cover };
+            }
+          }
+          return null;
+        })() : null),
+        clouds: (row.clouds || []).map(function(c) {
+          return { code: c.cover || '', base_feet_agl: (typeof c.base === 'number' ? c.base * 100 : null) };
+        }),
+        observed: row.reportTime || '',
+        station: { geometry: (row.lat && row.lon ? { coordinates: [row.lon, row.lat] } : null) }
+      };
+    }).filter(function(r) { return r !== null; });
+  });
+}
+
 function ensureApWxCache() {
   if(!window.__apWxCache) window.__apWxCache = { metarByIcao: {}, tafByIcao: {} };
 }
@@ -9715,7 +9783,21 @@ function loadMetarsForIcaosList(near, keepExistingLayers) {
       if(d && d.data && d.data.length) merged = merged.concat(d.data);
     }
     if(!merged.length) {
-      console.warn('[A/P-fetch] METAR all batches empty or failed');
+      console.warn('[A/P-fetch] METAR all batches empty or failed — trying avwx fallback');
+      // ── フォールバック: aviationweather.gov (認証不要) ──
+      apFetchAvwxMetar(near).then(function(avwxMerged) {
+        avwxMerged.forEach(function(row) {
+          if(row && row.icao) {
+            ensureApWxCache();
+            window.__apWxCache.metarByIcao[String(row.icao).toUpperCase()] = row;
+          }
+        });
+        renderMetarMarkers(avwxMerged, headers);
+      }).catch(function(e) {
+        console.warn('[A/P-fetch] avwx fallback also failed', e);
+        renderMetarMarkers([], headers);
+      });
+      return;
     }
     merged.forEach(function(row) {
       if(row && row.icao) {
