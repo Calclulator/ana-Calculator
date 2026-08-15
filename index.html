@@ -9428,7 +9428,7 @@ function apFetchAvwxMetar(icaos) {
   if(!icaos || !icaos.length) return Promise.resolve([]);
   var chunks = apChunkIcaos(icaos, 25);
   var reqs = chunks.map(function(chunk) {
-    var url = 'https://aviationweather.gov/api/data/metar?ids=' + chunk.join(',') + '&format=json&hours=2';
+    var url = 'https://aviationweather.gov/api/data/metar?ids=' + chunk.join(',') + '&format=json&hours=4';
     return fetch(url)
       .then(function(r) { return r.ok ? r.json() : []; })
       .catch(function() { return []; });
@@ -9697,7 +9697,7 @@ function apDrawAirportMarker(opts) {
             '<div style="color:#546e7a;font-size:13px;">METAR 読込中...</div>' +
             '</div>'
           ).openOn(map);
-          var avwxUrl = 'https://aviationweather.gov/api/data/metar?ids=' + icaoFix + '&format=json&hours=2';
+          var avwxUrl = 'https://aviationweather.gov/api/data/metar?ids=' + icaoFix + '&format=json&hours=4';
           fetch(avwxUrl)
             .then(function(r) { return r.ok ? r.json() : []; })
             .catch(function() { return []; })
