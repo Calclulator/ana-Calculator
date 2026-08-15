@@ -84,6 +84,28 @@ GitHub Desktop で commit → push すると数分で GitHub Pages に反映。
 - [ ] MLDW 行の挿入(残燃料が MLDW を下回る WP 直前にオレンジ系の行を挿入)
 - [ ] NEXRAD Radar の SAT TIME 対応(現在は最新のみ表示)
 - [ ] BOM Radar の SAT TIME 対応(表示が不安定)
+- [ ] A/P METAR の「データなし」問題（下記参照）
+
+### A/P METAR 現状と経緯（重要）
+
+**現状**: 一部空港でタップしても「METAR: データなし」が出る。
+
+**これまでの変更**:
+- CheckWX API（`eb52e4c6ca254584842adb8dc574b4f8`）がレート制限 or 部分データを返すため「データなし」が頻発
+- aviationweather.gov を **プライマリ**に変更（`commit 9fc78c5`）→ 色付き円は表示されるようになった
+- プレースホルダーマーカーのクリックハンドラーに **METARキャッシュ参照** を追加済み（`instructions-metar-popup-fix.md` を Cursor が適用済み）
+- aviationweather.gov の `hours=2` → `hours=4` に変更済み（直接 index.html を編集、未 push の場合あり）
+
+**残る問題の仮説**:
+- aviationweather.gov は `hours=N` 以内のMETARのみ返す（CheckWXは最新1件を無条件返却）
+- 一部空港（発報間隔が長い空港）が `hours=4` でも抜けるかもしれない
+- `hours=4` で解決しない場合は、個別の空港ICAOコードを確認して対応する
+
+**関連コード箇所**:
+- `function apFetchAvwxMetar(icaos)` — avwx バルクフェッチ（line ~9427）
+- `function loadMetarsForIcaosList(near, keepExistingLayers)` — プライマリ/セカンダリ切り替え（line ~9913）
+- `function renderMetarMarkers(metarList, headers)` — 円+マーカー描画（line ~9741）
+- プレースホルダークリックハンドラー — キャッシュ参照+avwx単件フェッチ（line ~9657）
 
 ### Cursor 実装待ち（指示書あり）
 
@@ -120,3 +142,8 @@ GitHub Desktop で commit → push すると数分で GitHub Pages に反映。
 - FIR 境界の二重線描画は実装済み(Day=青/Night=黄)
 - メニューには出発地→目的地、UTC、両空港 LCL Time が表示される
 - SAT TIME スライダーは右が最新、左に行くほど過去
+- WP ラベルは全件 `permanent:true` で常時表示（キー WP は大きめフォント、非キー WP は 9px・75%透明度）
+- ATO 列ヘッダーに「反映」ボタンあり。バックグラウンドから復帰時も `visibilitychange` で自動反映
+- NOTAM PDF アップロード対応。座標ベースと R/D/P 空域識別符（OpenAIP API 経由）をマップ表示
+- OpenAIP API キー: `81b014bd2dc31293a446b1562a028a72`（`OPENAIP_API_KEY` 変数に設定済み）
+- A/P METAR: aviationweather.gov プライマリ（`hours=4`）、CheckWX セカンダリ
