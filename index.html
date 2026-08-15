@@ -9424,56 +9424,118 @@ function apFetchCheckwxJson(url, opt, tag) {
 // aviationweather.gov METAR フォールバック
 // CheckWX が空の場合に呼ばれる。ICAOリストを25件ごとに分割してフェッチ。
 // 戻り値: CheckWX互換形式 {icao, flight_category, raw_text, ...} の配列を resolve する Promise
+function apConvertAvwxRow(row) {
+  if(!row || !row.icaoId) return null;
+  var cat = row.fltCat || row.flightCategory || '';
+  var fcMap = { VFR: 'VFR', MVFR: 'MVFR', IFR: 'IFR', LIFR: 'LIFR' };
+  var visNum = null;
+  if(typeof row.visib === 'number') visNum = row.visib;
+  else if(typeof row.visib === 'string') visNum = parseFloat(row.visib);
+  return {
+    icao: String(row.icaoId).toUpperCase(),
+    raw_text: row.rawOb || '',
+    flight_category: fcMap[cat] || cat,
+    _obsTime: (typeof row.obsTime === 'number' ? row.obsTime : 0),
+    temperature: { celsius: (typeof row.temp === 'number' ? row.temp : null) },
+    dewpoint:    { celsius: (typeof row.dewp === 'number' ? row.dewp : null) },
+    wind: {
+      speed_kts:   (typeof row.wspd === 'number' ? row.wspd : null),
+      degrees:     (typeof row.wdir === 'number' ? row.wdir : null),
+      gust_kts:    (typeof row.wgst === 'number' ? row.wgst : null)
+    },
+    visibility: { miles: visNum },
+    ceiling: (row.clouds && row.clouds.length ? (function() {
+      var c;
+      for(var ci = 0; ci < row.clouds.length; ci++) {
+        c = row.clouds[ci];
+        if(c.cover === 'BKN' || c.cover === 'OVC') {
+          return { feet_agl: (typeof c.base === 'number' ? c.base : null), code: c.cover };
+        }
+      }
+      return null;
+    })() : null),
+    clouds: (row.clouds || []).map(function(c) {
+      return { code: c.cover || '', base_feet_agl: (typeof c.base === 'number' ? c.base : null) };
+    }),
+    observed: row.reportTime || '',
+    station: { geometry: (typeof row.lat === 'number' && typeof row.lon === 'number' ? { coordinates: [row.lon, row.lat] } : null) }
+  };
+}
+
+function apDedupeMetarsByIcao(list) {
+  var best = {};
+  var i, row, ic, prev;
+  for(i = 0; i < list.length; i++) {
+    row = list[i];
+    if(!row || !row.icao) continue;
+    ic = String(row.icao).toUpperCase();
+    prev = best[ic];
+    if(!prev || (row._obsTime || 0) >= (prev._obsTime || 0)) best[ic] = row;
+  }
+  var out = [];
+  for(ic in best) {
+    if(Object.prototype.hasOwnProperty.call(best, ic)) out.push(best[ic]);
+  }
+  return out;
+}
+
+function apCacheMetarRows(rows) {
+  if(!rows || !rows.length) return;
+  ensureApWxCache();
+  var i, row, ic;
+  for(i = 0; i < rows.length; i++) {
+    row = rows[i];
+    if(!row || !row.icao) continue;
+    ic = String(row.icao).toUpperCase();
+    window.__apWxCache.metarByIcao[ic] = row;
+  }
+}
+
 function apFetchAvwxMetar(icaos) {
   if(!icaos || !icaos.length) return Promise.resolve([]);
-  var chunks = apChunkIcaos(icaos, 25);
+  var chunks = apChunkIcaos(icaos, 20);
   var reqs = chunks.map(function(chunk) {
-    var url = 'https://aviationweather.gov/api/data/metar?ids=' + chunk.join(',') + '&format=json&hours=4';
+    var url = 'https://aviationweather.gov/api/data/metar?ids=' + chunk.join(',') + '&format=json&hours=12';
     return fetch(url)
       .then(function(r) { return r.ok ? r.json() : []; })
       .catch(function() { return []; });
   });
   return Promise.all(reqs).then(function(results) {
     var merged = [];
-    var i;
+    var i, conv;
     for(i = 0; i < results.length; i++) {
-      if(Array.isArray(results[i])) merged = merged.concat(results[i]);
+      if(!Array.isArray(results[i])) continue;
+      results[i].forEach(function(raw) {
+        conv = apConvertAvwxRow(raw);
+        if(conv) merged.push(conv);
+      });
     }
-    // aviationweather.gov の JSON を CheckWX 互換形式に変換
-    return merged.map(function(row) {
-      if(!row || !row.icaoId) return null;
-      var cat = row.flightCategory || '';
-      // flight_category マッピング
-      var fcMap = { VFR: 'VFR', MVFR: 'MVFR', IFR: 'IFR', LIFR: 'LIFR' };
-      return {
-        icao: String(row.icaoId).toUpperCase(),
-        raw_text: row.rawOb || '',
-        flight_category: fcMap[cat] || cat,
-        temperature: { celsius: (typeof row.temp === 'number' ? row.temp : null) },
-        dewpoint:    { celsius: (typeof row.dewp === 'number' ? row.dewp : null) },
-        wind: {
-          speed_kts:   (typeof row.wspd === 'number' ? row.wspd : null),
-          degrees:     (typeof row.wdir === 'number' ? row.wdir : null),
-          gust_kts:    (typeof row.wgst === 'number' ? row.wgst : null)
-        },
-        visibility: { miles: (typeof row.visib === 'string' ? parseFloat(row.visib) : null) },
-        ceiling: (row.clouds && row.clouds.length ? (function() {
-          var c;
-          for(var ci = 0; ci < row.clouds.length; ci++) {
-            c = row.clouds[ci];
-            if(c.cover === 'BKN' || c.cover === 'OVC') {
-              return { feet_agl: (typeof c.base === 'number' ? c.base * 100 : null), code: c.cover };
-            }
-          }
-          return null;
-        })() : null),
-        clouds: (row.clouds || []).map(function(c) {
-          return { code: c.cover || '', base_feet_agl: (typeof c.base === 'number' ? c.base * 100 : null) };
-        }),
-        observed: row.reportTime || '',
-        station: { geometry: (row.lat && row.lon ? { coordinates: [row.lon, row.lat] } : null) }
-      };
-    }).filter(function(r) { return r !== null; });
+    return apDedupeMetarsByIcao(merged);
+  });
+}
+
+function apFetchCheckwxMetarList(icaos) {
+  if(!icaos || !icaos.length) return Promise.resolve([]);
+  var headers = AP_CHECKWX_HEADERS;
+  var chunks = apChunkIcaos(icaos, 25);
+  var reqs = chunks.map(function(chunk, idx) {
+    var metarUrl = 'https://api.checkwx.com/v2/metar/' + chunk.join(',') + '/decoded';
+    return apFetchCheckwxJson(metarUrl, headers, 'METAR-batch-' + (idx + 1))
+      .then(function(res) { return { ok: true, res: res, idx: idx }; })
+      .catch(function(err) { return { ok: false, err: err, idx: idx }; });
+  });
+  return Promise.all(reqs).then(function(results) {
+    var merged = [];
+    var i, d;
+    for(i = 0; i < results.length; i++) {
+      if(!results[i].ok) {
+        console.warn('[A/P-fetch] METAR batch failed idx=' + results[i].idx, results[i].err);
+        continue;
+      }
+      d = results[i].res && results[i].res.json ? results[i].res.json : null;
+      if(d && d.data && d.data.length) merged = merged.concat(d.data);
+    }
+    return merged;
   });
 }
 
@@ -9690,38 +9752,51 @@ function apDrawAirportMarker(opts) {
               });
             return;
           }
-          // キャッシュなし → aviationweather.gov から1件取得
+          // キャッシュなし → CheckWX → aviationweather.gov
           pop.setLatLng(ll).setContent(
             '<div class="wx-radar-popup-metar" style="font-family:monospace;font-size:13px;min-width:300px;background:#fff;color:#1a1a1a;padding:10px;border-radius:4px;">' +
             '<div style="font-weight:bold;margin-bottom:8px;color:#1565c0;font-size:13px;">' + escH(icaoFix) + '</div>' +
             '<div style="color:#546e7a;font-size:13px;">METAR 読込中...</div>' +
             '</div>'
           ).openOn(map);
-          var avwxUrl = 'https://aviationweather.gov/api/data/metar?ids=' + icaoFix + '&format=json&hours=4';
-          fetch(avwxUrl)
-            .then(function(r) { return r.ok ? r.json() : []; })
-            .catch(function() { return []; })
-            .then(function(rows) {
-              if(!Array.isArray(rows) || !rows.length || !rows[0]) {
-                pop.setContent(apPopupNoMetarHtml(icaoFix));
+          function showAvwxOrNone() {
+            var avwxUrl = 'https://aviationweather.gov/api/data/metar?ids=' + icaoFix + '&format=json&hours=12';
+            fetch(avwxUrl)
+              .then(function(r) { return r.ok ? r.json() : []; })
+              .catch(function() { return []; })
+              .then(function(rows) {
+                var conv = null;
+                var ri, cand;
+                if(Array.isArray(rows)) {
+                  for(ri = 0; ri < rows.length; ri++) {
+                    cand = apConvertAvwxRow(rows[ri]);
+                    if(cand && (!conv || (cand._obsTime || 0) >= (conv._obsTime || 0))) conv = cand;
+                  }
+                }
+                if(!conv) {
+                  pop.setContent(apPopupNoMetarHtml(icaoFix));
+                  return;
+                }
+                ensureApWxCache();
+                window.__apWxCache.metarByIcao[icaoFix] = conv;
+                pop.setContent(apPopupMetarTafHtml(conv, ''));
+              });
+          }
+          var metarUrl1 = 'https://api.checkwx.com/v2/metar/' + icaoFix + '/decoded';
+          apFetchCheckwxJson(metarUrl1, AP_CHECKWX_HEADERS, 'METAR-ph-' + icaoFix)
+            .then(function(res) {
+              var d1 = res && res.json ? res.json : null;
+              var row1 = d1 && d1.data && d1.data[0] ? d1.data[0] : null;
+              if(row1 && row1.raw_text) {
+                ensureApWxCache();
+                window.__apWxCache.metarByIcao[icaoFix] = row1;
+                pop.setContent(apPopupMetarTafHtml(row1, ''));
                 return;
               }
-              var row = rows[0];
-              var cat = row.flightCategory || '';
-              var fcMap = { VFR: 'VFR', MVFR: 'MVFR', IFR: 'IFR', LIFR: 'LIFR' };
-              var m2 = {
-                icao: String(row.icaoId || icaoFix).toUpperCase(),
-                raw_text: row.rawOb || '',
-                flight_category: fcMap[cat] || cat,
-                temperature: { celsius: row.temp },
-                dewpoint: { celsius: row.dewp },
-                wind: { speed_kts: row.wspd, degrees: row.wdir, gust_kts: row.wgst },
-                visibility: { miles: parseFloat(row.visib) || null },
-                station: { geometry: (row.lat && row.lon ? { coordinates: [row.lon, row.lat] } : null) }
-              };
-              ensureApWxCache();
-              window.__apWxCache.metarByIcao[icaoFix] = m2;
-              pop.setContent(apPopupMetarTafHtml(m2, ''));
+              showAvwxOrNone();
+            })
+            .catch(function() {
+              showAvwxOrNone();
             });
         };
       })(icao, llAp));
@@ -9984,50 +10059,43 @@ function loadMetarsForIcaosList(near, keepExistingLayers) {
   if(!near || !near.length) return Promise.resolve();
   var headers = AP_CHECKWX_HEADERS;
 
-  console.log('[A/P-fetch] METAR: trying aviationweather.gov (primary)', near.length, 'airports');
+  console.log('[A/P-fetch] METAR: CheckWX + aviationweather.gov merge', near.length, 'airports');
 
-  // ── プライマリ: aviationweather.gov (認証不要・レート制限なし) ──
-  return apFetchAvwxMetar(near).then(function(avwxMerged) {
-    if(avwxMerged && avwxMerged.length) {
-      console.log('[A/P-fetch] aviationweather.gov OK:', avwxMerged.length, 'METARs');
-      avwxMerged.forEach(function(row) {
-        if(row && row.icao) {
-          ensureApWxCache();
-          window.__apWxCache.metarByIcao[String(row.icao).toUpperCase()] = row;
-        }
-      });
-      renderMetarMarkers(avwxMerged, headers);
-      return;
+  // 両方取得して ICAO 単位でマージ（片方の CORS/レート制限で欠落しないようにする）
+  return Promise.all([
+    apFetchCheckwxMetarList(near).catch(function(e) {
+      console.warn('[A/P-fetch] CheckWX failed', e);
+      return [];
+    }),
+    apFetchAvwxMetar(near).catch(function(e) {
+      console.warn('[A/P-fetch] aviationweather.gov failed', e);
+      return [];
+    })
+  ]).then(function(pair) {
+    var checkwx = pair[0] || [];
+    var avwx = pair[1] || [];
+    var byIcao = {};
+    var i, row, ic;
+    for(i = 0; i < checkwx.length; i++) {
+      row = checkwx[i];
+      if(!row || !row.icao) continue;
+      ic = String(row.icao).toUpperCase();
+      row.icao = ic;
+      byIcao[ic] = row;
     }
-
-    // ── セカンダリ: CheckWX (aviationweather.govが空の場合のみ) ──
-    console.warn('[A/P-fetch] aviationweather.gov returned empty — falling back to CheckWX');
-    var chunks = apChunkIcaos(near, 25);
-    var reqs = chunks.map(function(chunk, idx) {
-      var metarUrl = 'https://api.checkwx.com/v2/metar/' + chunk.join(',') + '/decoded';
-      return apFetchCheckwxJson(metarUrl, headers, 'METAR-batch-' + (idx + 1))
-        .then(function(res) { return { ok: true, res: res, idx: idx }; })
-        .catch(function(err) { return { ok: false, err: err, idx: idx }; });
-    });
-    return Promise.all(reqs).then(function(results) {
-      var merged = [];
-      var i;
-      for(i = 0; i < results.length; i++) {
-        if(!results[i].ok) {
-          console.warn('[A/P-fetch] METAR batch failed idx=' + results[i].idx, results[i].err);
-          continue;
-        }
-        var d = results[i].res && results[i].res.json ? results[i].res.json : null;
-        if(d && d.data && d.data.length) merged = merged.concat(d.data);
-      }
-      merged.forEach(function(row) {
-        if(row && row.icao) {
-          ensureApWxCache();
-          window.__apWxCache.metarByIcao[String(row.icao).toUpperCase()] = row;
-        }
-      });
-      renderMetarMarkers(merged, headers);
-    });
+    for(i = 0; i < avwx.length; i++) {
+      row = avwx[i];
+      if(!row || !row.icao) continue;
+      ic = String(row.icao).toUpperCase();
+      if(!byIcao[ic] || (!byIcao[ic].raw_text && row.raw_text)) byIcao[ic] = row;
+    }
+    var merged = [];
+    for(ic in byIcao) {
+      if(Object.prototype.hasOwnProperty.call(byIcao, ic)) merged.push(byIcao[ic]);
+    }
+    console.log('[A/P-fetch] merged METARs', merged.length, 'checkwx=', checkwx.length, 'avwx=', avwx.length);
+    apCacheMetarRows(merged);
+    renderMetarMarkers(merged, headers);
   }).catch(function(err) {
     console.error('[A/P-fetch] loadMetars failed', err && err.message);
     renderMetarMarkers([], headers);
