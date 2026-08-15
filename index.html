@@ -6398,25 +6398,19 @@ var APCH_LEVELS = [
 ];
 var APCH_DISTS = [200, 150, 100, 50, 0];
 
-function apchEscAttr(v) {
-  return String(v).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
-}
-function apchSvgOpen(tag, attrs) {
-  var s = '<' + tag;
+function apchSvgEl(tag, attrs, text) {
+  var NS = 'http://www.w3.org/2000/svg';
+  var n = document.createElementNS(NS, tag);
   var k;
-  for (k in attrs) {
-    if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
-    if (attrs[k] == null) continue;
-    s += ' ' + k + "='" + apchEscAttr(attrs[k]) + "'";
+  if(attrs) {
+    for(k in attrs) {
+      if(!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+      if(attrs[k] == null) continue;
+      n.setAttribute(k, String(attrs[k]));
+    }
   }
-  return s + '>';
-}
-function apchSvgVoid(tag, attrs) {
-  var open = apchSvgOpen(tag, attrs);
-  return open.slice(0, open.length - 1) + '/>';
-}
-function apchSvgText(attrs, text) {
-  return apchSvgOpen('text', attrs) + (text == null ? '' : String(text)) + '</text>';
+  if(text != null && text !== '') n.appendChild(document.createTextNode(String(text)));
+  return n;
 }
 
 function apchPad2(n) {
@@ -6742,8 +6736,8 @@ function renderApchPanel() {
       '</div>' +
       '<button type="button" id="apch-run-btn" onclick="runApchBrief()" style="' + runStyle + '">RUN APCH BRIEF</button>' +
       '<div id="apch-msg" style="margin-top:10px;font-size:12px;color:' + C.lbl + ';"></div>' +
-      '<div id="apch-section" style="margin-top:18px;"></div>' +
-      '<div id="apch-taf" style="margin-top:18px;"></div>' +
+      '<div id="apch-section" style="margin-top:18px;min-height:120px;"></div>' +
+      '<div id="apch-taf" style="margin-top:18px;min-height:80px;"></div>' +
     '</div>';
 
   panel.setAttribute('data-mode', modeKey);
@@ -6760,6 +6754,7 @@ function renderApchPanel() {
 
 function renderCrossSection(wxData, points) {
   var host = document.getElementById('apch-section');
+  console.log('[APCH] コンテナ', host);
   if(!host) return;
   var C = getDayColors();
   var nCol = APCH_DISTS.length;
@@ -6768,23 +6763,27 @@ function renderCrossSection(wxData, points) {
   var cellW = 78, cellH = 40;
   var W = leftPad + nCol * cellW + rightPad;
   var H = topPad + nRow * cellH + botPad;
-  var svg = [];
-  var r, c, x, y, cell, spd, dir, cloudy, rot, lbl, fill, vb;
-  vb = '0 0 ' + W + ' ' + H;
-  svg.push(apchSvgOpen('svg', {
-    xmlns: 'http://www.w3.org/2000/svg',
-    viewBox: vb,
-    width: '100%',
-    style: 'max-width:' + W + 'px;display:block'
-  }));
-  svg.push(apchSvgText({
+  var r, c, x, y, cell, spd, dir, cloudy, rot, lbl, fill;
+  var g, g2, svg;
+
+  while(host.firstChild) host.removeChild(host.firstChild);
+
+  svg = apchSvgEl('svg', {
+    width: W,
+    height: H,
+    viewBox: '0 0 ' + W + ' ' + H
+  });
+  svg.style.display = 'block';
+  svg.style.maxWidth = '100%';
+
+  svg.appendChild(apchSvgEl('text', {
     x: leftPad + nCol * cellW / 2, y: 12, 'text-anchor': 'middle',
     fill: C.acc, 'font-size': 12, 'font-weight': 'bold', 'letter-spacing': '0.08em'
   }, '高度断面図'));
 
   for(r = 0; r < nRow; r++) {
     y = topPad + r * cellH;
-    svg.push(apchSvgText({
+    svg.appendChild(apchSvgEl('text', {
       x: leftPad - 8, y: y + cellH / 2 + 4, 'text-anchor': 'end',
       fill: C.lbl, 'font-size': 10
     }, APCH_LEVELS[r].fl));
@@ -6792,21 +6791,26 @@ function renderCrossSection(wxData, points) {
       x = leftPad + c * cellW;
       cell = (wxData && wxData[c] && wxData[c][r]) ? wxData[c][r] : null;
       cloudy = cell && cell.cloudcover > 50;
-      fill = cloudy ? ((typeof DAY_MODE !== 'undefined' && DAY_MODE) ? 'rgba(120,128,140,.28)' : 'rgba(180,190,200,.22)') : 'transparent';
-      svg.push(apchSvgVoid('rect', {
+      fill = cloudy ? ((typeof DAY_MODE !== 'undefined' && DAY_MODE) ? 'rgba(120,128,140,.28)' : 'rgba(180,190,200,.22)') : 'none';
+      svg.appendChild(apchSvgEl('rect', {
         x: x, y: y, width: cellW, height: cellH, fill: fill, stroke: C.bdr, 'stroke-width': 1
       }));
       if(cell && cell.windspeed != null && !isNaN(cell.windspeed)) {
         spd = Math.round(Number(cell.windspeed));
         dir = (cell.winddir != null && !isNaN(cell.winddir)) ? Number(cell.winddir) : 0;
         rot = dir;
-        svg.push(apchSvgOpen('g', { transform: 'translate(' + (x + cellW / 2) + ',' + (y + cellH / 2) + ')' }));
-        svg.push(apchSvgText({ y: -7, 'text-anchor': 'middle', fill: C.hi, 'font-size': 11, 'font-weight': 'bold' }, spd));
-        svg.push(apchSvgOpen('g', { transform: 'rotate(' + rot + ')' }));
-        svg.push(apchSvgText({ y: 14, 'text-anchor': 'middle', fill: C.acc, 'font-size': 12 }, '▲'));
-        svg.push('</g></g>');
+        g = apchSvgEl('g', { transform: 'translate(' + (x + cellW / 2) + ',' + (y + cellH / 2) + ')' });
+        g.appendChild(apchSvgEl('text', {
+          y: -7, 'text-anchor': 'middle', fill: C.hi, 'font-size': 11, 'font-weight': 'bold'
+        }, spd));
+        g2 = apchSvgEl('g', { transform: 'rotate(' + rot + ')' });
+        g2.appendChild(apchSvgEl('text', {
+          y: 14, 'text-anchor': 'middle', fill: C.acc, 'font-size': 12
+        }, '▲'));
+        g.appendChild(g2);
+        svg.appendChild(g);
       } else {
-        svg.push(apchSvgText({
+        svg.appendChild(apchSvgEl('text', {
           x: x + cellW / 2, y: y + cellH / 2 + 4, 'text-anchor': 'middle',
           fill: C.dim, 'font-size': 11
         }, '—'));
@@ -6816,17 +6820,22 @@ function renderCrossSection(wxData, points) {
   for(c = 0; c < nCol; c++) {
     x = leftPad + c * cellW + cellW / 2;
     lbl = (points && points[c] && points[c].dist === 0) ? 'APT' : (APCH_DISTS[c] + 'NM');
-    svg.push(apchSvgText({ x: x, y: H - 10, 'text-anchor': 'middle', fill: C.lbl, 'font-size': 10 }, lbl));
+    svg.appendChild(apchSvgEl('text', {
+      x: x, y: H - 10, 'text-anchor': 'middle', fill: C.lbl, 'font-size': 10
+    }, lbl));
   }
-  svg.push('</svg>');
-  svg.push('<div style="color:' + C.dim + ';font-size:10px;margin-top:4px;">風速 kt ／ ▲ は風の吹いてくる方向（FROM）。雲量 50%超のセルはグレー。</div>');
-  host.innerHTML = svg.join('');
-  var svgRoot = host.querySelector('svg');
-  if(svgRoot) svgRoot.setAttribute('viewBox', vb);
+
+  host.appendChild(svg);
+  var note = document.createElement('div');
+  note.style.cssText = 'color:' + C.dim + ';font-size:10px;margin-top:4px;';
+  note.appendChild(document.createTextNode('風速 kt ／ ▲ は風の吹いてくる方向（FROM）。雲量 50%超のセルはグレー。'));
+  host.appendChild(note);
+  console.log('[APCH] cross-section svg', svg.getAttribute('viewBox'), svg.getBoundingClientRect());
 }
 
 function renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate) {
   var host = document.getElementById('apch-taf');
+  console.log('[APCH] TAFコンテナ', host);
   if(!host) return;
   var C = getDayColors();
   var eta = etaDate.getTime();
@@ -6834,14 +6843,13 @@ function renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate) {
   var t0 = eta - win;
   var t1 = eta + win;
   var span = t1 - t0;
-  var leftPad = 86, topPad = 22, barH = 22, gap = 14, botPad = 28, rightPad = 8;
+  var leftPad = 86, topPad = 22, barH = 22, gap = 14, botPad = 28;
   var barW = 420;
-  var rows = [{ icao: destIcao || 'DEST', segs: destTaf || [], overlay: true }];
-  if(altIcao) rows.push({ icao: altIcao, segs: altTaf || [], overlay: true });
+  var rows = [{ icao: destIcao || 'DEST', segs: destTaf || [] }];
+  if(altIcao) rows.push({ icao: altIcao, segs: altTaf || [] });
   var H = topPad + rows.length * (barH + gap) + botPad;
-  var W = leftPad + barW + rightPad;
-  var svg = [];
-  var i, j, row, y, segs, prev, ovl, s, x1, x2, w, tick, tx, lab, cat;
+  var W = leftPad + barW + 8;
+  var i, j, row, y, segs, prev, ovl, s, x1, x2, w, tick, tx, lab, cat, svg, lg, sw, sp;
 
   function xOf(t) {
     var p = (t - t0) / span;
@@ -6858,13 +6866,17 @@ function renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate) {
     return { prev: a, ovl: b };
   }
 
-  svg.push(apchSvgOpen('svg', {
-    xmlns: 'http://www.w3.org/2000/svg',
-    viewBox: '0 0 ' + W + ' ' + H,
-    width: '100%',
-    style: 'max-width:' + W + 'px;display:block'
-  }));
-  svg.push(apchSvgText({
+  while(host.firstChild) host.removeChild(host.firstChild);
+
+  svg = apchSvgEl('svg', {
+    width: W,
+    height: H,
+    viewBox: '0 0 ' + W + ' ' + H
+  });
+  svg.style.display = 'block';
+  svg.style.maxWidth = '100%';
+
+  svg.appendChild(apchSvgEl('text', {
     x: leftPad + barW / 2, y: 14, 'text-anchor': 'middle',
     fill: C.acc, 'font-size': 12, 'font-weight': 'bold', 'letter-spacing': '0.08em'
   }, 'TAFタイムライン'));
@@ -6872,18 +6884,18 @@ function renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate) {
   for(i = 0; i < rows.length; i++) {
     row = rows[i];
     y = topPad + i * (barH + gap);
-    svg.push(apchSvgText({
+    svg.appendChild(apchSvgEl('text', {
       x: leftPad - 8, y: y + barH / 2 + 4, 'text-anchor': 'end',
       fill: C.lbl, 'font-size': 10
     }, (i === 0 ? 'DEST ' : 'ALT ') + String(row.icao)));
-    svg.push(apchSvgVoid('rect', {
+    svg.appendChild(apchSvgEl('rect', {
       x: leftPad, y: y, width: barW, height: barH, fill: C.bg3, stroke: C.bdr, rx: 3
     }));
     segs = splitSegs(row.segs);
     prev = segs.prev;
     ovl = segs.ovl;
     if(!prev.length && !ovl.length) {
-      svg.push(apchSvgText({
+      svg.appendChild(apchSvgEl('text', {
         x: leftPad + barW / 2, y: y + barH / 2 + 4, 'text-anchor': 'middle',
         fill: C.dim, 'font-size': 10
       }, 'TAF N/A'));
@@ -6894,11 +6906,11 @@ function renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate) {
       x2 = xOf(s.to);
       w = x2 - x1;
       if(w < 1) w = 1;
-      svg.push(apchSvgVoid('rect', {
+      svg.appendChild(apchSvgEl('rect', {
         x: x1, y: y, width: w, height: barH, fill: apchCatColor(s.cat), opacity: 0.85
       }));
       if(w >= 36) {
-        svg.push(apchSvgText({
+        svg.appendChild(apchSvgEl('text', {
           x: x1 + w / 2, y: y + barH / 2 + 4, 'text-anchor': 'middle',
           fill: '#ffffff', 'font-size': 9, 'font-weight': 'bold'
         }, s.cat));
@@ -6910,7 +6922,7 @@ function renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate) {
       x2 = xOf(s.to);
       w = x2 - x1;
       if(w < 1) w = 1;
-      svg.push(apchSvgVoid('rect', {
+      svg.appendChild(apchSvgEl('rect', {
         x: x1, y: y + 4, width: w, height: barH - 8,
         fill: apchCatColor(s.cat), opacity: 0.55,
         stroke: '#fff', 'stroke-width': 0.5, 'stroke-dasharray': '3 2'
@@ -6919,35 +6931,47 @@ function renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate) {
   }
 
   var etaX = xOf(eta);
-  svg.push(apchSvgVoid('line', {
+  svg.appendChild(apchSvgEl('line', {
     x1: etaX, y1: topPad - 2, x2: etaX, y2: topPad + rows.length * (barH + gap) - gap,
     stroke: '#ffffff', 'stroke-width': 1.5, 'stroke-dasharray': '4 3'
   }));
-  svg.push(apchSvgText({ x: etaX, y: H - 8, 'text-anchor': 'middle', fill: C.hi, 'font-size': 9 }, 'ETA'));
+  svg.appendChild(apchSvgEl('text', {
+    x: etaX, y: H - 8, 'text-anchor': 'middle', fill: C.hi, 'font-size': 9
+  }, 'ETA'));
 
   for(tick = t0; tick <= t1 + 1000; tick += 3600000) {
     tx = xOf(tick);
     lab = apchPad2(new Date(tick).getUTCHours()) + 'Z';
-    svg.push(apchSvgVoid('line', {
+    svg.appendChild(apchSvgEl('line', {
       x1: tx, y1: H - 26, x2: tx, y2: H - 22, stroke: C.dim
     }));
     if(Math.abs(tick - eta) > 20 * 60 * 1000) {
-      svg.push(apchSvgText({ x: tx, y: H - 8, 'text-anchor': 'middle', fill: C.dim, 'font-size': 9 }, lab));
+      svg.appendChild(apchSvgEl('text', {
+        x: tx, y: H - 8, 'text-anchor': 'middle', fill: C.dim, 'font-size': 9
+      }, lab));
     }
   }
-  svg.push('</svg>');
+
+  host.appendChild(svg);
 
   var legend = ['VFR', 'MVFR', 'IFR', 'LIFR'];
-  var lg = '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;font-size:10px;color:' + C.lbl + ';">';
+  lg = document.createElement('div');
+  lg.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;font-size:10px;color:' + C.lbl + ';';
   for(i = 0; i < legend.length; i++) {
     cat = legend[i];
-    lg += '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;background:' +
-      apchCatColor(cat) + ';border-radius:2px;display:inline-block;"></span>' + cat + '</span>';
+    sp = document.createElement('span');
+    sp.style.cssText = 'display:inline-flex;align-items:center;gap:4px;';
+    sw = document.createElement('span');
+    sw.style.cssText = 'width:12px;height:12px;background:' + apchCatColor(cat) + ';border-radius:2px;display:inline-block;';
+    sp.appendChild(sw);
+    sp.appendChild(document.createTextNode(cat));
+    lg.appendChild(sp);
   }
-  lg += '<span>破線枠 = TEMPO/PROB</span></div>';
-  host.innerHTML = svg.join('') + lg;
-  var tafSvg = host.querySelector('svg');
-  if(tafSvg) tafSvg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  sp = document.createElement('span');
+  sp.appendChild(document.createTextNode('破線枠 = TEMPO/PROB'));
+  lg.appendChild(sp);
+  host.appendChild(lg);
+  console.log('[APCH] taf svg', svg.getAttribute('viewBox'), svg.getBoundingClientRect());
 }
 
 function runApchBrief() {
@@ -7010,7 +7034,9 @@ function runApchBrief() {
         altTaf: altTaf,
         etaDate: etaDate
       };
+      console.log('[APCH] renderCrossSection呼び出し直前', wxData);
       renderCrossSection(wxData, points);
+      console.log('[APCH] renderTafTimeline呼び出し直前', destTaf, altTaf);
       renderTafTimeline(inp.destIcao, destTaf, inp.altIcao, altTaf, etaDate);
       setMsg('', false);
     });
