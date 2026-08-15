@@ -9387,17 +9387,37 @@ function apGetCircRenderer() {
   }
   return _apCircSvgRenderer;
 }
-var AP_CHECKWX_HEADERS = { headers: { 'X-API-Key': 'eb52e4c6ca254584842adb8dc574b4f8' } };
+var CHECKWX_API_KEY = 'eb52e4c6ca254584842adb8dc574b4f8';
+var AP_CHECKWX_HEADERS = { headers: { 'X-API-Key': CHECKWX_API_KEY } };
 
 function apFetchCheckwxJson(url, opt, tag) {
   var pfx = '[A/P-fetch] ' + tag + ' ';
-  console.log(pfx + 'url=', url);
-  return fetch(url, opt || {})
+  var headers = {};
+  var src = (opt && opt.headers) ? opt.headers : null;
+  var k;
+  if(src) {
+    if(typeof src.forEach === 'function') {
+      src.forEach(function(v, hk) { headers[hk] = v; });
+    } else {
+      for(k in src) {
+        if(Object.prototype.hasOwnProperty.call(src, k)) headers[k] = src[k];
+      }
+    }
+  }
+  headers['X-API-Key'] = CHECKWX_API_KEY;
+  var init = { mode: 'cors', headers: headers };
+  if(opt) {
+    for(k in opt) {
+      if(Object.prototype.hasOwnProperty.call(opt, k) && k !== 'headers') init[k] = opt[k];
+    }
+  }
+  console.log(pfx + 'url=', url, 'hasKey=', !!(CHECKWX_API_KEY && String(CHECKWX_API_KEY).length));
+  return fetch(url, init)
     .then(function(r) {
       var hdrs = {};
       try {
         if(r.headers && r.headers.forEach) {
-          r.headers.forEach(function(v, k) { hdrs[k] = v; });
+          r.headers.forEach(function(v, hk) { hdrs[hk] = v; });
         }
       } catch(e) {}
       console.log(pfx + 'status=', r.status, 'ok=', r.ok, 'content-type=', hdrs['content-type'] || '(none)');
