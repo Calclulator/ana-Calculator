@@ -1020,6 +1020,8 @@ var NAV_ACFT_CODE = null;   // JetPlan 機材コード (例: 'NH8A')
 var NAV_TAX_LBS = null;     // TAX燃料 (lbs)
 var DUMP_TIME_MIN = null;   // Time to Dump 算出の所要時間(分)。未計算は null
 var NOTAM_DATA = [];   // パース済みエリア NOTAM の配列
+var OPENAIP_API_KEY = '81b014bd2dc31293a446b1562a028a72';  // openaip.net で取得したキーに置換
+var NOTAM_AIRSPACE_CACHE = {};  // designator → OpenAIP GeoJSON キャッシュ
 // JetPlan コードのプレフィックスで機材を判定
 // サフィックス(A/C/K等)はエンジン種別のため無視する
 function getDumpParams(acftCode) {
@@ -8907,6 +8909,38 @@ function fetchSigmetGeojsonBypassCache() {
 // NOTAM PDF OVERLAY
 // =====================================================================
 
+// ICAO 2文字プレフィックス → ISO 国コード (ANA 主要路線カバー)
+function icaoPrefixToCountry(icao) {
+  if(!icao || icao.length < 2) return '';
+  var p2 = icao.substring(0, 2).toUpperCase();
+  var p1 = icao.substring(0, 1).toUpperCase();
+  var map2 = {
+    'RJ':'JP','RO':'JP',
+    'NZ':'NZ',
+    'WS':'SG',
+    'VM':'HK',
+    'VT':'TH','VV':'VN','VY':'MM',
+    'VI':'IN','VO':'IN','VE':'IN','VA':'IN',
+    'ZB':'CN','ZG':'CN','ZH':'CN','ZJ':'CN','ZL':'CN',
+    'ZP':'CN','ZS':'CN','ZT':'CN','ZU':'CN','ZW':'CN','ZY':'CN',
+    'OE':'SA','OM':'AE','OI':'IR','OK':'KW','OB':'BH'
+  };
+  var map1 = { 'Y':'AU', 'K':'US', 'P':'US' };
+  return map2[p2] || map1[p1] || '';
+}
+
+// テキスト中の ICAO 空港コードから国コードを推定
+function guessCountryFromText(text) {
+  // 4文字大文字のICAOコードを探す
+  var icaoRe = /\b([A-Z]{4})\b/g;
+  var m;
+  while((m = icaoRe.exec(text)) !== null) {
+    var c = icaoPrefixToCountry(m[1]);
+    if(c) return c;
+  }
+  return '';
+}
+
 // NOTAM座標文字列 (例: "412500N1412945E" / "023000.00N1051628.72E") をパース
 function parseNotamCoord(coordStr) {
   var m = coordStr.match(
@@ -8930,8 +8964,7 @@ function parseNotamText(rawText) {
   while((mm = detectRe.exec(rawText)) !== null) {
     all.push({ idx: mm.index, raw: mm[0] });
   }
-  if(!all.length) return;
-
+  if(all.length) {
   // 前後 200文字以内の座標を同一エリアとしてグループ化
   var groups = [];
   var cur = [all[0]];
@@ -9005,9 +9038,99 @@ function parseNotamText(rawText) {
       });
     }
   }
+  }
+
+  // ── 空域識別符 (R481 ACT 等) の検出 ───────────────────────────────
+  // 座標を含まないNOTAMで "R481 ACT" / "D203 ACTIVE" 等のパターンを検出する
+  var airspaceRe = /\b([RDPCTW]\d{3,4}[A-Z]?)\s+(?:ACT(?:IVE)?|ACTVD)\b/g;
+  var foundDesignators = {};
+  var am;
+  while((am = airspaceRe.exec(rawText)) !== null) {
+    var desig = am[1];
+    if(foundDesignators[desig]) continue;
+    foundDesignators[desig] = true;
+
+    // この識別符の前後 600文字を取り出してタイトル・有効期限・国コードを抽出
+    var aStart = Math.max(0, am.index - 400);
+    var aEnd   = Math.min(rawText.length, am.index + 600);
+    var aText  = rawText.substring(aStart, aEnd);
+
+    // 同じ識別符が座標グループとして既に NOTAM_DATA にある場合はスキップ
+    var alreadyParsed = false;
+    var ni;
+    for(ni = 0; ni < NOTAM_DATA.length; ni++) {
+      if(NOTAM_DATA[ni].designator === desig) { alreadyParsed = true; break; }
+    }
+    if(alreadyParsed) continue;
+
+    // 有効期限
+    var aTilM = aText.match(/TIL[\-\s]*(\d{2}\/\d{2}(?:[^\n]{0,30})?)/);
+    var aValidity = aTilM ? 'TIL ' + aTilM[1].replace(/\s+/g,' ').trim() : '';
+
+    // 国コード推定
+    var aCountry = guessCountryFromText(aText);
+
+    // タイトル: 識別符の直前の大文字フレーズ
+    var beforeDesig = rawText.substring(Math.max(0, am.index - 100), am.index);
+    var titlePhraseM = beforeDesig.match(/([A-Z][A-Z\s\/\-]{5,60})\s*$/);
+    var aTitle = titlePhraseM
+      ? titlePhraseM[1].replace(/\s+/g,' ').trim() + ' ' + desig
+      : desig + ' ACT';
+
+    // fullText: TIL行で終端
+    var afterDesig = rawText.substring(am.index, am.index + 600);
+    var endM2 = afterDesig.match(/TIL[\-\s]*\d{2}\/\d{2}[^\n]{0,60}?\([A-Z]{2,8}\)/);
+    var aFullEnd = endM2 ? am.index + endM2.index + endM2[0].length : am.index + 400;
+    var aFull = rawText.substring(Math.max(0, am.index - 200), aFullEnd).trim();
+
+    NOTAM_DATA.push({
+      title:    aTitle,
+      validity: aValidity,
+      fullText: aFull,
+      coords:   null,         // 座標なし → OpenAIP から取得
+      designator: desig,
+      designatorCountry: aCountry,
+      geoJson:  null          // fetchOpenAipAirspace() で非同期に埋める
+    });
+  }
 }
 
-// NOTAM レイヤーをマップに描画
+// OpenAIP から空域識別符の GeoJSON ポリゴンを取得する
+// 結果は NOTAM_AIRSPACE_CACHE[designator] にキャッシュ
+function fetchOpenAipAirspace(designator, country, callback) {
+  if(!OPENAIP_API_KEY || OPENAIP_API_KEY === 'YOUR_OPENAIP_API_KEY_HERE') {
+    callback(null);
+    return;
+  }
+  // キャッシュヒット
+  if(NOTAM_AIRSPACE_CACHE[designator] !== undefined) {
+    callback(NOTAM_AIRSPACE_CACHE[designator]);
+    return;
+  }
+  var url = 'https://api.core.openaip.net/api/airspaces?designator='
+    + encodeURIComponent(designator)
+    + (country ? '&country=' + encodeURIComponent(country) : '')
+    + '&limit=5'
+    + '&apiKey=' + encodeURIComponent(OPENAIP_API_KEY);
+  fetch(url)
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(data) {
+      var geo = null;
+      if(data && data.items && data.items.length) {
+        // 最初にマッチした空域の geometry を使用
+        geo = data.items[0].geometry || null;
+      }
+      NOTAM_AIRSPACE_CACHE[designator] = geo;
+      callback(geo);
+    })
+    .catch(function(e) {
+      console.warn('[NOTAM-airspace] fetch failed for', designator, e);
+      NOTAM_AIRSPACE_CACHE[designator] = null;
+      callback(null);
+    });
+}
+
+// NOTAM レイヤーをマップに描画（座標ベース + OpenAIP 空域ベース）
 function renderNotamLayer() {
   if(LY.notam) {
     LY.notam.forEach(function(l){ try{ map.removeLayer(l); }catch(e){} });
@@ -9019,9 +9142,9 @@ function renderNotamLayer() {
   if(typeof map === 'undefined' || !map) return;
 
   var escN = function(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
-  var color = '#ffa726';  // オレンジ（警告系）
+  var color = '#ffa726';
 
-  NOTAM_DATA.forEach(function(notam) {
+  function addLayerToMap(notam, geometry) {
     var popHtml =
       '<div style="font-family:monospace;font-size:12px;min-width:380px;max-width:520px;' +
       'background:#fff;color:#1a1a1a;padding:8px;border-radius:4px;">' +
@@ -9034,23 +9157,57 @@ function renderNotamLayer() {
       '</div>';
 
     var layer;
-    if(notam.coords.length >= 3) {
+    if(geometry) {
+      // OpenAIP GeoJSON ポリゴン
+      layer = L.geoJSON(geometry, {
+        style: function() {
+          return { color: color, weight: 2, fillOpacity: 0.12, fillColor: color };
+        }
+      });
+      layer.bindPopup(popHtml, { maxWidth: 560, minWidth: 400 });
+      layer.bindTooltip(escN(notam.title), { className: 'sgx', sticky: true, direction: 'auto' });
+    } else if(notam.coords && notam.coords.length >= 3) {
+      // 座標ベースポリゴン
       layer = L.polygon(notam.coords, {
         color: color, weight: 2, fillOpacity: 0.12, fillColor: color, interactive: true
       });
-    } else {
+      layer.bindPopup(popHtml, { maxWidth: 560, minWidth: 400 });
+      layer.bindTooltip(escN(notam.title), { className: 'sgx', sticky: true, direction: 'auto' });
+    } else if(notam.coords && notam.coords.length >= 1) {
+      // 座標ベース円（2点以下）
       layer = L.circle(notam.coords[0], {
-        radius: 9260,  // 5NM
-        color: color, weight: 2, fillOpacity: 0.12, fillColor: color, interactive: true
+        radius: 9260, color: color, weight: 2, fillOpacity: 0.12, fillColor: color, interactive: true
       });
+      layer.bindPopup(popHtml, { maxWidth: 560, minWidth: 400 });
+      layer.bindTooltip(escN(notam.title), { className: 'sgx', sticky: true, direction: 'auto' });
+    } else {
+      return; // 座標もGeoJSONもない場合は描画しない
     }
-    layer.bindPopup(popHtml, { maxWidth: 560, minWidth: 400 });
-    layer.bindTooltip(escN(notam.title), { className: 'sgx', sticky: true, direction: 'auto' });
     layer.addTo(map);
     LY.notam.push(layer);
-  });
+    if(typeof bringTop === 'function') bringTop();
+  }
 
-  if(typeof bringTop === 'function') bringTop();
+  var i, notam;
+  for(i = 0; i < NOTAM_DATA.length; i++) {
+    notam = NOTAM_DATA[i];
+    if(notam.designator && !notam.coords) {
+      // OpenAIP から境界を取得して描画
+      (function(n) {
+        if(n.geoJson) {
+          addLayerToMap(n, n.geoJson);
+        } else {
+          fetchOpenAipAirspace(n.designator, n.designatorCountry, function(geo) {
+            n.geoJson = geo;
+            if(geo) addLayerToMap(n, geo);
+          });
+        }
+      })(notam);
+    } else {
+      // 座標ベース（即時描画）
+      addLayerToMap(notam, null);
+    }
+  }
 }
 
 // NOTAM チェックボックス onchange
