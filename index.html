@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
 <title>AJX Calculator v2.5</title>
 <link rel="manifest" href="manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -722,6 +723,12 @@
 <script src="gfs-wind-layer.js"></script>
 <script src="js/fdp-calc.js"></script>
 <script>
+// CheckWX キーはスクリプト先頭で代入する。
+// #nav-flight-info は </script> の後にあるため、復元時に例外が出ると
+// 末尾の var CHECKWX_API_KEY = ... まで到達せず hasKey=false になる。
+var CHECKWX_API_KEY = 'eb52e4c6ca254584842adb8dc574b4f8';
+var AP_CHECKWX_HEADERS = { headers: { 'X-API-Key': CHECKWX_API_KEY } };
+
 // =====================================================================
 // PDF.js
 // =====================================================================
@@ -1399,6 +1406,7 @@ window.addEventListener('load', function(){
       try { map.invalidateSize(true); } catch(e){}
     }
     setTimeout(function(){ showTab('fp'); }, 300);
+    if(typeof updateNavFlightInfo === 'function') updateNavFlightInfo();
   }, 200);
   window.addEventListener('beforeprint', function(){
     var p = document.querySelector('#panels .panel.active');
@@ -6463,8 +6471,13 @@ function fetchAirportCoords(icao) {
   }
   // CheckWX の /v2/airport は 404 のため station API を使用
   // レスポンスは json.data[0].latitude.decimal / longitude.decimal
+  var key = (typeof CHECKWX_API_KEY === 'string' && CHECKWX_API_KEY)
+    ? CHECKWX_API_KEY : 'eb52e4c6ca254584842adb8dc574b4f8';
+  var headers = (typeof AP_CHECKWX_HEADERS !== 'undefined' && AP_CHECKWX_HEADERS)
+    ? AP_CHECKWX_HEADERS
+    : { headers: { 'X-API-Key': key } };
   var urlStn = 'https://api.checkwx.com/station/' + ic;
-  return apFetchCheckwxJson(urlStn, AP_CHECKWX_HEADERS, 'APCH-stn-' + ic).then(function(res) {
+  return apFetchCheckwxJson(urlStn, headers, 'APCH-stn-' + ic).then(function(res) {
     var coords = pickLatLon(res && res.json);
     if(!coords) throw new Error(ic + ' の座標を取得できませんでした');
     return coords;
@@ -6593,7 +6606,12 @@ function apchFlightCategory(f, inheritClouds, inheritVis) {
 function fetchTafTimeline(icao, etaDate) {
   var ic = String(icao || '').toUpperCase();
   var url = 'https://api.checkwx.com/v2/taf/' + ic + '/decoded';
-  return apFetchCheckwxJson(url, AP_CHECKWX_HEADERS, 'APCH-taf-' + ic).then(function(res) {
+  var key = (typeof CHECKWX_API_KEY === 'string' && CHECKWX_API_KEY)
+    ? CHECKWX_API_KEY : 'eb52e4c6ca254584842adb8dc574b4f8';
+  var headers = (typeof AP_CHECKWX_HEADERS !== 'undefined' && AP_CHECKWX_HEADERS)
+    ? AP_CHECKWX_HEADERS
+    : { headers: { 'X-API-Key': key } };
+  return apFetchCheckwxJson(url, headers, 'APCH-taf-' + ic).then(function(res) {
     var json = res && res.json;
     var data0 = json && json.data && json.data[0] ? json.data[0] : null;
     var forecasts = (data0 && data0.forecast) ? data0.forecast : [];
@@ -9088,17 +9106,24 @@ function updateNavClock() {
 
 function updateNavFlightInfo() {
   var info = document.getElementById('nav-flight-info');
+  if(!info) return;
   if(!NAV_DEP || !NAV_DEST){ info.style.display='none'; return; }
   info.style.display='block';
   updateNavClock();
-  document.getElementById('nav-dep-icao').textContent = NAV_DEP;
-  document.getElementById('nav-arr-icao').textContent = NAV_DEST;
+  var depIcaoEl = document.getElementById('nav-dep-icao');
+  var arrIcaoEl = document.getElementById('nav-arr-icao');
+  var depTimeEl = document.getElementById('nav-dep-time');
+  var depTzEl = document.getElementById('nav-dep-tz');
+  var arrTimeEl = document.getElementById('nav-arr-time');
+  var arrTzEl = document.getElementById('nav-arr-tz');
+  if(depIcaoEl) depIcaoEl.textContent = NAV_DEP;
+  if(arrIcaoEl) arrIcaoEl.textContent = NAV_DEST;
   var depTz = getIcaoTz(NAV_DEP);
   var arrTz = getIcaoTz(NAV_DEST);
-  document.getElementById('nav-dep-time').textContent = NAV_STD ? utcHhmmToLcl(NAV_STD, depTz.offset) : '--:--';
-  document.getElementById('nav-dep-tz').textContent = 'STD ' + (NAV_STD ? NAV_STD.slice(0,2)+':'+NAV_STD.slice(2,4)+'Z' : '--:--') + ' · ' + depTz.name;
-  document.getElementById('nav-arr-time').textContent = NAV_STA ? utcHhmmToLcl(NAV_STA, arrTz.offset) : '--:--';
-  document.getElementById('nav-arr-tz').textContent = 'STA ' + (NAV_STA ? NAV_STA.slice(0,2)+':'+NAV_STA.slice(2,4)+'Z' : '--:--') + ' · ' + arrTz.name;
+  if(depTimeEl) depTimeEl.textContent = NAV_STD ? utcHhmmToLcl(NAV_STD, depTz.offset) : '--:--';
+  if(depTzEl) depTzEl.textContent = 'STD ' + (NAV_STD ? NAV_STD.slice(0,2)+':'+NAV_STD.slice(2,4)+'Z' : '--:--') + ' · ' + depTz.name;
+  if(arrTimeEl) arrTimeEl.textContent = NAV_STA ? utcHhmmToLcl(NAV_STA, arrTz.offset) : '--:--';
+  if(arrTzEl) arrTzEl.textContent = 'STA ' + (NAV_STA ? NAV_STA.slice(0,2)+':'+NAV_STA.slice(2,4)+'Z' : '--:--') + ' · ' + arrTz.name;
 }
 setInterval(updateNavClock, 60000);
 updateNavClock();
@@ -9981,6 +10006,8 @@ var AP_CHECKWX_HEADERS = { headers: { 'X-API-Key': CHECKWX_API_KEY } };
 
 function apFetchCheckwxJson(url, opt, tag) {
   var pfx = '[A/P-fetch] ' + tag + ' ';
+  var key = (typeof CHECKWX_API_KEY === 'string' && CHECKWX_API_KEY)
+    ? CHECKWX_API_KEY : 'eb52e4c6ca254584842adb8dc574b4f8';
   var headers = {};
   var src = (opt && opt.headers) ? opt.headers : null;
   var k;
@@ -9993,14 +10020,14 @@ function apFetchCheckwxJson(url, opt, tag) {
       }
     }
   }
-  headers['X-API-Key'] = CHECKWX_API_KEY;
+  headers['X-API-Key'] = key;
   var init = { mode: 'cors', headers: headers };
   if(opt) {
     for(k in opt) {
       if(Object.prototype.hasOwnProperty.call(opt, k) && k !== 'headers') init[k] = opt[k];
     }
   }
-  console.log(pfx + 'url=', url, 'hasKey=', !!(CHECKWX_API_KEY && String(CHECKWX_API_KEY).length));
+  console.log(pfx + 'url=', url, 'hasKey=', !!(key && String(key).length));
   return fetch(url, init)
     .then(function(r) {
       var hdrs = {};
@@ -11509,6 +11536,7 @@ if(WX_GFS_WIND_ON && typeof applyGfsWindLayer === 'function') applyGfsWindLayer(
     </div>
   </div>
 </div>
+<script>if(typeof updateNavFlightInfo==='function') updateNavFlightInfo();</script>
 <div id="ws-method-help-overlay" onclick="closeWsMethodHelp()"></div>
 <div id="ws-method-help-panel" role="dialog" aria-modal="true" aria-labelledby="wsm-dialog-title">
   <div class="wsm-hdr">
