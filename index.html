@@ -724,7 +724,7 @@
 <script src="js/fdp-calc.js"></script>
 <script>
 // CheckWX キーはスクリプト先頭で代入する。
-// #nav-flight-info は </script> の後にあるため、復元時に例外が出ると
+// #nav-flight-info はメイン script の後ろにあるため、復元時に例外が出ると
 // 末尾の var CHECKWX_API_KEY = ... まで到達せず hasKey=false になる。
 var CHECKWX_API_KEY = 'eb52e4c6ca254584842adb8dc574b4f8';
 var AP_CHECKWX_HEADERS = { headers: { 'X-API-Key': CHECKWX_API_KEY } };
