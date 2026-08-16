@@ -7137,97 +7137,118 @@ function drawRadar(icao, lat, lon, cellEl) {
   cellEl.appendChild(ext);
 }
 
-function apchSkewTSnapDate(etaDate) {
-  var d = (etaDate instanceof Date) ? new Date(etaDate.getTime()) : new Date(etaDate);
-  if(isNaN(d.getTime())) d = new Date();
-  var utcH = d.getUTCHours();
-  if(utcH >= 18) {
-    d.setUTCDate(d.getUTCDate() + 1);
-    d.setUTCHours(0, 0, 0, 0);
-  } else if(utcH >= 6) {
-    d.setUTCHours(12, 0, 0, 0);
+function buildSkewTCandidates(etaDate, maxAttempts) {
+  var start = (etaDate instanceof Date) ? new Date(etaDate.getTime()) : new Date(etaDate);
+  if(isNaN(start.getTime())) start = new Date();
+  var now = new Date();
+  if(start > now) start = now;
+
+  var h = start.getUTCHours();
+  if(h >= 18) {
+    start.setUTCDate(start.getUTCDate() + 1);
+    start.setUTCHours(0, 0, 0, 0);
+    if(start > now) {
+      start.setUTCDate(start.getUTCDate() - 1);
+      start.setUTCHours(12, 0, 0, 0);
+    }
+  } else if(h >= 6) {
+    start.setUTCHours(12, 0, 0, 0);
   } else {
-    d.setUTCHours(0, 0, 0, 0);
+    start.setUTCHours(0, 0, 0, 0);
   }
-  return d;
+  if(start > now) start.setUTCHours(start.getUTCHours() - 12);
+
+  var list = [];
+  var cur = new Date(start.getTime());
+  var i;
+  for(i = 0; i < maxAttempts; i++) {
+    list.push(new Date(cur.getTime()));
+    cur.setUTCHours(cur.getUTCHours() - 12);
+  }
+  return list;
 }
 
-function buildSkewTUrl(icao, etaDate) {
-  var wmo = ICAO_TO_WMO[String(icao || '').toUpperCase()];
-  if(!wmo) return null;
-  var d = apchSkewTSnapDate(etaDate);
-  var yyyy = d.getUTCFullYear();
-  var mm = apchPad2(d.getUTCMonth() + 1);
-  var dd = apchPad2(d.getUTCDate());
-  var hh = apchPad2(d.getUTCHours());
+function buildSkewTUrl(wmo, dateObj) {
+  var yyyy = dateObj.getUTCFullYear();
+  var mm = apchPad2(dateObj.getUTCMonth() + 1);
+  var dd = apchPad2(dateObj.getUTCDate());
+  var hh = apchPad2(dateObj.getUTCHours());
   var dt = yyyy + '-' + mm + '-' + dd + '+' + hh + '%3A00%3A00';
   return 'https://weather.uwyo.edu/wsgi/sounding?datetime=' + dt +
     '&id=' + wmo + '&type=PNG%3ASKEWT&src=FM35';
 }
 
-function buildSkewTUrlLegacy(icao, etaDate) {
-  var wmo = ICAO_TO_WMO[String(icao || '').toUpperCase()];
-  if(!wmo) return null;
-  var d = apchSkewTSnapDate(etaDate);
-  var yyyy = d.getUTCFullYear();
-  var mm = apchPad2(d.getUTCMonth() + 1);
-  var dd = apchPad2(d.getUTCDate());
-  var hh = apchPad2(d.getUTCHours());
-  var ddhh = dd + hh;
-  return 'https://weather.uwyo.edu/cgi-bin/sounding.py?TYPE=gif%3ASKEWT' +
-    '&YEAR=' + yyyy + '&MONTH=' + mm +
-    '&FROM=' + ddhh + '&TO=' + ddhh + '&STNM=' + wmo;
-}
-
-function loadSkewT(icao, etaDate, cellEl) {
-  if(!cellEl) return;
-  var ic = String(icao || '').toUpperCase();
-  var stnm = ICAO_TO_WMO[ic];
-  if(!stnm) {
-    apchSetError(cellEl, 'Skew-T: ' + ic + ' のWMO番号未登録');
+function trySkewTUrls(icao, wmo, candidates, idx, el) {
+  if(!el) return;
+  if(idx >= candidates.length) {
+    apchClearEl(el);
+    var empty = document.createElement('div');
+    empty.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#f39c12;font-size:11px;text-align:center;padding:8px;';
+    var icon = document.createElement('div');
+    icon.style.cssText = 'font-size:22px;margin-bottom:6px;';
+    icon.appendChild(document.createTextNode('⚠️'));
+    empty.appendChild(icon);
+    var title = document.createElement('div');
+    title.appendChild(document.createTextNode('Skew-T データなし'));
+    empty.appendChild(title);
+    var sub = document.createElement('div');
+    sub.style.cssText = 'color:#888;font-size:10px;margin-top:4px;';
+    sub.appendChild(document.createTextNode(icao + '  過去3日分を検索しましたが観測データがありません'));
+    empty.appendChild(sub);
+    el.appendChild(empty);
     return;
   }
-  var url = buildSkewTUrl(ic, etaDate);
-  apchClearEl(cellEl);
+
+  var dateObj = candidates[idx];
+  var url = buildSkewTUrl(wmo, dateObj);
+  var labelTime = dateObj.getUTCFullYear() + '/' +
+    apchPad2(dateObj.getUTCMonth() + 1) + '/' +
+    apchPad2(dateObj.getUTCDate()) + ' ' +
+    apchPad2(dateObj.getUTCHours()) + 'UTC';
+
+  apchClearEl(el);
+  var loading = document.createElement('div');
+  loading.style.cssText = 'color:#aaa;font-size:11px;padding:8px;text-align:center;';
+  loading.appendChild(document.createTextNode('Skew-T 検索中… ' + labelTime));
+  el.appendChild(loading);
+
   var img = document.createElement('img');
   img.className = 'apch-chart-img';
   img.alt = 'Skew-T';
-  img.onerror = function() {
-    var legacyUrl = buildSkewTUrlLegacy(ic, etaDate);
-    apchClearEl(cellEl);
-    var box = document.createElement('div');
-    box.style.cssText = 'padding:10px;color:#f39c12;font-size:11px;text-align:center;';
-    var icon = document.createElement('div');
-    icon.style.cssText = 'font-size:20px;margin-bottom:6px;';
-    icon.appendChild(document.createTextNode('⚠️'));
-    box.appendChild(icon);
-    box.appendChild(document.createTextNode('データなし（観測時刻外の可能性）'));
-    box.appendChild(document.createElement('br'));
-    var a1 = document.createElement('a');
-    a1.className = 'apch-ext-link';
-    a1.href = url;
-    a1.target = '_blank';
-    a1.rel = 'noopener noreferrer';
-    a1.appendChild(document.createTextNode('wsgi で確認'));
-    box.appendChild(a1);
-    if(legacyUrl) {
-      box.appendChild(document.createTextNode(' | '));
-      var a2 = document.createElement('a');
-      a2.className = 'apch-ext-link';
-      a2.href = legacyUrl;
-      a2.target = '_blank';
-      a2.rel = 'noopener noreferrer';
-      a2.appendChild(document.createTextNode('cgi-bin で確認'));
-      box.appendChild(a2);
+  img.style.cssText = 'width:100%;height:calc(100% - 28px);object-fit:contain;background:#000;display:block;';
+  img.onload = function() {
+    if(!img.naturalWidth) {
+      trySkewTUrls(icao, wmo, candidates, idx + 1, el);
+      return;
     }
-    cellEl.appendChild(box);
+    apchClearEl(el);
+    var header = document.createElement('div');
+    header.style.cssText = 'font-size:10px;color:#aaa;padding:3px 6px;background:#111;white-space:nowrap;overflow:hidden;';
+    header.appendChild(document.createTextNode('Skew-T  ' + icao + '  ' + labelTime));
+    el.appendChild(header);
+    el.appendChild(img);
   };
-  cellEl.appendChild(img);
-  var cap = document.createElement('div');
-  cap.style.cssText = 'font-size:10px;color:#78909c;margin-top:4px;';
-  cap.appendChild(document.createTextNode('Skew-T ' + ic + ' (WMO ' + stnm + ')'));
-  cellEl.appendChild(cap);
+  img.onerror = function() {
+    trySkewTUrls(icao, wmo, candidates, idx + 1, el);
+  };
   img.src = url;
+}
+
+function loadSkewT(icao, etaDate, cellEl) {
+  if(typeof cellEl === 'string') cellEl = document.getElementById(cellEl);
+  if(!cellEl) return;
+  var ic = String(icao || '').toUpperCase();
+  var wmo = ICAO_TO_WMO[ic];
+  if(!wmo) {
+    apchSetError(cellEl, 'Skew-T: ' + ic + ' のWMO局番号未登録');
+    return;
+  }
+  apchClearEl(cellEl);
+  var loading = document.createElement('div');
+  loading.style.cssText = 'color:#aaa;font-size:11px;padding:8px;text-align:center;';
+  loading.appendChild(document.createTextNode('Skew-T 検索中…'));
+  cellEl.appendChild(loading);
+  trySkewTUrls(ic, wmo, buildSkewTCandidates(etaDate, 6), 0, cellEl);
 }
 
 function fetchApchDecodedRaw(kind, icao) {
