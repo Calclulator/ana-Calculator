@@ -7022,6 +7022,40 @@ function loadJmaSurfaceChart(etaDate, cellEl, captionOverride) {
   });
 }
 
+function isJapanAirport(icao) {
+  var pre = String(icao || '').slice(0, 2).toUpperCase();
+  return pre === 'RJ' || pre === 'RO';
+}
+
+function loadFsas(etaDate, cellEl) {
+  if(!cellEl) return;
+  fetchJmaWeatherMapList().then(function(list) {
+    var names = [];
+    var asia = list && list.asia ? list.asia : {};
+    var i;
+    if(asia.ft24) {
+      for(i = 0; i < asia.ft24.length; i++) names.push(asia.ft24[i]);
+    }
+    if(asia.ft48) {
+      for(i = 0; i < asia.ft48.length; i++) names.push(asia.ft48[i]);
+    }
+    var best = apchPickClosestName(names, etaDate);
+    if(!best) { apchSetError(cellEl, '悪天予想図: データなし'); return; }
+    var imgUrl = 'https://www.jma.go.jp/bosai/weather_map/data/png/' + best;
+    var kind = /fsas48/i.test(best) ? 'FSAS48' : 'FSAS24';
+    var vt = parseJmaChartTime(best);
+    var cap = kind + '（アジア悪天予想図）' + (isFinite(vt) ? (' ' + apchPad2(new Date(vt).getUTCHours()) + 'Z') : '');
+    apchAppendChartImg(cellEl, imgUrl, '悪天予想図: 画像取得失敗', cap);
+  }).catch(function() {
+    apchSetError(cellEl, '悪天予想図: 取得失敗');
+  });
+}
+
+function loadApchSigwx(destIcao, etaDate, cellEl) {
+  if(isJapanAirport(destIcao)) loadJmaSigwx(etaDate, cellEl);
+  else loadFsas(etaDate, cellEl);
+}
+
 function loadJmaSigwx(etaDate, cellEl) {
   if(!cellEl) return;
   var fbjpUrl = 'https://www.data.jma.go.jp/airinfo/data/pict/fbjp/fbjp.png?_=' + Date.now();
@@ -7029,34 +7063,15 @@ function loadJmaSigwx(etaDate, cellEl) {
   var img = document.createElement('img');
   img.className = 'apch-chart-img';
   img.alt = 'FBJP';
-  img.src = fbjpUrl;
   img.onerror = function() {
-    fetchJmaWeatherMapList().then(function(list) {
-      var names = [];
-      var asia = list && list.asia ? list.asia : {};
-      var i;
-      if(asia.ft24) {
-        for(i = 0; i < asia.ft24.length; i++) names.push(asia.ft24[i]);
-      }
-      if(asia.ft48) {
-        for(i = 0; i < asia.ft48.length; i++) names.push(asia.ft48[i]);
-      }
-      var best = apchPickClosestName(names, etaDate);
-      if(!best) { apchSetError(cellEl, '悪天予想図: データなし'); return; }
-      var imgUrl = 'https://www.jma.go.jp/bosai/weather_map/data/png/' + best;
-      var kind = /fsas48/i.test(best) ? 'FSAS48' : 'FSAS24';
-      var vt = parseJmaChartTime(best);
-      var cap = kind + '（FBJPなし）' + (isFinite(vt) ? (' ' + apchPad2(new Date(vt).getUTCHours()) + 'Z') : '');
-      apchAppendChartImg(cellEl, imgUrl, '悪天予想図: 画像取得失敗', cap);
-    }).catch(function() {
-      apchSetError(cellEl, '悪天予想図: 取得失敗');
-    });
+    loadFsas(etaDate, cellEl);
   };
   cellEl.appendChild(img);
   var cap = document.createElement('div');
   cap.style.cssText = 'font-size:10px;color:#78909c;margin-top:4px;';
   cap.appendChild(document.createTextNode('FBJP（国内悪天予想図）'));
   cellEl.appendChild(cap);
+  img.src = fbjpUrl;
 }
 
 function getRainViewerUrl(lat, lon, zoom) {
@@ -7144,9 +7159,7 @@ function drawRadar(icao, lat, lon, cellEl) {
   cellEl.appendChild(ext);
 }
 
-function buildSkewTUrl(icao, etaDate) {
-  var wmo = ICAO_TO_WMO[String(icao || '').toUpperCase()];
-  if(!wmo) return null;
+function apchSkewTSnapDate(etaDate) {
   var d = (etaDate instanceof Date) ? new Date(etaDate.getTime()) : new Date(etaDate);
   if(isNaN(d.getTime())) d = new Date();
   var utcH = d.getUTCHours();
@@ -7158,13 +7171,34 @@ function buildSkewTUrl(icao, etaDate) {
   } else {
     d.setUTCHours(0, 0, 0, 0);
   }
+  return d;
+}
+
+function buildSkewTUrl(icao, etaDate) {
+  var wmo = ICAO_TO_WMO[String(icao || '').toUpperCase()];
+  if(!wmo) return null;
+  var d = apchSkewTSnapDate(etaDate);
   var yyyy = d.getUTCFullYear();
   var mm = apchPad2(d.getUTCMonth() + 1);
   var dd = apchPad2(d.getUTCDate());
   var hh = apchPad2(d.getUTCHours());
-  var dt = yyyy + '-' + mm + '-' + dd + 'T' + hh + ':00:00';
-  return 'https://weather.uwyo.edu/wsgi/sounding?datetime=' + encodeURIComponent(dt) +
-    '&id=' + wmo + '&type=PNG:SKEWT&src=FM35';
+  var dt = yyyy + '-' + mm + '-' + dd + '+' + hh + '%3A00%3A00';
+  return 'https://weather.uwyo.edu/wsgi/sounding?datetime=' + dt +
+    '&id=' + wmo + '&type=PNG%3ASKEWT&src=FM35';
+}
+
+function buildSkewTUrlLegacy(icao, etaDate) {
+  var wmo = ICAO_TO_WMO[String(icao || '').toUpperCase()];
+  if(!wmo) return null;
+  var d = apchSkewTSnapDate(etaDate);
+  var yyyy = d.getUTCFullYear();
+  var mm = apchPad2(d.getUTCMonth() + 1);
+  var dd = apchPad2(d.getUTCDate());
+  var hh = apchPad2(d.getUTCHours());
+  var ddhh = dd + hh;
+  return 'https://weather.uwyo.edu/cgi-bin/sounding.py?TYPE=gif%3ASKEWT' +
+    '&YEAR=' + yyyy + '&MONTH=' + mm +
+    '&FROM=' + ddhh + '&TO=' + ddhh + '&STNM=' + wmo;
 }
 
 function loadSkewT(icao, etaDate, cellEl) {
@@ -7180,31 +7214,42 @@ function loadSkewT(icao, etaDate, cellEl) {
   var img = document.createElement('img');
   img.className = 'apch-chart-img';
   img.alt = 'Skew-T';
-  img.src = url;
   img.onerror = function() {
-    var prevDate = (etaDate instanceof Date) ? new Date(etaDate.getTime() - 12 * 3600 * 1000) : new Date(Date.now() - 12 * 3600 * 1000);
-    var url2 = buildSkewTUrl(ic, prevDate);
-    img.onerror = function() {
-      apchClearEl(cellEl);
-      var err = document.createElement('div');
-      err.className = 'apch-err';
-      err.appendChild(document.createTextNode('Skew-T取得失敗（データなし）'));
-      cellEl.appendChild(err);
-      var a = document.createElement('a');
-      a.className = 'apch-ext-link';
-      a.href = url;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.appendChild(document.createTextNode('Wyoming直接開く'));
-      cellEl.appendChild(a);
-    };
-    img.src = url2;
+    var legacyUrl = buildSkewTUrlLegacy(ic, etaDate);
+    apchClearEl(cellEl);
+    var box = document.createElement('div');
+    box.style.cssText = 'padding:10px;color:#f39c12;font-size:11px;text-align:center;';
+    var icon = document.createElement('div');
+    icon.style.cssText = 'font-size:20px;margin-bottom:6px;';
+    icon.appendChild(document.createTextNode('⚠️'));
+    box.appendChild(icon);
+    box.appendChild(document.createTextNode('データなし（観測時刻外の可能性）'));
+    box.appendChild(document.createElement('br'));
+    var a1 = document.createElement('a');
+    a1.className = 'apch-ext-link';
+    a1.href = url;
+    a1.target = '_blank';
+    a1.rel = 'noopener noreferrer';
+    a1.appendChild(document.createTextNode('wsgi で確認'));
+    box.appendChild(a1);
+    if(legacyUrl) {
+      box.appendChild(document.createTextNode(' | '));
+      var a2 = document.createElement('a');
+      a2.className = 'apch-ext-link';
+      a2.href = legacyUrl;
+      a2.target = '_blank';
+      a2.rel = 'noopener noreferrer';
+      a2.appendChild(document.createTextNode('cgi-bin で確認'));
+      box.appendChild(a2);
+    }
+    cellEl.appendChild(box);
   };
   cellEl.appendChild(img);
   var cap = document.createElement('div');
   cap.style.cssText = 'font-size:10px;color:#78909c;margin-top:4px;';
   cap.appendChild(document.createTextNode('Skew-T ' + ic + ' (WMO ' + stnm + ')'));
   cellEl.appendChild(cap);
+  img.src = url;
 }
 
 function fetchApchDecodedRaw(kind, icao) {
@@ -7234,42 +7279,76 @@ function formatApchTafRaw(raw) {
 function renderMetarTafText(destIcao, altIcao, cellEl) {
   if(!cellEl) return;
   var C = getDayColors();
-  apchSetLoading(cellEl, 'Loading METAR/TAF...');
-  var jobs = [
-    fetchApchDecodedRaw('metar', destIcao),
-    fetchApchDecodedRaw('taf', destIcao)
-  ];
-  if(altIcao) {
-    jobs.push(fetchApchDecodedRaw('metar', altIcao));
-    jobs.push(fetchApchDecodedRaw('taf', altIcao));
+  var tabs = [];
+  if(destIcao) tabs.push({ icao: String(destIcao).toUpperCase(), label: 'DEST ' + String(destIcao).toUpperCase() });
+  if(altIcao) tabs.push({ icao: String(altIcao).toUpperCase(), label: 'ALTN ' + String(altIcao).toUpperCase() });
+  if(!tabs.length) {
+    apchSetError(cellEl, 'METAR/TAF: ICAO がありません');
+    return;
   }
-  Promise.all(jobs).then(function(all) {
-    apchClearEl(cellEl);
-    var wrap = document.createElement('div');
-    wrap.style.cssText = 'font-family:monospace;font-size:11px;line-height:1.7;padding:4px;' +
-      'color:' + C.text + ';height:100%;overflow-y:auto;box-sizing:border-box;';
-    function addBlock(title, icao, text, titleColor, bodyColor) {
-      var h = document.createElement('div');
-      h.style.cssText = 'color:' + titleColor + ';font-weight:bold;margin-bottom:4px;';
-      h.appendChild(document.createTextNode(title + ' ' + (icao || '')));
-      wrap.appendChild(h);
-      var pre = document.createElement('pre');
-      pre.className = 'apch-metar-raw';
-      pre.style.color = bodyColor;
-      pre.style.marginBottom = '14px';
-      pre.appendChild(document.createTextNode(text || '(not available)'));
-      wrap.appendChild(pre);
+
+  var html = '<div style="display:flex;flex-direction:column;height:100%;">';
+  html += '<div id="mxt-tabs" style="display:flex;flex-shrink:0;border-bottom:1px solid ' + C.bdr + ';">';
+  var i, active, btnBg, btnColor, btnBdr;
+  for(i = 0; i < tabs.length; i++) {
+    active = (i === 0);
+    btnBg = active ? C.hlBg : C.bg;
+    btnColor = active ? C.acc : C.dim;
+    btnBdr = active ? C.acc : 'transparent';
+    html += '<button type="button" id="mxt-tab-' + i + '" onclick="mxtShowTab(' + i + ')" style="flex:1;padding:6px 4px;font-size:11px;font-weight:bold;border:none;cursor:pointer;background:' +
+      btnBg + ';color:' + btnColor + ';border-bottom:2px solid ' + btnBdr + ';">' + tabs[i].label + '</button>';
+  }
+  html += '</div>';
+  for(i = 0; i < tabs.length; i++) {
+    html += '<div id="mxt-body-' + i + '" style="flex:1;overflow-y:auto;display:' + (i === 0 ? 'block' : 'none') +
+      ';padding:8px;font-family:monospace;font-size:11px;line-height:1.7;color:' + C.text + ';">' +
+      '<p style="color:' + C.dim + ';font-size:10px;">Loading ' + tabs[i].icao + '...</p></div>';
+  }
+  html += '</div>';
+  cellEl.innerHTML = html;
+
+  window.mxtShowTab = function(idx) {
+    var n, tabBtn, tabBody;
+    for(n = 0; n < tabs.length; n++) {
+      tabBtn = document.getElementById('mxt-tab-' + n);
+      tabBody = document.getElementById('mxt-body-' + n);
+      if(!tabBtn || !tabBody) continue;
+      if(n === idx) {
+        tabBtn.style.background = C.hlBg;
+        tabBtn.style.color = C.acc;
+        tabBtn.style.borderBottom = '2px solid ' + C.acc;
+        tabBody.style.display = 'block';
+      } else {
+        tabBtn.style.background = C.bg;
+        tabBtn.style.color = C.dim;
+        tabBtn.style.borderBottom = '2px solid transparent';
+        tabBody.style.display = 'none';
+      }
     }
-    addBlock('▍METAR', destIcao, all[0] || '(METAR not available)', C.acc, C.hi);
-    addBlock('▍TAF', destIcao, formatApchTafRaw(all[1]), '#81c784', '#d0f0d0');
-    if(altIcao) {
-      addBlock('▍ALT METAR', altIcao, all[2] || '(METAR not available)', C.acc, C.hi);
-      addBlock('▍ALT TAF', altIcao, formatApchTafRaw(all[3]), '#81c784', '#d0f0d0');
-    }
-    cellEl.appendChild(wrap);
-  }).catch(function(e) {
-    apchSetError(cellEl, 'METAR/TAF Error: ' + ((e && e.message) ? e.message : String(e)));
-  });
+  };
+
+  for(i = 0; i < tabs.length; i++) {
+    (function(t, bodyIdx) {
+      var bodyEl = document.getElementById('mxt-body-' + bodyIdx);
+      if(!bodyEl) return;
+      Promise.all([
+        fetchApchDecodedRaw('metar', t.icao),
+        fetchApchDecodedRaw('taf', t.icao)
+      ]).then(function(results) {
+        var metarRaw = results[0] || '(METAR unavailable)';
+        var tafFmt = formatApchTafRaw(results[1]);
+        var esc = (typeof escH === 'function') ? escH : function(s) { return String(s); };
+        bodyEl.innerHTML =
+          '<div style="color:' + C.acc + ';font-weight:bold;margin-bottom:3px;">▍METAR ' + esc(t.icao) + '</div>' +
+          '<div style="white-space:pre-wrap;margin-bottom:14px;color:' + C.hi + ';">' + esc(metarRaw) + '</div>' +
+          '<div style="color:#81c784;font-weight:bold;margin-bottom:3px;">▍TAF ' + esc(t.icao) + '</div>' +
+          '<div style="white-space:pre-wrap;color:#d0f0d0;">' + esc(tafFmt) + '</div>';
+      }).catch(function(e) {
+        bodyEl.innerHTML = '<p style="color:#ef5350;font-size:11px;">Error: ' +
+          ((e && e.message) ? e.message : String(e)) + '</p>';
+      });
+    })(tabs[i], i);
+  }
 }
 
 function drawCrossSection(inputs, cellEl) {
@@ -7336,7 +7415,7 @@ function replayApchBrief() {
   loadSurfaceChart(APCH_LAST.destIcao, APCH_LAST.etaDate, apchCell(3));
   drawRadar(APCH_LAST.destIcao, APCH_LAST.lat, APCH_LAST.lon, apchCell(4));
   loadSkewT(APCH_LAST.destIcao, APCH_LAST.etaDate, apchCell(5));
-  loadJmaSigwx(APCH_LAST.etaDate, apchCell(6));
+  loadApchSigwx(APCH_LAST.destIcao, APCH_LAST.etaDate, apchCell(6));
 }
 
 function renderApchPanel() {
@@ -7703,7 +7782,7 @@ function runApchBrief() {
   drawCrossSection(inp, apchCell(2));
   loadSurfaceChart(inp.destIcao, etaDate, apchCell(3));
   loadSkewT(inp.destIcao, etaDate, apchCell(5));
-  loadJmaSigwx(etaDate, apchCell(6));
+  loadApchSigwx(inp.destIcao, etaDate, apchCell(6));
 
   var coordsP = fetchAirportCoords(inp.destIcao).catch(function() {
     var apt = (typeof APT !== 'undefined' && APT[inp.destIcao]) ? APT[inp.destIcao] : null;
