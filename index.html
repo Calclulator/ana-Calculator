@@ -23,7 +23,7 @@
   .panel.active{display:flex;}
   .bar{background:#0d1117;border-bottom:1px solid #1e2a38;padding:4px 8px;display:flex;flex-wrap:wrap;align-items:center;gap:5px;flex-shrink:0;}
   .lbl{color:#546e7a;font-size:10px;letter-spacing:.06em;white-space:nowrap;}
-  .btn{font-size:11px;font-family:inherit;padding:2px 8px;background:transparent;border:1px solid #2a3a4e;border-radius:3px;cursor:pointer;color:#90a4ae;}
+  .btn{font-size:11px;font-family:inherit;padding:2px 8px;background:transparent;border:1px solid #2a3a4e;border-radius:3px;cursor:pointer;color:#90a4ae;touch-action:manipulation;-webkit-tap-highlight-color:rgba(79,195,247,.25);}
   .btn:hover{background:#1e2a38;color:#cfd8dc;}
   .btn.on{background:#0d2a3e;border-color:#1565c0;color:#4fc3f7;}
   .btn.go{background:#1a3a1a;border-color:#2e7d32;color:#66bb6a;font-size:13px;padding:4px 14px;}
@@ -8395,6 +8395,17 @@ function renderCurfewPanel() {
   if(autoFH && autoFM) { calcCurfew(); }
 }
 
+function ensureIpadPointerClicks(root) {
+  if(!root) return;
+  var els = root.querySelectorAll('[onclick], button, .btn');
+  var i, el;
+  for(i = 0; i < els.length; i++) {
+    el = els[i];
+    el.style.cursor = 'pointer';
+    el.style.webkitTapHighlightColor = 'rgba(79,195,247,.25)';
+  }
+}
+
 function renderDumpPanel() {
   var panel = document.getElementById('dump-panel');
   if(!panel) return;
@@ -8416,7 +8427,7 @@ function renderDumpPanel() {
   panel.innerHTML =
     '<div class="bar">' +
       '<span style="color:'+C.acc+';font-weight:bold;letter-spacing:.08em;">Time to Dump</span>' +
-      '<button class="btn" onclick="renderDumpPanel()" style="margin-left:auto;" title="フライトプランから再計算">↺ フライトプランから更新</button>' +
+      '<button type="button" class="btn" id="dump-refresh-fp" onclick="renderDumpPanel()" ontouchend="event.preventDefault();renderDumpPanel();" style="margin-left:auto;cursor:pointer;-webkit-appearance:none;min-height:32px;padding:6px 10px;" title="フライトプランから再計算">↺ フライトプランから更新</button>' +
     '</div>' +
     '<div style="padding:16px 18px;overflow-y:auto;height:calc(100% - 44px);box-sizing:border-box;">' +
 
@@ -8485,6 +8496,7 @@ function renderDumpPanel() {
   } else {
     DUMP_TIME_MIN = null;
   }
+  ensureIpadPointerClicks(panel);
 }
 
 function onDumpCurInput(val) {
@@ -8613,11 +8625,10 @@ function renderCcBrfgPanel() {
       '<span style="color:'+C.acc+';font-weight:bold;letter-spacing:.08em;">CC BRFG</span>' +
       '<span style="margin-left:12px;color:'+C.lbl+';font-size:11px;">Reference information only, for use while cabin doors are open</span>' +
     '</div>' +
-    '<div style="display:flex;height:calc(100% - 44px);overflow:hidden;">' +
+    '<div style="display:flex;flex-direction:column;height:calc(100% - 44px);overflow:hidden;min-height:0;">' +
 
-      // ── 左ペイン ──
-      '<div style="width:40%;min-width:220px;padding:14px 16px;box-sizing:border-box;' +
-           'border-right:1px solid '+C.bdr+';overflow-y:auto;">' +
+      '<div style="width:100%;flex:1;min-height:0;padding:14px 16px;box-sizing:border-box;' +
+           'border-bottom:1px solid '+C.bdr+';overflow-y:auto;">' +
 
         // ルートヘッダー
         '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">' +
@@ -8683,27 +8694,36 @@ function renderCcBrfgPanel() {
         '<div style="height:1px;background:'+C.bdr+';margin:20px 0 10px 0;"></div>' +
         '<div style="color:'+C.acc+';font-size:13px;">Have a nice flight! ✈</div>' +
 
-      '</div>' + // 左ペイン終わり
+      '</div>' +
 
-      // ── 右ペイン ──
-      '<div style="flex:1;padding:14px 16px;box-sizing:border-box;display:flex;flex-direction:column;">' +
+      '<div style="width:100%;height:45%;flex-shrink:0;min-height:180px;padding:14px 16px;box-sizing:border-box;display:flex;flex-direction:column;">' +
         '<div style="color:'+C.lbl+';font-size:10px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">' +
           'ENROUTE WEATHER / TURBULENCE' +
         '</div>' +
-        '<div id="ccbrfg-turb-text" style="color:'+C.text+';font-size:13px;line-height:1.8;margin-bottom:12px;white-space:pre-line;">' +
+        '<div id="ccbrfg-turb-text" style="color:'+C.text+';font-size:13px;line-height:1.8;margin-bottom:8px;white-space:pre-line;max-height:28%;overflow-y:auto;flex-shrink:0;">' +
           (notReady ? '（NAVLOGを適用すると自動表示されます）' : turbText) +
         '</div>' +
-        '<canvas id="ccbrfg-canvas" style="width:100%;flex:1;border-radius:4px;" height="320"></canvas>' +
+        '<canvas id="ccbrfg-canvas" style="width:100%;flex:1;min-height:0;border-radius:4px;"></canvas>' +
       '</div>' +
 
     '</div>'; // flex終わり
 
-  // Canvas描画
   if(!notReady) {
     var canvas = document.getElementById('ccbrfg-canvas');
     if(canvas) {
-      canvas.width = canvas.offsetWidth || 600;
-      renderTurbulenceChart(canvas, turbData);
+      function sizeCcBrfgCanvas() {
+        var c = document.getElementById('ccbrfg-canvas');
+        if(!c) return;
+        var w = c.clientWidth || c.offsetWidth || 600;
+        var h = c.clientHeight || c.offsetHeight || 320;
+        if(w < 40) w = 600;
+        if(h < 80) h = 180;
+        c.width = w;
+        c.height = h;
+        renderTurbulenceChart(c, turbData);
+      }
+      sizeCcBrfgCanvas();
+      setTimeout(sizeCcBrfgCanvas, 80);
     }
   }
 }
