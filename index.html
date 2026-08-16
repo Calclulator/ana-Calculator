@@ -148,6 +148,22 @@
   .mp-right{width:230px;padding:12px;overflow-y:auto;flex-shrink:0;}
   .mp-lbl{color:#546e7a;font-size:10px;margin-bottom:3px;letter-spacing:.05em;}
   .mp-raw{background:#0d1117;border-radius:4px;padding:8px;margin-bottom:10px;word-break:break-all;line-height:1.7;}
+  .apch-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto auto;gap:8px;padding:8px 0;}
+  .apch-cell{background:#1a1a2e;border:1px solid #444;border-radius:6px;padding:6px;min-height:220px;overflow:auto;display:flex;flex-direction:column;}
+  .apch-cell h3{font-size:11px;color:#90caf9;margin:0 0 4px 0;text-transform:uppercase;letter-spacing:0.05em;}
+  .apch-cell-body{flex:1;min-height:180px;position:relative;}
+  .apch-loading{color:#607d8b;font-size:12px;padding:16px 4px;}
+  .apch-err{color:#ff9800;font-size:12px;padding:8px 4px;}
+  .apch-metar-raw{font-family:inherit;font-size:11px;white-space:pre-wrap;word-break:break-word;line-height:1.45;margin:0 0 8px;padding:6px;border-radius:4px;background:rgba(0,0,0,.25);color:#cfd8dc;}
+  .apch-chart-img{width:100%;height:auto;max-height:280px;object-fit:contain;display:block;background:#000;}
+  .apch-ext-link{display:inline-block;margin-top:6px;font-size:10px;color:#4fc3f7;text-decoration:none;}
+  .apch-radar-map{width:100%;height:200px;border-radius:4px;}
+  body.day-mode .apch-cell{background:#ffffff;border-color:#d0d8e4;}
+  body.day-mode .apch-cell h3{color:#1565c0;}
+  body.day-mode .apch-metar-raw{background:#f5f7fa;color:#1a2a3a;}
+  body.day-mode .apch-chart-img{background:#eef1f5;}
+  body.day-mode .apch-ext-link{color:#1565c0;}
+  @media (max-width:700px){.apch-grid{grid-template-columns:1fr;}}
   .mp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-bottom:10px;}
   .mp-field{display:flex;flex-direction:column;gap:2px;}
   .mp-taf-period{border-top:.5px solid #1e2a38;padding:4px 0;font-size:11px;line-height:1.5;}
@@ -1030,7 +1046,7 @@ var NAV_TAXI_MIN = null;       // 離陸前TAXI時間（分）= B/T - F/T
 var NAV_ALT_TIME_MIN = null;   // ALT空港までの飛行時間（分）
 var NAV_INIT_FL = null;        // 初期巡航高度（フィート）例: 35000
 var NAV_STEP_CLIMBS = [];      // Step Climb配列 [{fl:37000, wp:'41N50'}, ...]
-var NAV_WINDS_ALOFT = {};      // WIND/TEMP ALOFT データ {wpName: {12000:spd, 18000:spd, ...}}
+var NAV_WINDS_ALOFT = {};      // {wpName: {12000:{spd,dir}|spd, ...}} 旧セーブは数値が残る
 var NAV_PZFW_LBS = null;    // Planned Zero Fuel Weight (lbs)
 var NAV_ACFT_CODE = null;   // JetPlan 機材コード (例: 'NH8A')
 var NAV_TAX_LBS = null;     // TAX燃料 (lbs)
@@ -2316,11 +2332,11 @@ function runParse() {
         // 風向: 最初の2桁 (x10), 風速: 次の2桁 (特殊: dir>=50→dir-50, spd+100)
         var dirRaw = parseInt(aloftVal.slice(0, 2), 10);
         var spdRaw = parseInt(aloftVal.slice(2, 4), 10);
-        var windSpd;
-        if(dirRaw >= 50) { windSpd = spdRaw + 100; }
-        else { windSpd = spdRaw; }
-        if(aloftVal.slice(0,4) === '9900') { windSpd = 0; }
-        wpData[aloftAltsFt[avi]] = windSpd;
+        var windSpd, dirDeg;
+        if(dirRaw >= 50) { windSpd = spdRaw + 100; dirDeg = (dirRaw - 50) * 10; }
+        else { windSpd = spdRaw; dirDeg = dirRaw * 10; }
+        if(aloftVal.slice(0,4) === '9900') { windSpd = 0; dirDeg = 0; }
+        wpData[aloftAltsFt[avi]] = { spd: windSpd, dir: dirDeg };
       }
       NAV_WINDS_ALOFT[aloftWp] = wpData;
     }
@@ -5803,6 +5819,22 @@ function shearToTurb(shearPer1000ft) {
   return TURB_MOD;
 }
 
+function navAloftSpd(v) {
+  if(v == null) return undefined;
+  if(typeof v === 'object') {
+    if(v.spd == null || isNaN(v.spd)) return undefined;
+    return Number(v.spd);
+  }
+  if(typeof v === 'number' && !isNaN(v)) return v;
+  return undefined;
+}
+
+function navAloftDir(v) {
+  if(v == null) return 0;
+  if(typeof v === 'object' && v.dir != null && !isNaN(v.dir)) return Number(v.dir);
+  return 0;
+}
+
 // 指定WP・高度における乱気流レベルを返す（WINDS/TEMP ALOFTから）
 // altFt: チェックする高度（フィート）
 function getTurbAtWp(wpName, altFt) {
@@ -5821,7 +5853,7 @@ function getTurbAtWp(wpName, altFt) {
     if(altFt < aloftAltsFt[0]) { lower = aloftAltsFt[0]; upper = aloftAltsFt[1]; }
     else { lower = aloftAltsFt[aloftAltsFt.length-2]; upper = aloftAltsFt[aloftAltsFt.length-1]; }
   }
-  var spdLower = wpData[lower], spdUpper = wpData[upper];
+  var spdLower = navAloftSpd(wpData[lower]), spdUpper = navAloftSpd(wpData[upper]);
   if(spdLower === undefined || spdUpper === undefined) return TURB_SMOOTH;
   var altDiffK = (upper - lower) / 1000;
   var shear = Math.abs(spdUpper - spdLower) / altDiffK;
@@ -6399,6 +6431,17 @@ var APCH_LEVELS = [
 var APCH_DISTS = [200, 150, 100, 50, 0];
 var LAYER_ALT_FT = [39000, 34000, 30000, 18000, 10000, 5000, 0];
 var VWS_THRESHOLD = 7.0;
+var APCH_RADAR_MAP = null;
+var ICAO_TO_WMO = {
+  'RJTT': '47646', 'RJBB': '47772', 'RJOO': '47772',
+  'RJAA': '47646', 'ROAH': '47936',
+  'YSSY': '94767', 'YMML': '94866', 'YBBN': '94578',
+  'YBCS': '94294', 'YBTL': '94294',
+  'PGUM': '91212', 'PGSN': '91226',
+  'AYPY': '94035',
+  'VHHH': '45004', 'RCTP': '46692', 'RKSI': '47122',
+  'WSSS': '48698', 'VTBS': '48455', 'WMKK': '48650'
+};
 
 function apchSvgEl(tag, attrs, text) {
   var NS = 'http://www.w3.org/2000/svg';
@@ -6696,6 +6739,460 @@ function apchBuildEtaDate(etaStr) {
   return etaDate;
 }
 
+function apchClearEl(el) {
+  while(el && el.firstChild) el.removeChild(el.firstChild);
+}
+
+function apchSetLoading(el, text) {
+  if(!el) return;
+  apchClearEl(el);
+  var d = document.createElement('div');
+  d.className = 'apch-loading';
+  d.textContent = text || '読込中…';
+  el.appendChild(d);
+}
+
+function apchSetError(el, text) {
+  if(!el) return;
+  apchClearEl(el);
+  var d = document.createElement('div');
+  d.className = 'apch-err';
+  d.textContent = text;
+  el.appendChild(d);
+}
+
+function apchCell(n) {
+  return document.getElementById('apch-cell-' + n);
+}
+
+function initApchGrid() {
+  var host = document.getElementById('apch-results');
+  if(!host) return;
+  if(APCH_RADAR_MAP) {
+    try { APCH_RADAR_MAP.remove(); } catch(e) {}
+    APCH_RADAR_MAP = null;
+  }
+  var titles = ['METAR/TAF', '断面図', '地上天気図', 'Radar', 'Skew-T', '悪天予想図'];
+  var i, cell, h, body;
+  apchClearEl(host);
+  var grid = document.createElement('div');
+  grid.className = 'apch-grid';
+  grid.id = 'apch-grid';
+  for(i = 0; i < titles.length; i++) {
+    cell = document.createElement('div');
+    cell.className = 'apch-cell';
+    h = document.createElement('h3');
+    h.appendChild(document.createTextNode(titles[i]));
+    cell.appendChild(h);
+    body = document.createElement('div');
+    body.className = 'apch-cell-body';
+    body.id = 'apch-cell-' + (i + 1);
+    apchSetLoading(body);
+    cell.appendChild(body);
+    grid.appendChild(cell);
+  }
+  host.appendChild(grid);
+}
+
+function apchHaversineNm(lat1, lon1, lat2, lon2) {
+  var R = 3440.065;
+  var p1 = lat1 * Math.PI / 180;
+  var p2 = lat2 * Math.PI / 180;
+  var dphi = (lat2 - lat1) * Math.PI / 180;
+  var dl = (lon2 - lon1) * Math.PI / 180;
+  var a = Math.sin(dphi / 2) * Math.sin(dphi / 2) +
+          Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function apchPickAloft(wpData, targetFt) {
+  var bestKey = null, bestDiff = 1e9, k, d;
+  if(!wpData) return null;
+  for(k in wpData) {
+    if(!Object.prototype.hasOwnProperty.call(wpData, k)) continue;
+    d = Math.abs(Number(k) - targetFt);
+    if(d < bestDiff) { bestDiff = d; bestKey = k; }
+  }
+  if(bestKey == null || bestDiff > 3000) return null;
+  return wpData[bestKey];
+}
+
+function buildCrossSectionFromNavlog(destIcao, arrivalTC) {
+  var aloft = (typeof NAV_WINDS_ALOFT !== 'undefined' && NAV_WINDS_ALOFT) ? NAV_WINDS_ALOFT : {};
+  var ordered = [];
+  var i, w, last5, destLat, destLon, apt, col, distNm, pts;
+  if(typeof WP !== 'undefined' && WP) {
+    for(i = 0; i < WP.length; i++) {
+      w = WP[i];
+      if(!w || !w.id) continue;
+      if(aloft[w.id]) ordered.push({ id: w.id, data: aloft[w.id], wp: w });
+    }
+  }
+  if(!ordered.length) {
+    var keys = Object.keys(aloft);
+    for(i = 0; i < keys.length; i++) {
+      ordered.push({ id: keys[i], data: aloft[keys[i]], wp: null });
+    }
+  }
+  last5 = ordered.slice(-5);
+  while(last5.length < 5 && last5.length > 0) last5.unshift(last5[0]);
+  destLat = null;
+  destLon = null;
+  if(destIcao && typeof APT !== 'undefined' && APT[destIcao]) {
+    apt = APT[destIcao];
+    if(typeof apt.lat === 'number' && typeof apt.lon === 'number') {
+      destLat = apt.lat;
+      destLon = apt.lon;
+    }
+  }
+  if(destLat == null && last5.length && last5[last5.length - 1].wp) {
+    w = last5[last5.length - 1].wp;
+    if(typeof w.lat === 'number') {
+      destLat = w.lat;
+      destLon = (typeof w.lon === 'number') ? w.lon : w.lng;
+    }
+  }
+  pts = [];
+  for(i = 0; i < last5.length; i++) {
+    col = last5[i];
+    distNm = APCH_DISTS[i];
+    w = col.wp;
+    if(w && typeof w.lat === 'number' && destLat != null) {
+      distNm = Math.round(apchHaversineNm(w.lat, (typeof w.lon === 'number' ? w.lon : w.lng), destLat, destLon));
+    }
+    pts.push({ id: col.id, dist: distNm });
+  }
+  return { cols: last5, points: pts };
+}
+
+function parseJmaTime(str) {
+  str = String(str || '');
+  if(str.length < 10) return NaN;
+  return new Date(
+    str.slice(0, 4) + '-' + str.slice(4, 6) + '-' + str.slice(6, 8) + 'T' +
+    str.slice(8, 10) + ':00:00Z'
+  ).getTime();
+}
+
+function parseJmaChartTime(fname) {
+  var s = String(fname || '');
+  var m = s.match(/_C_\d+_(\d{14})_/);
+  var ts, extra;
+  if(m) ts = parseJmaTime(m[1]);
+  else {
+    m = s.match(/^(\d{14})/);
+    ts = m ? parseJmaTime(m[1]) : NaN;
+  }
+  extra = 0;
+  if(/fsas24/i.test(s)) extra = 24 * 3600 * 1000;
+  else if(/fsas48/i.test(s)) extra = 48 * 3600 * 1000;
+  return isFinite(ts) ? ts + extra : NaN;
+}
+
+function apchPickClosestName(names, etaDate) {
+  var etaTs = etaDate.getTime();
+  var best = null, bestDiff = Infinity, i, t, d;
+  if(!names || !names.length) return null;
+  for(i = 0; i < names.length; i++) {
+    t = parseJmaChartTime(names[i]);
+    if(!isFinite(t)) continue;
+    d = Math.abs(t - etaTs);
+    if(d < bestDiff) { bestDiff = d; best = names[i]; }
+  }
+  return best || names[names.length - 1];
+}
+
+function fetchJmaWeatherMapList() {
+  if(fetchJmaWeatherMapList._p) return fetchJmaWeatherMapList._p;
+  fetchJmaWeatherMapList._p = fetch('https://www.jma.go.jp/bosai/weather_map/data/list.json?_=' + Date.now())
+    .then(function(r) {
+      if(!r.ok) throw new Error('JMA list ' + r.status);
+      return r.json();
+    })
+    .then(function(json) {
+      fetchJmaWeatherMapList._p = null;
+      return json;
+    }, function(err) {
+      fetchJmaWeatherMapList._p = null;
+      throw err;
+    });
+  return fetchJmaWeatherMapList._p;
+}
+
+function apchAppendChartImg(cellEl, imgUrl, failText, caption) {
+  apchClearEl(cellEl);
+  var img = document.createElement('img');
+  img.className = 'apch-chart-img';
+  img.alt = caption || '';
+  img.src = imgUrl;
+  img.onerror = function() {
+    apchSetError(cellEl, failText || '画像取得失敗');
+  };
+  cellEl.appendChild(img);
+  if(caption) {
+    var cap = document.createElement('div');
+    cap.style.cssText = 'font-size:10px;color:#78909c;margin-top:4px;';
+    cap.appendChild(document.createTextNode(caption));
+    cellEl.appendChild(cap);
+  }
+}
+
+function loadJmaSurfaceChart(etaDate, cellEl) {
+  if(!cellEl) return;
+  fetchJmaWeatherMapList().then(function(list) {
+    var names = (list && list.asia && list.asia.now) ? list.asia.now : [];
+    var best = apchPickClosestName(names, etaDate);
+    if(!best) { apchSetError(cellEl, '地上天気図: データなし'); return; }
+    var imgUrl = 'https://www.jma.go.jp/bosai/weather_map/data/png/' + best;
+    var vt = parseJmaChartTime(best);
+    var cap = isFinite(vt) ? ('ASAS ' + apchPad2(new Date(vt).getUTCHours()) + 'Z') : 'ASAS';
+    apchAppendChartImg(cellEl, imgUrl, '地上天気図: 画像取得失敗', cap);
+  }).catch(function() {
+    apchSetError(cellEl, '地上天気図: 取得失敗');
+  });
+}
+
+function loadJmaSigwx(etaDate, cellEl) {
+  if(!cellEl) return;
+  fetchJmaWeatherMapList().then(function(list) {
+    var names = [];
+    var asia = list && list.asia ? list.asia : {};
+    var i;
+    if(asia.ft24) {
+      for(i = 0; i < asia.ft24.length; i++) names.push(asia.ft24[i]);
+    }
+    if(asia.ft48) {
+      for(i = 0; i < asia.ft48.length; i++) names.push(asia.ft48[i]);
+    }
+    var best = apchPickClosestName(names, etaDate);
+    if(!best) { apchSetError(cellEl, '悪天予想図: データなし'); return; }
+    var imgUrl = 'https://www.jma.go.jp/bosai/weather_map/data/png/' + best;
+    var kind = /fsas48/i.test(best) ? 'FSAS48' : 'FSAS24';
+    var vt = parseJmaChartTime(best);
+    var cap = kind + (isFinite(vt) ? (' ' + apchPad2(new Date(vt).getUTCHours()) + 'Z') : '');
+    apchAppendChartImg(cellEl, imgUrl, '悪天予想図: 画像取得失敗', cap);
+  }).catch(function() {
+    apchSetError(cellEl, '悪天予想図: 取得失敗');
+  });
+}
+
+function getRainViewerUrl(lat, lon, zoom) {
+  return 'https://www.rainviewer.com/map.html?loc=' + lat + ',' + lon + ',' + (zoom || 8);
+}
+
+function getRadarIframeUrl(icao, lat, lon) {
+  var ic = String(icao || '').toUpperCase();
+  if(/^RJ|^RO/.test(ic)) {
+    return 'https://www.jma.go.jp/bosai/nowc/#zoom:8/lat:' + lat + '/lon:' + lon;
+  }
+  if(/^Y/.test(ic)) {
+    return 'https://www.bom.gov.au/products/national_radar_sat.loop.shtml';
+  }
+  if(/^PG/.test(ic)) {
+    return 'https://radar.weather.gov/station/PGUA/standard';
+  }
+  return getRainViewerUrl(lat, lon, 8);
+}
+
+function drawRainViewerMiniMap(lat, lon, cellEl, overlayKind) {
+  if(!cellEl || typeof L === 'undefined') {
+    apchSetError(cellEl, 'Radar: 地図を初期化できません');
+    return;
+  }
+  if(APCH_RADAR_MAP) {
+    try { APCH_RADAR_MAP.remove(); } catch(e) {}
+    APCH_RADAR_MAP = null;
+  }
+  apchClearEl(cellEl);
+  var mapDiv = document.createElement('div');
+  mapDiv.className = 'apch-radar-map';
+  cellEl.appendChild(mapDiv);
+  var baseUrl = (typeof DAY_MODE !== 'undefined' && DAY_MODE)
+    ? (BASES && BASES.light) : (BASES && BASES.dark);
+  if(!baseUrl) baseUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  var mini = L.map(mapDiv, { zoomControl: true, attributionControl: false });
+  APCH_RADAR_MAP = mini;
+  L.tileLayer(baseUrl, { maxZoom: 12 }).addTo(mini);
+  mini.setView([lat, lon], 8);
+  L.circleMarker([lat, lon], { radius: 5, color: '#ff9800', weight: 2, fillOpacity: 0.8 }).addTo(mini);
+  setTimeout(function() { try { mini.invalidateSize(); } catch(e2) {} }, 200);
+
+  if(overlayKind === 'jma') {
+    fetch('https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes_N1.json?_=' + Date.now())
+      .then(function(r) { return r.json(); })
+      .then(function(arr) {
+        var last = arr && arr.length ? arr[arr.length - 1] : null;
+        if(!last) return;
+        var url = 'https://www.jma.go.jp/bosai/jmatile/data/nowc/' + last.basetime +
+          '/none/' + last.validtime + '/surf/hrpns/{z}/{x}/{y}.png';
+        L.tileLayer(url, { opacity: 0.7, maxZoom: 12 }).addTo(mini);
+      })
+      .catch(function() {});
+    return;
+  }
+  fetch('https://api.rainviewer.com/public/weather-maps.json')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var past = d && d.radar && d.radar.past ? d.radar.past : [];
+      var frame = past.length ? past[past.length - 1] : null;
+      if(!frame) return;
+      var host = d.host || 'https://tilecache.rainviewer.com';
+      var url = host + frame.path + '/256/{z}/{x}/{y}/2/1_1.png';
+      L.tileLayer(url, { opacity: 0.75, maxZoom: 12 }).addTo(mini);
+    })
+    .catch(function() {});
+}
+
+function drawRadar(icao, lat, lon, cellEl) {
+  if(!cellEl) return;
+  if(lat == null || lon == null || isNaN(lat) || isNaN(lon)) {
+    apchSetError(cellEl, 'Radar: 目的地座標がありません');
+    return;
+  }
+  var ic = String(icao || '').toUpperCase();
+  var overlay = (/^RJ|^RO/.test(ic)) ? 'jma' : 'rainviewer';
+  drawRainViewerMiniMap(lat, lon, cellEl, overlay);
+  var ext = document.createElement('a');
+  ext.className = 'apch-ext-link';
+  ext.href = getRadarIframeUrl(ic, lat, lon);
+  ext.target = '_blank';
+  ext.rel = 'noopener noreferrer';
+  ext.appendChild(document.createTextNode('公式レーダーを開く'));
+  cellEl.appendChild(ext);
+}
+
+function loadSkewT(icao, etaDate, cellEl) {
+  if(!cellEl) return;
+  var ic = String(icao || '').toUpperCase();
+  var stnm = ICAO_TO_WMO[ic];
+  if(!stnm) {
+    apchSetError(cellEl, 'Skew-T: ' + ic + ' の観測点データなし');
+    return;
+  }
+  var now = Date.now();
+  var t = etaDate.getTime();
+  if(t > now) t = now;
+  var d = new Date(t);
+  var h = d.getUTCHours();
+  var obsH = (h < 6 || h >= 18) ? 0 : 12;
+  if(obsH === 0 && h >= 18) d.setUTCDate(d.getUTCDate() + 1);
+  if(d.getTime() > now) {
+    d = new Date(now);
+    h = d.getUTCHours();
+    obsH = (h < 6 || h >= 18) ? 0 : 12;
+    if(obsH === 0 && h >= 18) {
+      obsH = 12;
+    }
+  }
+  var Y = d.getUTCFullYear();
+  var M = apchPad2(d.getUTCMonth() + 1);
+  var D = apchPad2(d.getUTCDate());
+  var HH = apchPad2(obsH);
+  var url = 'https://weather.uwyo.edu/wsgi/sounding?datetime=' +
+    Y + '-' + M + '-' + D + '%20' + HH + ':00:00&id=' + stnm + '&type=PNG:SKEWT&src=FM35';
+  apchClearEl(cellEl);
+  var img = document.createElement('img');
+  img.className = 'apch-chart-img';
+  img.alt = 'Skew-T';
+  img.src = url;
+  img.onerror = function() {
+    var prev = new Date(Date.UTC(Y, d.getUTCMonth(), d.getUTCDate(), obsH, 0, 0) - 12 * 3600 * 1000);
+    var url2 = 'https://weather.uwyo.edu/wsgi/sounding?datetime=' +
+      prev.getUTCFullYear() + '-' + apchPad2(prev.getUTCMonth() + 1) + '-' +
+      apchPad2(prev.getUTCDate()) + '%20' + apchPad2(prev.getUTCHours()) +
+      ':00:00&id=' + stnm + '&type=PNG:SKEWT&src=FM35';
+    img.onerror = function() {
+      apchSetError(cellEl, 'Skew-T: 観測データなし（' + stnm + '）');
+    };
+    img.src = url2;
+  };
+  cellEl.appendChild(img);
+  var cap = document.createElement('div');
+  cap.style.cssText = 'font-size:10px;color:#78909c;margin-top:4px;';
+  cap.appendChild(document.createTextNode(ic + ' WMO ' + stnm + '  ' + HH + 'Z'));
+  cellEl.appendChild(cap);
+}
+
+function fetchApchMetarRaw(icao) {
+  var ic = String(icao || '').toUpperCase();
+  if(!ic) return Promise.resolve('');
+  var key = (typeof CHECKWX_API_KEY === 'string' && CHECKWX_API_KEY)
+    ? CHECKWX_API_KEY : 'eb52e4c6ca254584842adb8dc574b4f8';
+  var headers = (typeof AP_CHECKWX_HEADERS !== 'undefined' && AP_CHECKWX_HEADERS)
+    ? AP_CHECKWX_HEADERS
+    : { headers: { 'X-API-Key': key } };
+  var url = 'https://api.checkwx.com/v2/metar/' + ic + '/decoded';
+  return apFetchCheckwxJson(url, headers, 'APCH-metar-' + ic).then(function(res) {
+    var d = res && res.json && res.json.data && res.json.data[0] ? res.json.data[0] : null;
+    if(!d) return '';
+    return d.raw_text || d.raw || '';
+  }).catch(function() { return ''; });
+}
+
+function drawMetarTaf(destIcao, altIcao, etaDate, destTaf, altTaf, destMetar, altMetar, cellEl) {
+  if(!cellEl) return;
+  var C = getDayColors();
+  apchClearEl(cellEl);
+  function addRaw(label, icao, raw) {
+    var wrap = document.createElement('div');
+    var lbl = document.createElement('div');
+    lbl.style.cssText = 'font-size:10px;color:' + C.lbl + ';letter-spacing:.04em;margin-bottom:2px;';
+    lbl.appendChild(document.createTextNode(label + ' ' + (icao || '')));
+    wrap.appendChild(lbl);
+    var pre = document.createElement('pre');
+    pre.className = 'apch-metar-raw';
+    pre.appendChild(document.createTextNode(raw || 'METAR: データなし'));
+    wrap.appendChild(pre);
+    cellEl.appendChild(wrap);
+  }
+  addRaw('DEST METAR', destIcao, destMetar);
+  if(altIcao) addRaw('ALT METAR', altIcao, altMetar);
+  var tafHost = document.createElement('div');
+  tafHost.id = 'apch-taf';
+  cellEl.appendChild(tafHost);
+  renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate, tafHost);
+}
+
+function drawCrossSection(inputs, cellEl) {
+  if(!cellEl) return;
+  var built = buildCrossSectionFromNavlog(inputs.destIcao, inputs.arrivalTC);
+  if(!built.cols.length) {
+    apchSetError(cellEl, '断面図: WINDS/TEMP ALOFT がありません');
+    return;
+  }
+  var wxData = [];
+  var c, r, col, picked, spd;
+  for(c = 0; c < built.cols.length; c++) {
+    col = built.cols[c];
+    wxData[c] = [];
+    for(r = 0; r < LAYER_ALT_FT.length; r++) {
+      picked = apchPickAloft(col.data, LAYER_ALT_FT[r]);
+      spd = navAloftSpd(picked);
+      wxData[c][r] = {
+        windspeed: (spd === undefined) ? null : spd,
+        winddir: navAloftDir(picked),
+        cloudcover: 0
+      };
+    }
+  }
+  renderCrossSection(wxData, built.points, cellEl);
+}
+
+function replayApchBrief() {
+  if(!APCH_LAST) return;
+  initApchGrid();
+  drawMetarTaf(
+    APCH_LAST.destIcao, APCH_LAST.altIcao, APCH_LAST.etaDate,
+    APCH_LAST.destTaf, APCH_LAST.altTaf, APCH_LAST.destMetar, APCH_LAST.altMetar,
+    apchCell(1)
+  );
+  drawCrossSection({ destIcao: APCH_LAST.destIcao, arrivalTC: APCH_LAST.arrivalTC }, apchCell(2));
+  loadJmaSurfaceChart(APCH_LAST.etaDate, apchCell(3));
+  drawRadar(APCH_LAST.destIcao, APCH_LAST.lat, APCH_LAST.lon, apchCell(4));
+  loadSkewT(APCH_LAST.destIcao, APCH_LAST.etaDate, apchCell(5));
+  loadJmaSigwx(APCH_LAST.etaDate, apchCell(6));
+}
+
 function renderApchPanel() {
   var panel = document.getElementById('apch-panel');
   if(!panel) return;
@@ -6703,9 +7200,8 @@ function renderApchPanel() {
   var modeKey = (typeof DAY_MODE !== 'undefined' && DAY_MODE) ? 'day' : 'night';
   if(panel.getAttribute('data-mode') === modeKey && document.getElementById('apch-eta')) {
     fillApchFromNavlog(false);
-    if(APCH_LAST) {
-      renderCrossSection(APCH_LAST.wxData, APCH_LAST.points);
-      renderTafTimeline(APCH_LAST.destIcao, APCH_LAST.destTaf, APCH_LAST.altIcao, APCH_LAST.altTaf, APCH_LAST.etaDate);
+    if(APCH_LAST && !document.getElementById('apch-grid')) {
+      replayApchBrief();
     }
     return;
   }
@@ -6743,8 +7239,7 @@ function renderApchPanel() {
       '</div>' +
       '<button type="button" id="apch-run-btn" onclick="runApchBrief()" style="' + runStyle + '">RUN APCH BRIEF</button>' +
       '<div id="apch-msg" style="margin-top:10px;font-size:12px;color:' + C.lbl + ';"></div>' +
-      '<div id="apch-section" style="margin-top:18px;min-height:120px;"></div>' +
-      '<div id="apch-taf" style="margin-top:18px;min-height:80px;"></div>' +
+      '<div id="apch-results"></div>' +
     '</div>';
 
   panel.setAttribute('data-mode', modeKey);
@@ -6754,20 +7249,18 @@ function renderApchPanel() {
     if(etaEl) etaEl.value = prevEta;
   }
   if(APCH_LAST) {
-    renderCrossSection(APCH_LAST.wxData, APCH_LAST.points);
-    renderTafTimeline(APCH_LAST.destIcao, APCH_LAST.destTaf, APCH_LAST.altIcao, APCH_LAST.altTaf, APCH_LAST.etaDate);
+    replayApchBrief();
   }
 }
 
-function renderCrossSection(wxData, points) {
-  var host = document.getElementById('apch-section');
-  console.log('[APCH] コンテナ', host);
+function renderCrossSection(wxData, points, hostEl) {
+  var host = hostEl || document.getElementById('apch-cell-2') || document.getElementById('apch-section');
   if(!host) return;
   var C = getDayColors();
   var nCol = APCH_DISTS.length;
   var nRow = APCH_LEVELS.length;
-  var leftPad = 52, topPad = 18, botPad = 52, rightPad = 10;
-  var cellW = 78, cellH = 40;
+  var leftPad = 44, topPad = 8, botPad = 48, rightPad = 8;
+  var cellW = 56, cellH = 30;
   var W = leftPad + nCol * cellW + rightPad;
   var H = topPad + nRow * cellH + botPad;
   var r, c, x, y, cell, spd, dir, cloudy, rot, lbl, fill;
@@ -6806,11 +7299,6 @@ function renderCrossSection(wxData, points) {
   });
   svg.style.display = 'block';
   svg.style.maxWidth = '100%';
-
-  svg.appendChild(apchSvgEl('text', {
-    x: leftPad + nCol * cellW / 2, y: 12, 'text-anchor': 'middle',
-    fill: C.acc, 'font-size': 12, 'font-weight': 'bold', 'letter-spacing': '0.08em'
-  }, '高度断面図'));
 
   for(r = 0; r < nRow; r++) {
     y = topPad + r * cellH;
@@ -6873,7 +7361,7 @@ function renderCrossSection(wxData, points) {
 
   for(c = 0; c < nCol; c++) {
     x = leftPad + c * cellW + cellW / 2;
-    lbl = (points && points[c] && points[c].dist === 0) ? 'APT' : (APCH_DISTS[c] + 'NM');
+    lbl = (points && points[c] && points[c].dist === 0) ? 'APT' : ((points && points[c] && points[c].dist != null) ? (points[c].dist + 'NM') : (APCH_DISTS[c] + 'NM'));
     svg.appendChild(apchSvgEl('text', {
       x: x, y: topPad + nRow * cellH + 14, 'text-anchor': 'middle', fill: C.lbl, 'font-size': 10
     }, lbl));
@@ -6895,14 +7383,12 @@ function renderCrossSection(wxData, points) {
   host.appendChild(svg);
   var note = document.createElement('div');
   note.style.cssText = 'color:' + C.dim + ';font-size:10px;margin-top:4px;';
-  note.appendChild(document.createTextNode('風速 kt ／ ▲ は風の吹いてくる方向（FROM）。雲量 50%超のセルはグレー。'));
+  note.appendChild(document.createTextNode('風速 kt ／ ▲ は風の吹いてくる方向（FROM）。NavLog WINDS/TEMP ALOFT。'));
   host.appendChild(note);
-  console.log('[APCH] cross-section svg', svg.getAttribute('viewBox'), svg.getBoundingClientRect());
 }
 
-function renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate) {
-  var host = document.getElementById('apch-taf');
-  console.log('[APCH] TAFコンテナ', host);
+function renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate, hostEl) {
+  var host = hostEl || document.getElementById('apch-taf');
   if(!host) return;
   var C = getDayColors();
   var eta = etaDate.getTime();
@@ -6910,8 +7396,8 @@ function renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate) {
   var t0 = eta - win;
   var t1 = eta + win;
   var span = t1 - t0;
-  var leftPad = 86, topPad = 22, barH = 22, gap = 14, botPad = 28;
-  var barW = 420;
+  var leftPad = 70, topPad = 18, barH = 20, gap = 12, botPad = 26;
+  var barW = 240;
   var rows = [{ icao: destIcao || 'DEST', segs: destTaf || [] }];
   if(altIcao) rows.push({ icao: altIcao, segs: altTaf || [] });
   var H = topPad + rows.length * (barH + gap) + botPad;
@@ -7038,7 +7524,6 @@ function renderTafTimeline(destIcao, destTaf, altIcao, altTaf, etaDate) {
   sp.appendChild(document.createTextNode('破線枠 = TEMPO/PROB'));
   lg.appendChild(sp);
   host.appendChild(lg);
-  console.log('[APCH] taf svg', svg.getAttribute('viewBox'), svg.getBoundingClientRect());
 }
 
 function runApchBrief() {
@@ -7055,58 +7540,58 @@ function runApchBrief() {
     setMsg('NAV LOGを先に入力してください', true);
     return;
   }
-  if(inp.arrivalTC == null) {
-    setMsg('最終レグの TC を取得できませんでした', true);
-    return;
-  }
   var etaStr = etaEl ? String(etaEl.value || '').trim() : '';
   var etaDate = apchBuildEtaDate(etaStr);
   if(!etaDate) {
     setMsg('ETA を HH:MM（UTC）で入力してください', true);
     return;
   }
-  var now = Date.now();
-  if(etaDate.getTime() - now > 72 * 3600 * 1000) {
-    setMsg('ETA が 72 時間を超えています。Open-Meteo の予報範囲外です。', true);
-    return;
-  }
-  var etaIso = etaDate.toISOString();
   if(btn) {
     btn.disabled = true;
     btn.textContent = 'LOADING…';
   }
   setMsg('気象データを取得しています…', false);
+  initApchGrid();
 
-  fetchAirportCoords(inp.destIcao).then(function(coords) {
-    var points = calcApproachPoints(coords.lat, coords.lon, inp.arrivalTC, APCH_DISTS);
-    var wxJobs = [];
-    var pi;
-    for(pi = 0; pi < points.length; pi++) {
-      wxJobs.push(fetchOpenMeteoForPoint(points[pi].lat, points[pi].lon, etaIso));
-    }
-    var tafJobs = [
-      fetchTafTimeline(inp.destIcao, etaDate).catch(function() { return []; }),
-      inp.altIcao ? fetchTafTimeline(inp.altIcao, etaDate).catch(function() { return []; }) : Promise.resolve([])
-    ];
-    return Promise.all([Promise.all(wxJobs), Promise.all(tafJobs)]).then(function(all) {
-      var wxData = all[0];
-      var destTaf = all[1][0] || [];
-      var altTaf = all[1][1] || [];
-      APCH_LAST = {
-        wxData: wxData,
-        points: points,
-        destIcao: inp.destIcao,
-        destTaf: destTaf,
-        altIcao: inp.altIcao,
-        altTaf: altTaf,
-        etaDate: etaDate
-      };
-      console.log('[APCH] renderCrossSection呼び出し直前', wxData);
-      renderCrossSection(wxData, points);
-      console.log('[APCH] renderTafTimeline呼び出し直前', destTaf, altTaf);
-      renderTafTimeline(inp.destIcao, destTaf, inp.altIcao, altTaf, etaDate);
-      setMsg('', false);
-    });
+  drawCrossSection(inp, apchCell(2));
+  loadJmaSurfaceChart(etaDate, apchCell(3));
+  loadSkewT(inp.destIcao, etaDate, apchCell(5));
+  loadJmaSigwx(etaDate, apchCell(6));
+
+  var tafJobs = [
+    fetchTafTimeline(inp.destIcao, etaDate).catch(function() { return []; }),
+    inp.altIcao ? fetchTafTimeline(inp.altIcao, etaDate).catch(function() { return []; }) : Promise.resolve([]),
+    fetchApchMetarRaw(inp.destIcao),
+    inp.altIcao ? fetchApchMetarRaw(inp.altIcao) : Promise.resolve('')
+  ];
+  var coordsP = fetchAirportCoords(inp.destIcao).catch(function() {
+    var apt = (typeof APT !== 'undefined' && APT[inp.destIcao]) ? APT[inp.destIcao] : null;
+    if(apt && typeof apt.lat === 'number') return { lat: apt.lat, lon: apt.lon };
+    return null;
+  });
+
+  Promise.all([Promise.all(tafJobs), coordsP]).then(function(all) {
+    var destTaf = all[0][0] || [];
+    var altTaf = all[0][1] || [];
+    var destMetar = all[0][2] || '';
+    var altMetar = all[0][3] || '';
+    var coords = all[1];
+    APCH_LAST = {
+      destIcao: inp.destIcao,
+      destTaf: destTaf,
+      destMetar: destMetar,
+      altIcao: inp.altIcao,
+      altTaf: altTaf,
+      altMetar: altMetar,
+      etaDate: etaDate,
+      arrivalTC: inp.arrivalTC,
+      lat: coords ? coords.lat : null,
+      lon: coords ? coords.lon : null
+    };
+    drawMetarTaf(inp.destIcao, inp.altIcao, etaDate, destTaf, altTaf, destMetar, altMetar, apchCell(1));
+    if(coords) drawRadar(inp.destIcao, coords.lat, coords.lon, apchCell(4));
+    else apchSetError(apchCell(4), 'Radar: 目的地座標がありません');
+    setMsg('', false);
   }).catch(function(err) {
     console.error('[APCH]', err);
     setMsg((err && err.message) ? err.message : String(err), true);
