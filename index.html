@@ -7168,43 +7168,76 @@ function buildSkewTCandidates(etaDate, maxAttempts) {
   return list;
 }
 
-function buildSkewTUrl(wmo, dateObj) {
+function buildSkewTUrl(wmo, dateObj, withSrc) {
   var yyyy = dateObj.getUTCFullYear();
   var mm = apchPad2(dateObj.getUTCMonth() + 1);
   var dd = apchPad2(dateObj.getUTCDate());
   var hh = apchPad2(dateObj.getUTCHours());
-  var dt = yyyy + '-' + mm + '-' + dd + '+' + hh + '%3A00%3A00';
-  return 'https://weather.uwyo.edu/wsgi/sounding?datetime=' + dt +
-    '&id=' + wmo + '&type=PNG%3ASKEWT&src=FM35';
+  var dt = yyyy + '-' + mm + '-' + dd + '+' + hh + ':00:00';
+  var url = 'https://weather.uwyo.edu/wsgi/sounding?datetime=' + dt +
+    '&id=' + wmo + '&type=PNG:SKEWT';
+  if(withSrc !== false) url += '&src=FM35';
+  return url;
+}
+
+function buildSkewTUrlCgiBin(wmo, dateObj) {
+  var yyyy = dateObj.getUTCFullYear();
+  var mm = apchPad2(dateObj.getUTCMonth() + 1);
+  var dd = apchPad2(dateObj.getUTCDate());
+  var hh = apchPad2(dateObj.getUTCHours());
+  var ddhh = dd + hh;
+  return 'https://weather.uwyo.edu/cgi-bin/sounding.py' +
+    '?TYPE=gif%3ASKEWT' +
+    '&YEAR=' + yyyy + '&MONTH=' + mm +
+    '&FROM=' + ddhh + '&TO=' + ddhh +
+    '&STNM=' + wmo;
+}
+
+function showSkewTImage(el, img, icao, labelTime) {
+  apchClearEl(el);
+  var header = document.createElement('div');
+  header.style.cssText = 'font-size:10px;color:#aaa;padding:3px 6px;background:#111;white-space:nowrap;overflow:hidden;';
+  header.appendChild(document.createTextNode('Skew-T  ' + icao + '  ' + labelTime));
+  el.appendChild(header);
+  el.appendChild(img);
+}
+
+function showSkewTCgiBin(el, icao, wmo, dateObj) {
+  var cgiBinUrl = buildSkewTUrlCgiBin(wmo, dateObj);
+  apchClearEl(el);
+  var header = document.createElement('div');
+  header.style.cssText = 'font-size:10px;color:#aaa;padding:2px 6px;background:#111;';
+  header.appendChild(document.createTextNode('Skew-T ' + icao + '（Wyoming cgi-bin） '));
+  var a = document.createElement('a');
+  a.className = 'apch-ext-link';
+  a.href = cgiBinUrl;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.appendChild(document.createTextNode('Wyoming で開く'));
+  header.appendChild(a);
+  el.appendChild(header);
+  var iframe = document.createElement('iframe');
+  iframe.src = cgiBinUrl;
+  iframe.title = 'Skew-T ' + icao;
+  iframe.style.cssText = 'width:100%;height:calc(100% - 18px);min-height:180px;border:none;background:#fff;';
+  el.appendChild(iframe);
 }
 
 function trySkewTUrls(icao, wmo, candidates, idx, el) {
   if(!el) return;
   if(idx >= candidates.length) {
-    apchClearEl(el);
-    var empty = document.createElement('div');
-    empty.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#f39c12;font-size:11px;text-align:center;padding:8px;';
-    var icon = document.createElement('div');
-    icon.style.cssText = 'font-size:22px;margin-bottom:6px;';
-    icon.appendChild(document.createTextNode('⚠️'));
-    empty.appendChild(icon);
-    var title = document.createElement('div');
-    title.appendChild(document.createTextNode('Skew-T データなし'));
-    empty.appendChild(title);
-    var sub = document.createElement('div');
-    sub.style.cssText = 'color:#888;font-size:10px;margin-top:4px;';
-    sub.appendChild(document.createTextNode(icao + '  過去3日分を検索しましたが観測データがありません'));
-    empty.appendChild(sub);
-    el.appendChild(empty);
+    var fallbackDate = (candidates && candidates.length) ? candidates[0] : new Date();
+    showSkewTCgiBin(el, icao, wmo, fallbackDate);
     return;
   }
 
   var dateObj = candidates[idx];
-  var url = buildSkewTUrl(wmo, dateObj);
   var labelTime = dateObj.getUTCFullYear() + '/' +
     apchPad2(dateObj.getUTCMonth() + 1) + '/' +
     apchPad2(dateObj.getUTCDate()) + ' ' +
     apchPad2(dateObj.getUTCHours()) + 'UTC';
+  var urlWithSrc = buildSkewTUrl(wmo, dateObj, true);
+  var urlNoSrc = buildSkewTUrl(wmo, dateObj, false);
 
   apchClearEl(el);
   var loading = document.createElement('div');
@@ -7212,26 +7245,26 @@ function trySkewTUrls(icao, wmo, candidates, idx, el) {
   loading.appendChild(document.createTextNode('Skew-T 検索中… ' + labelTime));
   el.appendChild(loading);
 
+  function bindSkewTImg(img, nextFn) {
+    img.className = 'apch-chart-img';
+    img.alt = 'Skew-T';
+    img.style.cssText = 'width:100%;height:calc(100% - 28px);object-fit:contain;background:#000;display:block;';
+    img.onload = function() {
+      if(!img.naturalWidth) { nextFn(); return; }
+      showSkewTImage(el, img, icao, labelTime);
+    };
+    img.onerror = nextFn;
+  }
+
   var img = document.createElement('img');
-  img.className = 'apch-chart-img';
-  img.alt = 'Skew-T';
-  img.style.cssText = 'width:100%;height:calc(100% - 28px);object-fit:contain;background:#000;display:block;';
-  img.onload = function() {
-    if(!img.naturalWidth) {
+  bindSkewTImg(img, function() {
+    var img2 = document.createElement('img');
+    bindSkewTImg(img2, function() {
       trySkewTUrls(icao, wmo, candidates, idx + 1, el);
-      return;
-    }
-    apchClearEl(el);
-    var header = document.createElement('div');
-    header.style.cssText = 'font-size:10px;color:#aaa;padding:3px 6px;background:#111;white-space:nowrap;overflow:hidden;';
-    header.appendChild(document.createTextNode('Skew-T  ' + icao + '  ' + labelTime));
-    el.appendChild(header);
-    el.appendChild(img);
-  };
-  img.onerror = function() {
-    trySkewTUrls(icao, wmo, candidates, idx + 1, el);
-  };
-  img.src = url;
+    });
+    img2.src = urlNoSrc;
+  });
+  img.src = urlWithSrc;
 }
 
 function loadSkewT(icao, etaDate, cellEl) {
