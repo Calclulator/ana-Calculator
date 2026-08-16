@@ -6476,7 +6476,8 @@ var ICAO_TO_WMO = {
   'RKSI': '47122', 'RKSS': '47122',
   'ZBAA': '54511', 'ZSPD': '58362', 'ZGGG': '59287',
   'RCTP': '46692', 'VHHH': '45004',
-  'WSSS': '48698', 'WMKK': '48615', 'VTBS': '48455',
+  'WSSS': '48698',   // Singapore Changi
+  'WMKK': '48615', 'VTBS': '48455',
   'WIII': '96749', 'RPLL': '98444',
   'YSSY': '94767', 'YMML': '94866', 'YBBN': '94578',
   'YPPH': '94610', 'YBCS': '94294', 'YBTL': '94294',
@@ -6979,32 +6980,9 @@ function apchAppendChartImg(cellEl, imgUrl, failText, caption) {
   }
 }
 
-function getSurfaceChartUrl(destIcao) {
-  var ic = String(destIcao || '').toUpperCase();
-  var pre2 = ic.slice(0, 2);
-  var pre1 = ic.slice(0, 1);
-  var eu = ['EG','EI','LF','LD','LS','LO','LI','LK','EP','EH','EL','EB','ES','EN','EF'];
-  if(pre2 === 'RJ' || pre2 === 'RO') return null;
-  if(pre2 === 'RK') return 'https://web.kma.go.kr/repositary/image/cht/img/AAXX_SFC00.gif';
-  if(pre2 === 'WS' || pre2 === 'WM') return 'https://www.wetterzentrale.de/maps/DNMI00_00.png';
-  if(pre1 === 'Y') return 'https://www.bom.gov.au/australia/charts/synoptic/national.gif';
-  if(pre1 === 'K' || pre2 === 'PA' || pre2 === 'PH') return 'https://www.wpc.ncep.noaa.gov/noaa/noaasfc.gif';
-  if(eu.indexOf(pre2) >= 0) return 'https://www.wetterzentrale.de/maps/DNMI00_00.png';
-  return null;
-}
-
 function loadSurfaceChart(destIcao, etaDate, cellEl) {
   if(!cellEl) return;
-  var imgUrl = getSurfaceChartUrl(destIcao);
-  if(!imgUrl) {
-    var pre2 = String(destIcao || '').slice(0, 2).toUpperCase();
-    var cap = (pre2 === 'RJ' || pre2 === 'RO')
-      ? 'JMA ASAS'
-      : ('JMA ASAS（' + destIcao + ' 専用図は自動取得未対応）');
-    loadJmaSurfaceChart(etaDate, cellEl, cap);
-    return;
-  }
-  apchAppendChartImg(cellEl, imgUrl, '地上天気図: 画像取得失敗', '地上天気図 ' + destIcao);
+  loadJmaSurfaceChart(etaDate, cellEl);
 }
 
 function loadJmaSurfaceChart(etaDate, cellEl, captionOverride) {
