@@ -1269,6 +1269,7 @@
         <tr>
           <th>Waypoint</th>
           <th>ZTME</th>
+          <th style="min-width:52px;text-align:center;">CTIME<br><span style="font-size:10px;color:#aaa;">RTIME</span></th>
           <th>ETO</th>
           <th>ATO <button onclick="tickAtoAutoFill();if(typeof renderFpTable==='function')renderFpTable();" style="font-size:9px;padding:1px 5px;margin-left:3px;background:#1a3a4a;color:#4fc3f7;border:1px solid #4fc3f7;border-radius:3px;cursor:pointer;vertical-align:middle;" title="現在時刻に基づいてATOを自動入力">反映</button></th>
           <th>Time Δ</th>
@@ -1281,7 +1282,7 @@
       </thead>
       <tbody id="fp-tbody">
         <tr>
-          <td colspan="10" style="color:#546e7a;padding:24px;text-align:center;">
+          <td colspan="11" style="color:#546e7a;padding:24px;text-align:center;">
             NAV LOGを貼り付けて ▶ Apply で解析してください
           </td>
         </tr>
@@ -3697,13 +3698,48 @@ function getFirForPoint(lat, lng) {
   return null;
 }
 
+function secToHHMM(sec) {
+  if(sec < 0) sec = 0;
+  var h = Math.floor(sec / 3600);
+  var m = Math.floor((sec % 3600) / 60);
+  return ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
+}
+
+// ctme は NAVLOG の積算分。Pass 1 は加算せず、最終 WP の ctme を総飛行時間とする
+function calcCtimeRtime(rows) {
+  if(!rows || !rows.length) return rows;
+  var grandTotal = 0;
+  var i, row, isFir;
+  for(i = 0; i < rows.length; i++) {
+    row = rows[i];
+    if(!row) continue;
+    isFir = typeof row.id === 'string' && row.id.charAt(0) === '-';
+    if(isFir) continue;
+    if(row.ctme === null || row.ctme === undefined || isNaN(row.ctme)) continue;
+    grandTotal = row.ctme;
+  }
+  for(i = 0; i < rows.length; i++) {
+    row = rows[i];
+    if(!row) continue;
+    if(row.ctme === null || row.ctme === undefined || isNaN(row.ctme)) {
+      row._ctime_sec = undefined;
+      row._rtime_sec = undefined;
+    } else {
+      row._ctime_sec = row.ctme * 60;
+      row._rtime_sec = (grandTotal - row.ctme) * 60;
+    }
+  }
+  return rows;
+}
+
 function renderFpTable() {
   var tbody = document.getElementById('fp-tbody');
   tbody.innerHTML = '';
   if(!FP_ROWS.length) {
-    tbody.innerHTML = '<tr><td colspan="10" style="color:#546e7a;padding:24px;text-align:center;">NAV LOGを貼り付けて ▶ Apply で解析してください</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="color:#546e7a;padding:24px;text-align:center;">NAV LOGを貼り付けて ▶ Apply で解析してください</td></tr>';
     return;
   }
+  calcCtimeRtime(FP_ROWS);
 
   // FIR color palette (bg=通常行, hi=境界行強調, ac=アクセント)
   var FIR_PAL = [
@@ -3771,7 +3807,7 @@ function renderFpTable() {
     if(curWt !== null && prevWt !== null && prevWt > NAV_MLDW && curWt <= NAV_MLDW) {
       var mldwTr = document.createElement('tr');
       mldwTr.style.cssText = 'background:rgba(255,152,0,.15);';
-      mldwTr.innerHTML = '<td colspan="10" style="text-align:center;color:#ff9800;font-weight:bold;' +
+      mldwTr.innerHTML = '<td colspan="11" style="text-align:center;color:#ff9800;font-weight:bold;' +
         'font-size:1em;letter-spacing:.12em;padding:5px 0;' +
         'border-top:1.5px solid rgba(255,152,0,.55);border-bottom:1.5px solid rgba(255,152,0,.55);">' +
         '&#9660; MLDW &nbsp;' + NAV_MLDW.toFixed(1) + '</td>';
@@ -3822,6 +3858,8 @@ function renderFpTable() {
       }
     }
     var ztmeStr = (row.ztme!==null) ? String(row.ztme) : '—';
+    var ctimeStr = (row._ctime_sec !== undefined && row._ctime_sec !== null && !isNaN(row._ctime_sec)) ? secToHHMM(row._ctime_sec) : '--:--';
+    var rtimeStr = (row._rtime_sec !== undefined && row._rtime_sec !== null && !isNaN(row._rtime_sec)) ? secToHHMM(row._rtime_sec) : '--:--';
 
     var noteHtml = '<input class="fp-in fp-note" value="' + escAttr(row.note || '') + '" ' +
       'oninput="onNoteChange(' + idx + ',this.value)" onchange="onNoteChange(' + idx + ',this.value)">' +
@@ -3830,6 +3868,10 @@ function renderFpTable() {
     tr.innerHTML =
       '<td style="color:'+(isFirBoundary?'#cfd8dc':'#90a4ae')+';padding:3px 8px;">'+row.id+'</td>'+
       '<td style="color:#546e7a;text-align:center;padding:3px 6px;">'+ztmeStr+'</td>'+
+      '<td style="text-align:center;font-size:12px;padding:3px 6px;min-width:52px;">'+
+        '<div style="color:#7ab3ef;">'+ctimeStr+'</div>'+
+        '<div style="color:#aaa;font-size:11px;">'+rtimeStr+'</div>'+
+      '</td>'+
       '<td style="color:#78909c;padding:3px 6px;">'+eto+'</td>'+
       '<td style="padding:3px 4px;"><input class="fp-in" value="'+row.ato+'" placeholder="" onchange="onAtoChange('+idx+',this.value)"></td>'+
       '<td style="padding:3px 6px;text-align:center;min-width:70px;">'+timeDeltaHtml+'</td>'+
