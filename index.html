@@ -1024,7 +1024,77 @@
         </table>
       </div>
     </div>
-    <div id="docs-tarmac" class="docs-tab-content" style="display:none;"></div>
+    <div id="docs-tarmac" class="docs-tab-content" style="display:none;">
+      <div class="section-title">TARMAC DELAY タイマー</div>
+      <div style="text-align:center;margin:16px 0;">
+        <div id="tarmac-timer-display" style="font-size:36px;font-weight:bold;color:#7ab3ef;font-family:monospace;letter-spacing:2px;">00:00:00</div>
+        <div style="margin-top:4px;font-size:12px;color:#aaa;">LIMIT: 4時間（4時間以内に GTB 要求）</div>
+        <div style="margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+          <button type="button" onclick="tarmacTimerStart()" style="padding:6px 16px;background:#1e5f1e;color:#fff;border:none;border-radius:4px;cursor:pointer;touch-action:manipulation;min-height:36px;">START</button>
+          <button type="button" onclick="tarmacTimerStop()" style="padding:6px 16px;background:#5f1e1e;color:#fff;border:none;border-radius:4px;cursor:pointer;touch-action:manipulation;min-height:36px;">STOP</button>
+          <button type="button" onclick="tarmacTimerReset()" style="padding:6px 16px;background:#333;color:#fff;border:none;border-radius:4px;cursor:pointer;touch-action:manipulation;min-height:36px;">RESET</button>
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:#aaa;">
+          開始時刻:
+          <span id="tarmac-start-lcl">--:--</span> LCL /
+          <span id="tarmac-start-utc">--:--</span> UTC
+        </div>
+      </div>
+      <div class="section-title">タイムライン・チェックリスト</div>
+      <table>
+        <tr><th>経過時間</th><th>アクション</th><th>状態</th></tr>
+        <tr><td>常時</td><td>旅客の健康状態把握、化粧室・座席リクライニング等の使用許可、快適な客室温度の維持</td><td id="tarmac-check-0" style="color:#888;">対応要</td></tr>
+        <tr><td>30分経過</td><td>遅延状況の機内アナウンス実施</td><td id="tarmac-check-30" style="color:#888;">—</td></tr>
+        <tr><td>2時間経過</td><td>全旅客へ飲食物（水とスナック等）の提供</td><td id="tarmac-check-120" style="color:#888;">—</td></tr>
+        <tr><td>3時間経過</td><td>GTB（降機機会提供）の判断を基地長と協議</td><td id="tarmac-check-180" style="color:#888;">—</td></tr>
+        <tr><td>4時間経過</td><td>全旅客へ飲食物の提供（以降2時間毎）</td><td id="tarmac-check-240" style="color:#888;">—</td></tr>
+      </table>
+      <div class="section-title">国別 Tarmac Delay 規定一覧（INFO No.5）</div>
+      <div style="overflow-x:auto;">
+        <table>
+          <tr><th>対象国</th><th>上限時間</th><th>リセット条件</th><th>特記事項</th></tr>
+          <tr>
+            <td>米国</td>
+            <td>4時間（4時間以内に GTB 要求）</td>
+            <td>【継続/中止ともに】ドアオープン ＋ 降機可能アナウンス</td>
+            <td>出発・到着・DIV*。PA: 30分超過時。FOOD: 2時間以内</td>
+          </tr>
+          <tr>
+            <td>カナダ</td>
+            <td>3時間（3h45m 以内に離陸確実な場合は延長可）</td>
+            <td>【運航中止】ドアオープンした時点。【運航継続】リセット不可</td>
+            <td>出発・到着・DIV*。PA: 30分ごと。FOOD: 2時間以内</td>
+          </tr>
+          <tr>
+            <td>韓国</td>
+            <td>4時間</td>
+            <td>【運航中止】ドアオープンした時点。【運航継続】リセット不可（開扉中は時間除外）</td>
+            <td>出発・到着・DIV。PA: 30分ごと。FOOD: 2時間以内</td>
+          </tr>
+          <tr>
+            <td>中国</td>
+            <td>設定なし（3時間超過で基地長へ確認）</td>
+            <td>【運航中止】ドアオープンした時点。【運航継続】リセット不可</td>
+            <td>出発・到着・DIV*。PA: 30分ごと。FOOD: 2時間以内</td>
+          </tr>
+          <tr>
+            <td>タイ</td>
+            <td>3時間（管制情報により離陸確実な場合は対象外）</td>
+            <td>【継続/中止ともに】ドアオープンした時点</td>
+            <td>出発時のみ。PA: 状況に応じ適切に実施（30分毎の義務なし）。FOOD: 対象外</td>
+          </tr>
+          <tr>
+            <td>ベトナム</td>
+            <td>3時間（管制情報により離陸確実な場合は対象外）</td>
+            <td>リセットの概念なし</td>
+            <td>出発時のみ。PA: 状況に応じ適切に実施。FOOD: 30分経過で飲料水、以後2時間毎</td>
+          </tr>
+        </table>
+      </div>
+      <p style="font-size:11px;color:#aaa;">
+        * 米国・カナダ・中国については、計画上当該国外を発着地とする便が当該国内にダイバートした場合は適用除外となります。
+      </p>
+    </div>
   </div>
 </div>
 
@@ -2015,6 +2085,93 @@ function showDocsTab(tabId) {
   suffix = String(tabId || '').indexOf('docs-') === 0 ? String(tabId).slice(5) : String(tabId || '');
   activeBtn = document.getElementById('dnav-' + suffix);
   if(activeBtn) activeBtn.classList.add('active');
+}
+
+var tarmacTimerInterval = null;
+var tarmacTimerSeconds = 0;
+var tarmacTimerRunning = false;
+
+function tarmacTimerStart() {
+  if(tarmacTimerRunning) return;
+  tarmacTimerRunning = true;
+  var now = new Date();
+  var lclH = ('0' + now.getHours()).slice(-2);
+  var lclM = ('0' + now.getMinutes()).slice(-2);
+  var utcH = ('0' + now.getUTCHours()).slice(-2);
+  var utcM = ('0' + now.getUTCMinutes()).slice(-2);
+  var lclEl = document.getElementById('tarmac-start-lcl');
+  var utcEl = document.getElementById('tarmac-start-utc');
+  if(lclEl) lclEl.textContent = lclH + ':' + lclM;
+  if(utcEl) utcEl.textContent = utcH + ':' + utcM;
+  tarmacTimerInterval = setInterval(function() {
+    tarmacTimerSeconds++;
+    tarmacUpdateDisplay();
+    tarmacUpdateChecklist();
+  }, 1000);
+  tarmacUpdateChecklist();
+}
+
+function tarmacTimerStop() {
+  tarmacTimerRunning = false;
+  if(tarmacTimerInterval) {
+    clearInterval(tarmacTimerInterval);
+    tarmacTimerInterval = null;
+  }
+}
+
+function tarmacTimerReset() {
+  tarmacTimerStop();
+  tarmacTimerSeconds = 0;
+  var disp = document.getElementById('tarmac-timer-display');
+  if(disp) {
+    disp.textContent = '00:00:00';
+    disp.style.color = '#7ab3ef';
+  }
+  var lclEl = document.getElementById('tarmac-start-lcl');
+  var utcEl = document.getElementById('tarmac-start-utc');
+  if(lclEl) lclEl.textContent = '--:--';
+  if(utcEl) utcEl.textContent = '--:--';
+  var ids = ['tarmac-check-0', 'tarmac-check-30', 'tarmac-check-120', 'tarmac-check-180', 'tarmac-check-240'];
+  var labels = ['対応要', '—', '—', '—', '—'];
+  var i, el;
+  for(i = 0; i < ids.length; i++) {
+    el = document.getElementById(ids[i]);
+    if(el) {
+      el.textContent = labels[i];
+      el.style.color = '#888';
+    }
+  }
+}
+
+function tarmacUpdateDisplay() {
+  var h = Math.floor(tarmacTimerSeconds / 3600);
+  var m = Math.floor((tarmacTimerSeconds % 3600) / 60);
+  var s = tarmacTimerSeconds % 60;
+  var str = ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2) + ':' + ('0' + s).slice(-2);
+  var disp = document.getElementById('tarmac-timer-display');
+  if(disp) {
+    disp.textContent = str;
+    disp.style.color = (tarmacTimerSeconds >= 14400) ? '#ff4444' : (tarmacTimerSeconds >= 10800) ? '#ffaa00' : '#7ab3ef';
+  }
+}
+
+function tarmacUpdateChecklist() {
+  var checkpoints = [
+    { id: 'tarmac-check-0', sec: 0, label: '✔ 対応中' },
+    { id: 'tarmac-check-30', sec: 1800, label: '✔ 実施要' },
+    { id: 'tarmac-check-120', sec: 7200, label: '✔ 提供要' },
+    { id: 'tarmac-check-180', sec: 10800, label: '✔ 協議要' },
+    { id: 'tarmac-check-240', sec: 14400, label: '✔ 提供要' }
+  ];
+  var i, cp, el;
+  for(i = 0; i < checkpoints.length; i++) {
+    cp = checkpoints[i];
+    el = document.getElementById(cp.id);
+    if(el && tarmacTimerSeconds >= cp.sec) {
+      el.textContent = cp.label;
+      el.style.color = (tarmacTimerSeconds >= 14400 && i === 4) ? '#ff4444' : '#4aff7a';
+    }
+  }
 }
 
 // 起動時: 一瞬 WX で地図初期化 → Flight Plan に切替
