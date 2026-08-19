@@ -179,6 +179,26 @@
   body.day-mode .docs-tab-content th{background:#1565c0;}
   body.day-mode .docs-tab-content h3{color:#1565c0;}
   body.day-mode .docs-tab-content .section-title{background:#1565c0;}
+  .wx-tab-btn{background:#1a1a2e;color:#7ab3ef;border:1px solid #2a4a7f;border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;touch-action:manipulation;}
+  .wx-tab-btn.wx-tab-active{background:#0d3b6e;color:#00d4ff;border-color:#00d4ff;}
+  .wx-sub-panel{padding:8px;min-height:300px;overflow-y:auto;flex:1;min-width:0;}
+  .wx-sub-tab-bar{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:8px;}
+  .wx-sub-tab-btn{background:#111;color:#aaa;border:1px solid #333;border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;touch-action:manipulation;}
+  .wx-sub-tab-btn.wx-sub-active{background:#0d3b6e;color:#00d4ff;border-color:#00d4ff;}
+  .wx-chart-img{max-width:100%;height:auto;display:block;margin:0 auto;background:#111;}
+  .wx-chart-wrapper{text-align:center;padding:4px;}
+  .wx-meta{font-size:11px;color:#888;margin-bottom:4px;}
+  .wx-refresh-btn{background:#0a3a0a;color:#00cc44;border:1px solid #00cc44;border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;margin-left:6px;touch-action:manipulation;}
+  .wx-open-btn{background:#1a1a1a;color:#7ab3ef;border:1px solid #7ab3ef;border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block;margin-left:6px;}
+  .wx-airport-selector{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:6px 0;margin-bottom:8px;}
+  .wx-airport-btn{background:#111;color:#ccc;border:1px solid #444;border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;touch-action:manipulation;}
+  .wx-airport-btn.wx-airport-active{background:#0d3b6e;color:#00d4ff;border-color:#00d4ff;}
+  body.day-mode .wx-tab-btn{background:#ffffff;color:#1565c0;border-color:#d0d8e4;}
+  body.day-mode .wx-tab-btn.wx-tab-active{background:#1565c0;color:#fff;border-color:#1565c0;}
+  body.day-mode .wx-sub-tab-btn,body.day-mode .wx-airport-btn{background:#ffffff;color:#1a2a3a;border-color:#d0d8e4;}
+  body.day-mode .wx-sub-tab-btn.wx-sub-active,body.day-mode .wx-airport-btn.wx-airport-active{background:#1565c0;color:#fff;border-color:#1565c0;}
+  body.day-mode .wx-meta{color:#546e7a;}
+  body.day-mode .wx-chart-img{background:#eef1f5;}
   .mp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-bottom:10px;}
   .mp-field{display:flex;flex-direction:column;gap:2px;}
   .mp-taf-period{border-top:.5px solid #1e2a38;padding:4px 0;font-size:11px;line-height:1.5;}
@@ -1220,6 +1240,227 @@
   </div>
 </div>
 
+<!-- ===== WX (Briefings) ===== -->
+<div id="wxbrief-panel" class="panel">
+  <div class="bar">
+    <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.08em;">WX</span>
+  </div>
+  <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;">
+    <div class="wx-tab-bar" style="display:flex;gap:4px;flex-wrap:wrap;padding:6px 8px;background:#111;border-bottom:1px solid #333;flex-shrink:0;">
+      <button type="button" onclick="showWxTab('metar')" id="wx-btn-metar" class="wx-tab-btn wx-tab-active">METAR/TAF</button>
+      <button type="button" onclick="showWxTab('tenkizu')" id="wx-btn-tenkizu" class="wx-tab-btn">天気図</button>
+      <button type="button" onclick="showWxTab('satellite')" id="wx-btn-satellite" class="wx-tab-btn">衛星</button>
+      <button type="button" onclick="showWxTab('sig')" id="wx-btn-sig" class="wx-tab-btn">SIG</button>
+      <button type="button" onclick="showWxTab('danmen')" id="wx-btn-danmen" class="wx-tab-btn">断面図</button>
+      <button type="button" onclick="showWxTab('skewt')" id="wx-btn-skewt" class="wx-tab-btn">SKEW-T</button>
+      <button type="button" onclick="showWxTab('kazan')" id="wx-btn-kazan" class="wx-tab-btn">火山</button>
+      <button type="button" onclick="showWxTab('kaigai')" id="wx-btn-kaigai" class="wx-tab-btn">海外</button>
+    </div>
+
+    <div id="wx-panel-metar" class="wx-sub-panel">
+      <div class="wx-airport-selector">
+        <span style="color:#aaa;font-size:11px;">空港:</span>
+        <button type="button" class="wx-airport-btn wx-airport-active" onclick="wxSetMetarAirport('RJTT',this)">羽田</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSetMetarAirport('RJAA',this)">成田</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSetMetarAirport('RJCC',this)">新千歳</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSetMetarAirport('RJGG',this)">中部</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSetMetarAirport('RJOO',this)">伊丹</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSetMetarAirport('RJBB',this)">関西</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSetMetarAirport('RJFF',this)">福岡</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSetMetarAirport('ROAH',this)">那覇</button>
+        <input id="wx-metar-icao" type="text" placeholder="ICAO" maxlength="4"
+          style="width:60px;background:#111;color:#fff;border:1px solid #555;border-radius:3px;padding:2px 6px;font-size:12px;font-family:monospace;text-transform:uppercase;"
+          oninput="this.value=this.value.toUpperCase()">
+        <button type="button" class="wx-airport-btn" onclick="wxSetMetarAirport(document.getElementById('wx-metar-icao').value,null)">GO</button>
+        <button type="button" class="wx-refresh-btn" onclick="wxRefreshMetar()">REFRESH</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:280px;">
+          <pre id="wx-metar-output" style="font-family:monospace;font-size:12px;color:#ccc;background:#0a0a0a;border:1px solid #333;border-radius:4px;padding:8px;min-height:200px;white-space:pre-wrap;line-height:1.5;margin:0;">LOADING...</pre>
+        </div>
+        <div style="flex:1;min-width:280px;">
+          <div class="wx-meta">JMA 空港逐次予報図</div>
+          <img id="wx-metar-jma-img" class="wx-chart-img" src="" alt="JMA ASF"
+               onerror="this.style.display='none';document.getElementById('wx-metar-jma-err').style.display='block';">
+          <div id="wx-metar-jma-err" style="display:none;color:#888;font-size:11px;padding:8px;">画像取得不可</div>
+          <div style="margin-top:4px;text-align:center;">
+            <a id="wx-metar-jma-link" href="https://www.data.jma.go.jp/airinfo/" target="_blank" rel="noopener" class="wx-open-btn">OPEN</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="wx-panel-tenkizu" class="wx-sub-panel" style="display:none;">
+      <div class="wx-sub-tab-bar">
+        <button type="button" class="wx-sub-tab-btn wx-sub-active" onclick="wxShowChart('tenkizu','asas',this)">ASAS/FSAS</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('tenkizu','200',this)">200hPa</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('tenkizu','250',this)">250hPa</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('tenkizu','300',this)">300hPa</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('tenkizu','300-500',this)">300/500hPa</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('tenkizu','500',this)">500hPa</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('tenkizu','850-700',this)">850/700hPa</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('tenkizu','koku',this)">全国航空気象解説</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('tenkizu','tanki',this)">短期予報解説</button>
+        <button type="button" class="wx-refresh-btn" onclick="wxRefreshChart('tenkizu')">REFRESH</button>
+      </div>
+      <div class="wx-chart-wrapper">
+        <div class="wx-meta" id="wx-tenkizu-meta"></div>
+        <img id="wx-tenkizu-img" class="wx-chart-img" src="" alt=""
+             onerror="this.style.display='none';document.getElementById('wx-tenkizu-err').style.display='block';">
+        <div id="wx-tenkizu-err" style="display:none;color:#888;font-size:11px;padding:8px;">画像取得失敗</div>
+        <div style="margin-top:4px;">
+          <a id="wx-tenkizu-open" href="https://www.data.jma.go.jp/airinfo/" target="_blank" rel="noopener" class="wx-open-btn">OPEN</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="wx-panel-satellite" class="wx-sub-panel" style="display:none;">
+      <div class="wx-sub-tab-bar">
+        <button type="button" class="wx-sub-tab-btn wx-sub-active" onclick="wxShowSatellite('ir',this)">赤外</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowSatellite('vis',this)">可視</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowSatellite('wv',this)">水蒸気</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowSatellite('tsas-n',this)">TSAS北</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowSatellite('tsas-s',this)">TSAS南</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowSatellite('radar',this)">雨雲レーダー</button>
+        <a href="https://www.jma.go.jp/bosai/map.html#5/38.169/138.999/&amp;elem=ir&amp;contents=himawari" target="_blank" rel="noopener" class="wx-open-btn">JMA ひまわり</a>
+      </div>
+      <div class="wx-chart-wrapper">
+        <div class="wx-meta" id="wx-satellite-meta"></div>
+        <img id="wx-satellite-img" class="wx-chart-img" src="" alt="衛星"
+             onerror="this.style.display='none';document.getElementById('wx-satellite-err').style.display='block';">
+        <div id="wx-satellite-err" style="display:none;color:#888;font-size:11px;padding:16px;text-align:center;">
+          直接表示不可。外部リンクから:
+          <a id="wx-satellite-extlink" href="https://www.jma.go.jp/bosai/map.html#5/38.169/138.999/&amp;elem=ir&amp;contents=himawari" target="_blank" rel="noopener" style="color:#7ab3ef;">JMA ひまわりモニタ</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="wx-panel-sig" class="wx-sub-panel" style="display:none;">
+      <div class="wx-sub-tab-bar">
+        <button type="button" class="wx-sub-tab-btn wx-sub-active" onclick="wxShowChart('sig','fbjp',this)">FBJP</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('sig','ubjp',this)">UBJP</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('sig','abjp',this)">ABJP</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('sig','fsas',this)">FSAS(太平洋)</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('sig','gfbjp',this)">Global SIGWX</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('sig','cmnt-dom',this)">国内空域解説</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('sig','cmnt-fir',this)">福岡FIR解説</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('sig','sigmet',this)">SIGMET</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('sig','typhoon',this)">台風情報</button>
+        <button type="button" class="wx-refresh-btn" onclick="wxRefreshChart('sig')">REFRESH</button>
+      </div>
+      <div class="wx-chart-wrapper">
+        <div class="wx-meta" id="wx-sig-meta"></div>
+        <img id="wx-sig-img" class="wx-chart-img" src="" alt="SIG"
+             onerror="this.style.display='none';document.getElementById('wx-sig-err').style.display='block';">
+        <div id="wx-sig-err" style="display:none;color:#888;font-size:11px;padding:8px;">画像取得失敗</div>
+        <div style="margin-top:4px;">
+          <a id="wx-sig-open" href="https://www.data.jma.go.jp/airinfo/" target="_blank" rel="noopener" class="wx-open-btn">OPEN</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="wx-panel-danmen" class="wx-sub-panel" style="display:none;">
+      <div class="wx-sub-tab-bar">
+        <button type="button" class="wx-sub-tab-btn wx-sub-active" onclick="wxShowChart('danmen','fxjp',this)">FXJP</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('danmen','axjp',this)">AXJP</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('danmen','all',this)">全国</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('danmen','fuk-kus',this)">福岡-釧路</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('danmen','fuk-mon',this)">福岡-紋別</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('danmen','tky-wak',this)">東京-稚内</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('danmen','tky-mem',this)">東京-女満別</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('danmen','fuk-tky',this)">福岡-東京</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('danmen','kag-tky',this)">鹿児島-東京</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('danmen','ish-tky',this)">石垣-東京</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('danmen','yon-tak',this)">与那国-高松</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('danmen','yon-fuk',this)">与那国-福岡</button>
+        <button type="button" class="wx-refresh-btn" onclick="wxRefreshChart('danmen')">REFRESH</button>
+      </div>
+      <div class="wx-chart-wrapper">
+        <div class="wx-meta" id="wx-danmen-meta"></div>
+        <img id="wx-danmen-img" class="wx-chart-img" src="" alt="断面図"
+             onerror="this.style.display='none';document.getElementById('wx-danmen-err').style.display='block';">
+        <div id="wx-danmen-err" style="display:none;color:#888;font-size:11px;padding:8px;">画像取得失敗</div>
+        <div style="margin-top:4px;">
+          <a id="wx-danmen-open" href="https://www.data.jma.go.jp/airinfo/" target="_blank" rel="noopener" class="wx-open-btn">JMA OPEN</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="wx-panel-skewt" class="wx-sub-panel" style="display:none;">
+      <div class="wx-airport-selector">
+        <span style="color:#aaa;font-size:11px;">空港:</span>
+        <button type="button" class="wx-airport-btn wx-airport-active" onclick="wxSetSkewtAirport('RJTT',this)">羽田</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('RJAA',this)">成田</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('RJCC',this)">新千歳</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('RJGG',this)">中部</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('RJOO',this)">伊丹</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('RJBB',this)">関西</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('RJFF',this)">福岡</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('ROAH',this)">那覇</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('WSSS',this)">シンガポール</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('WMKK',this)">KL</button>
+        <input id="wx-skewt-icao" type="text" placeholder="ICAO" maxlength="4"
+          style="width:60px;background:#111;color:#fff;border:1px solid #555;border-radius:3px;padding:2px 6px;font-size:12px;font-family:monospace;text-transform:uppercase;"
+          oninput="this.value=this.value.toUpperCase()">
+        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport(document.getElementById('wx-skewt-icao').value,null)">GO</button>
+        <button type="button" class="wx-refresh-btn" onclick="wxLoadSkewt(wxSkewtIcao)">REFRESH</button>
+      </div>
+      <div class="wx-chart-wrapper">
+        <div class="wx-meta" id="wx-skewt-meta"></div>
+        <img id="wx-skewt-img" class="wx-chart-img" src="" alt="Skew-T">
+        <div id="wx-skewt-err" style="display:none;color:#888;font-size:11px;padding:8px;">データなし。外部リンク:</div>
+        <div style="margin-top:4px;">
+          <a id="wx-skewt-wy-link" href="https://weather.uwyo.edu/cgi-bin/bufrraob.py" target="_blank" rel="noopener" class="wx-open-btn">Wyoming</a>
+          <a id="wx-skewt-tt-link" href="https://www.tropicaltidbits.com/analysis/soundings/" target="_blank" rel="noopener" class="wx-open-btn" style="margin-left:4px;">Tropicaltidbits</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="wx-panel-kazan" class="wx-sub-panel" style="display:none;">
+      <div style="text-align:center;padding:32px 20px;color:#aaa;">
+        <div style="font-size:24px;margin-bottom:8px;">🌋</div>
+        <div style="font-size:13px;color:#7ab3ef;margin-bottom:6px;">降灰予報（動的マップ）</div>
+        <div style="font-size:11px;color:#888;margin-bottom:20px;">
+          セキュリティ設定により直接表示不可。<br>
+          下のボタンから外部ページを開いてください。
+        </div>
+        <a href="https://www.jma.go.jp/bosai/map.html#5/37.979/135/&amp;contents=ashfall" target="_blank" rel="noopener"
+           style="display:inline-block;background:#0d3b6e;color:#00d4ff;border:1px solid #00d4ff;border-radius:4px;padding:10px 24px;font-size:13px;font-family:inherit;text-decoration:none;margin-bottom:12px;">
+          LAUNCH JMA 降灰予報
+        </a>
+        <div>
+          <a href="https://www.jma.go.jp/bosai/volcano/" target="_blank" rel="noopener" class="wx-open-btn">JMA 火山情報</a>
+          <a href="https://www.data.jma.go.jp/vaac/data/indexj.html" target="_blank" rel="noopener" class="wx-open-btn" style="margin-left:6px;">Tokyo VAAC</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="wx-panel-kaigai" class="wx-sub-panel" style="display:none;">
+      <div class="wx-sub-tab-bar">
+        <button type="button" class="wx-sub-tab-btn wx-sub-active" onclick="wxShowChart('kaigai','dwd-ana',this)">DWD 地上実況</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('kaigai','dwd-36h',this)">DWD 36h予想</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('kaigai','noaa-1',this)">NOAA WPC 1</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('kaigai','noaa-2',this)">NOAA WPC 2</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('kaigai','noaa-3',this)">NOAA WPC 3</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxShowChart('kaigai','noaa-ocean',this)">NOAA 海洋</button>
+        <button type="button" class="wx-refresh-btn" onclick="wxRefreshChart('kaigai')">REFRESH</button>
+      </div>
+      <div class="wx-chart-wrapper">
+        <div class="wx-meta" id="wx-kaigai-meta"></div>
+        <img id="wx-kaigai-img" class="wx-chart-img" src="" alt="海外天気図"
+             onerror="this.style.display='none';document.getElementById('wx-kaigai-err').style.display='block';">
+        <div id="wx-kaigai-err" style="display:none;color:#888;font-size:11px;padding:8px;">
+          画像取得失敗（hotlink制限の可能性）。
+          <a id="wx-kaigai-extlink" href="#" target="_blank" rel="noopener" style="color:#7ab3ef;">外部リンク</a>
+        </div>
+        <div style="margin-top:4px;">
+          <a id="wx-kaigai-open" href="#" target="_blank" rel="noopener" class="wx-open-btn">OPEN</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== MEMO ===== -->
 <div id="memo-panel" class="panel">
   <div class="bar">
@@ -2098,7 +2339,7 @@ var lightningReconnectTimer = null;
 // TABS
 // =====================================================================
 function showTab(name) {
-  ['wx','fp','atm','atm-gfs','crew-rest','fdp','memo','ccbrfg','dump','curfew','holding','apch','docs'].forEach(function(n) {
+  ['wx','fp','atm','atm-gfs','crew-rest','fdp','memo','ccbrfg','dump','curfew','holding','apch','docs','wxbrief'].forEach(function(n) {
     var p = document.getElementById(n+'-panel');
     if(p) p.classList.remove('active');
     var ni=document.getElementById('nav-'+n);
@@ -2191,6 +2432,7 @@ function navTo(tab){
   if(tab === 'holding') renderHoldingPanel();
   if(tab === 'apch') renderApchPanel();
   if(tab === 'docs') showDocsTab('docs-wx-mnm');
+  if(tab === 'wxbrief') showWxTab('metar');
 }
 
 function showDocsTab(tabId) {
@@ -2295,6 +2537,424 @@ function tarmacUpdateChecklist() {
       el.style.color = (tarmacTimerSeconds >= 14400 && i === 4) ? '#ff4444' : '#4aff7a';
     }
   }
+}
+
+// =====================================================================
+// WX BRIEFING
+// =====================================================================
+function showWxTab(tabId) {
+  var panels = document.querySelectorAll('.wx-sub-panel');
+  var btns = document.querySelectorAll('.wx-tab-btn');
+  var i, p, b;
+  for(i = 0; i < panels.length; i++) { panels[i].style.display = 'none'; }
+  for(i = 0; i < btns.length; i++) { btns[i].classList.remove('wx-tab-active'); }
+  p = document.getElementById('wx-panel-' + tabId);
+  b = document.getElementById('wx-btn-' + tabId);
+  if(p) p.style.display = 'block';
+  if(b) b.classList.add('wx-tab-active');
+  if(tabId === 'metar') wxRefreshMetar();
+}
+
+function wxPad2(n) {
+  n = Math.round(Number(n) || 0);
+  return (n < 10 ? '0' : '') + n;
+}
+
+function wxStamp(t) {
+  return String(t.getUTCFullYear()) + wxPad2(t.getUTCMonth() + 1) + wxPad2(t.getUTCDate()) + wxPad2(t.getUTCHours());
+}
+
+function wxNwpSlotHh() {
+  var e = new Date();
+  var n = e.getUTCHours() * 60 + e.getUTCMinutes();
+  var Te = new Date(e.getTime());
+  if(n >= 220 && n < 940) {
+    Te.setUTCHours(0, 0, 0, 0);
+  } else {
+    if(n < 220) Te.setUTCDate(Te.getUTCDate() - 1);
+    Te.setUTCHours(12, 0, 0, 0);
+  }
+  return wxPad2(Te.getUTCHours());
+}
+
+function wxNwpPdf(code) {
+  return 'https://www.jma.go.jp/bosai/numericmap/data/nwpmap/' + code + '_' + wxNwpSlotHh() + '.pdf';
+}
+
+function wxFxjpUrl() {
+  var h = Math.floor(new Date().getUTCHours() / 3) * 3;
+  return 'https://www.data.jma.go.jp/airinfo/data/pict/nwp/fxjp106_' + wxPad2(h) + '.png';
+}
+
+function wxWanlcUrl(type) {
+  var t = new Date(Date.now() - 35 * 60000);
+  t.setUTCMinutes(0, 0, 0);
+  return 'https://www.data.jma.go.jp/airinfo/data/pict/maiji/WANLC' + type + '_RJTD_' + wxStamp(t) + '0000.PNG';
+}
+
+function wxMetairSlotUrl(folder, prefix, lagMs, stepH) {
+  var t = new Date(Date.now() - (lagMs || 1800000));
+  var h = t.getUTCHours();
+  var slot = Math.floor(h / (stepH || 3)) * (stepH || 3);
+  t.setUTCHours(slot, 0, 0, 0);
+  return 'https://www3.metair.go.jp/pict/' + folder + '/' + prefix + '_RJTD_' + wxStamp(t) + '0000.png';
+}
+
+function wxHimawariUrl(band) {
+  var t = new Date(Date.now() - 30 * 60000);
+  var m = t.getUTCMinutes();
+  t.setUTCMinutes(m >= 30 ? 30 : 0, 0, 0);
+  t = new Date(t.getTime() - 10 * 60000);
+  return 'https://www.data.jma.go.jp/mscweb/data/himawari/img/jpn/jpn_' + band + '_' + wxPad2(t.getUTCHours()) + wxPad2(t.getUTCMinutes()) + '.jpg';
+}
+
+var wxMetarIcao = 'RJTT';
+var wxSkewtIcao = 'RJTT';
+
+var WX_CHART_TABLES = {
+  tenkizu: {
+    'asas': { label: 'ASAS 地上実況', kind: 'asas' },
+    '200': { label: '200hPa 解析', kind: 'pdf', nwp: 'aupa20' },
+    '250': { label: '250hPa 解析', kind: 'pdf', nwp: 'aupa25' },
+    '300': { label: '300hPa 解析', kind: 'pdf', nwp: 'aupn30' },
+    '300-500': { label: '300/500hPa', kind: 'pdf', nwp: 'aupq35' },
+    '500': { label: '500hPa 予想', kind: 'pdf', nwp: 'fupa502' },
+    '850-700': { label: '850/700hPa', kind: 'pdf', nwp: 'aupq78' },
+    'koku': { label: '全国航空気象解説', url: 'https://www.data.jma.go.jp/airinfo/data/pict/ajpn_cmnt/qyya86-0.png' },
+    'tanki': { label: '短期予報解説', kind: 'pdf', url: 'https://www.sunny-spot.net/chart/DOC2.pdf' }
+  },
+  sig: {
+    'fbjp': { label: 'FBJP 国内悪天予想図', url: 'https://www.data.jma.go.jp/airinfo/data/pict/fbjp/fbjp.png' },
+    'ubjp': { label: 'UBJP 圏界面/気温', dyn: 'ubjp' },
+    'abjp': { label: 'ABJP 解析', dyn: 'abjp' },
+    'fsas': { label: 'FSAS 太平洋悪天予想図', kind: 'fsas' },
+    'gfbjp': { label: 'Global SIGWX', url: 'https://www.bom.gov.au/difacs/aviation/IDX0536.gif' },
+    'cmnt-dom': { label: '全国航空気象解説報 (国内空域)', url: 'https://www.data.jma.go.jp/airinfo/data/pict/ajpn_cmnt/qyya82.png' },
+    'cmnt-fir': { label: '全国航空気象解説報 (福岡FIR)', url: 'https://www.data.jma.go.jp/airinfo/data/pict/ajpn_cmnt/qyya83.png' },
+    'sigmet': { label: 'SIGMET', url: 'https://www.data.jma.go.jp/airinfo/data/pict/sigmet/QGMA98.png' },
+    'typhoon': { label: '台風情報', url: 'https://www.amecs.co.jp/wx/data/typn/typn.png' }
+  },
+  danmen: {
+    'fxjp': { label: 'FXJP 予想断面図', dyn: 'fxjp106' },
+    'axjp': { label: 'AXJP 解析断面図', kind: 'pdf', nwp: 'axjp140' },
+    'all': { label: '全国', dyn: 'wanlc', wanlc: '199' },
+    'fuk-kus': { label: '福岡-釧路', dyn: 'wanlc', wanlc: '101' },
+    'fuk-mon': { label: '福岡-紋別', dyn: 'wanlc', wanlc: '102' },
+    'tky-wak': { label: '東京-稚内', dyn: 'wanlc', wanlc: '103' },
+    'tky-mem': { label: '東京-女満別', dyn: 'wanlc', wanlc: '104' },
+    'fuk-tky': { label: '福岡-東京', dyn: 'wanlc', wanlc: '105' },
+    'kag-tky': { label: '鹿児島-東京', dyn: 'wanlc', wanlc: '106' },
+    'ish-tky': { label: '石垣-東京', dyn: 'wanlc', wanlc: '107' },
+    'yon-tak': { label: '与那国-高松', dyn: 'wanlc', wanlc: '108' },
+    'yon-fuk': { label: '与那国-福岡', dyn: 'wanlc', wanlc: '109' }
+  },
+  kaigai: {
+    'dwd-ana': { label: 'DWD 地上実況', url: 'https://www.dwd.de/DWD/wetter/wv_spez/hobbymet/wetterkarten/bwk_bodendruck_na_ana.png' },
+    'dwd-36h': { label: 'DWD 36h 予想', url: 'https://www.dwd.de/DWD/wetter/wv_spez/hobbymet/wetterkarten/ico_tkboden_na_036.png' },
+    'noaa-1': { label: 'NOAA WPC 1', url: 'https://www.wpc.ncep.noaa.gov/basicwx/92fndfd.gif' },
+    'noaa-2': { label: 'NOAA WPC 2', url: 'https://www.wpc.ncep.noaa.gov/basicwx/94fndfd.gif' },
+    'noaa-3': { label: 'NOAA WPC 3', url: 'https://www.wpc.ncep.noaa.gov/basicwx/96fndfd.gif' },
+    'noaa-ocean': { label: 'NOAA 海洋', url: 'https://ocean.weather.gov/P_sfc_full_ocean_color.png' }
+  }
+};
+
+function wxResolvedEntry(entry) {
+  var out = { label: entry.label, url: entry.url || null, kind: entry.kind || 'img' };
+  if(entry.nwp) out.url = wxNwpPdf(entry.nwp);
+  if(entry.dyn === 'fxjp106') { out.url = wxFxjpUrl(); out.kind = 'img'; }
+  if(entry.dyn === 'wanlc') { out.url = wxWanlcUrl(entry.wanlc); out.kind = 'img'; }
+  if(entry.dyn === 'ubjp') { out.url = wxMetairSlotUrl('UBJP', 'QBMA95', 10 * 60000, 1); out.kind = 'img'; }
+  if(entry.dyn === 'abjp') { out.url = wxMetairSlotUrl('ABJP', 'QBMA98', 30 * 60000, 3); out.kind = 'img'; }
+  if(out.url && /\.pdf$/i.test(out.url)) out.kind = 'pdf';
+  return out;
+}
+
+function wxShowPdfOrFail(tabKey, resolved) {
+  var img = document.getElementById('wx-' + tabKey + '-img');
+  var err = document.getElementById('wx-' + tabKey + '-err');
+  var open = document.getElementById('wx-' + tabKey + '-open');
+  var ext = document.getElementById('wx-' + tabKey + '-extlink');
+  if(img) img.style.display = 'none';
+  if(err) {
+    err.style.display = 'block';
+    err.textContent = 'PDF / 外部表示: OPEN から開いてください';
+  }
+  if(open && resolved.url) open.href = resolved.url;
+  if(ext && resolved.url) ext.href = resolved.url;
+}
+
+function wxShowChart(tabKey, chartKey, btn) {
+  var table = WX_CHART_TABLES[tabKey];
+  if(!table) return;
+  var entry = table[chartKey];
+  if(!entry) return;
+  var panel = document.getElementById('wx-panel-' + tabKey);
+  var btns = panel ? panel.querySelectorAll('.wx-sub-tab-btn') : [];
+  var i, resolved, img, meta, err, open, ext;
+  for(i = 0; i < btns.length; i++) { btns[i].classList.remove('wx-sub-active'); }
+  if(btn) btn.classList.add('wx-sub-active');
+  resolved = wxResolvedEntry(entry);
+  img = document.getElementById('wx-' + tabKey + '-img');
+  meta = document.getElementById('wx-' + tabKey + '-meta');
+  err = document.getElementById('wx-' + tabKey + '-err');
+  open = document.getElementById('wx-' + tabKey + '-open');
+  ext = document.getElementById('wx-' + tabKey + '-extlink');
+  if(meta) meta.textContent = resolved.label;
+  if(open) open.href = resolved.url || 'https://www.data.jma.go.jp/airinfo/';
+  if(ext) ext.href = resolved.url || 'https://www.data.jma.go.jp/airinfo/';
+  if(resolved.kind === 'asas') {
+    wxLoadAsasPng(tabKey);
+    return;
+  }
+  if(resolved.kind === 'fsas') {
+    wxLoadFsasPng(tabKey);
+    return;
+  }
+  if(!resolved.url || resolved.kind === 'pdf') {
+    wxShowPdfOrFail(tabKey, resolved);
+    return;
+  }
+  if(!img) return;
+  img.style.display = 'block';
+  if(err) err.style.display = 'none';
+  img.src = resolved.url + (resolved.url.indexOf('?') >= 0 ? '&' : '?') + 't=' + new Date().getTime();
+}
+
+function wxLoadAsasPng(tabKey) {
+  var img = document.getElementById('wx-' + tabKey + '-img');
+  var err = document.getElementById('wx-' + tabKey + '-err');
+  var open = document.getElementById('wx-' + tabKey + '-open');
+  var pdf = 'https://www.data.jma.go.jp/fcd/yoho/data/wxchart/quick/ASAS_COLOR.pdf';
+  if(open) open.href = pdf;
+  if(typeof fetchJmaWeatherMapList !== 'function') {
+    wxShowPdfOrFail(tabKey, { url: pdf, label: 'ASAS' });
+    return;
+  }
+  fetchJmaWeatherMapList().then(function(list) {
+    var names = (list && list.asia && list.asia.now) ? list.asia.now : [];
+    var best = names.length ? names[names.length - 1] : null;
+    if(typeof apchPickClosestName === 'function') best = apchPickClosestName(names, new Date()) || best;
+    if(!best || !img) {
+      wxShowPdfOrFail(tabKey, { url: pdf, label: 'ASAS' });
+      return;
+    }
+    var imgUrl = 'https://www.jma.go.jp/bosai/weather_map/data/png/' + best;
+    img.style.display = 'block';
+    if(err) err.style.display = 'none';
+    img.src = imgUrl + '?t=' + new Date().getTime();
+    if(open) open.href = imgUrl;
+  }, function() {
+    wxShowPdfOrFail(tabKey, { url: pdf, label: 'ASAS' });
+  });
+}
+
+function wxLoadFsasPng(tabKey) {
+  var img = document.getElementById('wx-' + tabKey + '-img');
+  var err = document.getElementById('wx-' + tabKey + '-err');
+  var open = document.getElementById('wx-' + tabKey + '-open');
+  var pdf = 'https://www.data.jma.go.jp/fcd/yoho/data/wxchart/quick/FSAS24_COLOR_ASIA.pdf';
+  if(open) open.href = pdf;
+  if(typeof fetchJmaWeatherMapList !== 'function') {
+    wxShowPdfOrFail(tabKey, { url: pdf, label: 'FSAS' });
+    return;
+  }
+  fetchJmaWeatherMapList().then(function(list) {
+    var names = [];
+    var asia = list && list.asia ? list.asia : {};
+    var i;
+    if(asia.ft24) {
+      for(i = 0; i < asia.ft24.length; i++) names.push(asia.ft24[i]);
+    }
+    if(asia.ft48) {
+      for(i = 0; i < asia.ft48.length; i++) names.push(asia.ft48[i]);
+    }
+    var best = names.length ? names[names.length - 1] : null;
+    if(typeof apchPickClosestName === 'function') best = apchPickClosestName(names, new Date()) || best;
+    if(!best || !img) {
+      wxShowPdfOrFail(tabKey, { url: pdf, label: 'FSAS' });
+      return;
+    }
+    var imgUrl = 'https://www.jma.go.jp/bosai/weather_map/data/png/' + best;
+    img.style.display = 'block';
+    if(err) err.style.display = 'none';
+    img.src = imgUrl + '?t=' + new Date().getTime();
+    if(open) open.href = imgUrl;
+  }, function() {
+    wxShowPdfOrFail(tabKey, { url: pdf, label: 'FSAS' });
+  });
+}
+
+function wxRefreshChart(tabKey) {
+  var panel = document.getElementById('wx-panel-' + tabKey);
+  var activeBtn;
+  if(!panel) return;
+  activeBtn = panel.querySelector('.wx-sub-tab-btn.wx-sub-active');
+  if(activeBtn) activeBtn.click();
+}
+
+function wxSetMetarAirport(icao, btn) {
+  var allBtns, i;
+  if(!icao || icao.length < 3) return;
+  wxMetarIcao = String(icao).toUpperCase();
+  allBtns = document.querySelectorAll('#wx-panel-metar .wx-airport-btn');
+  for(i = 0; i < allBtns.length; i++) { allBtns[i].classList.remove('wx-airport-active'); }
+  if(btn) btn.classList.add('wx-airport-active');
+  wxUpdateJmaAsf(wxMetarIcao);
+  wxFetchMetarTaf(wxMetarIcao);
+}
+
+function wxUpdateJmaAsf(icao) {
+  var url = 'https://www.data.jma.go.jp/airinfo/data/pict/taf/QMCD98_' + icao + '.png';
+  var img = document.getElementById('wx-metar-jma-img');
+  var lnk = document.getElementById('wx-metar-jma-link');
+  var err = document.getElementById('wx-metar-jma-err');
+  if(!img) return;
+  img.style.display = 'block';
+  if(err) err.style.display = 'none';
+  img.src = url + '?t=' + new Date().getTime();
+  if(lnk) lnk.href = url;
+}
+
+function wxCheckwxKey() {
+  if(typeof CHECKWX_API_KEY === 'string' && CHECKWX_API_KEY) return CHECKWX_API_KEY;
+  return 'eb52e4c6ca254584842adb8dc574b4f8';
+}
+
+function wxFetchMetarTaf(icao) {
+  var out = document.getElementById('wx-metar-output');
+  var xhrM, key;
+  if(!out) return;
+  out.textContent = 'FETCHING ' + icao + '...';
+  key = wxCheckwxKey();
+  xhrM = new XMLHttpRequest();
+  xhrM.open('GET', 'https://api.checkwx.com/v2/metar/' + icao + '/decoded', true);
+  xhrM.setRequestHeader('X-API-Key', key);
+  xhrM.onload = function() {
+    var metarText = '--- METAR ---\n';
+    var d, raw, xhrT;
+    if(xhrM.status === 200) {
+      try {
+        d = JSON.parse(xhrM.responseText);
+        raw = d.data && d.data[0] ? (d.data[0].raw_text || d.data[0].raw || '') : '';
+        metarText += raw ? raw : 'NO DATA';
+      } catch(e) { metarText += 'PARSE ERROR'; }
+    } else { metarText += 'HTTP ' + xhrM.status; }
+    xhrT = new XMLHttpRequest();
+    xhrT.open('GET', 'https://api.checkwx.com/v2/taf/' + icao + '/decoded', true);
+    xhrT.setRequestHeader('X-API-Key', key);
+    xhrT.onload = function() {
+      var tafText = '\n\n--- TAF ---\n';
+      var td, traw;
+      if(xhrT.status === 200) {
+        try {
+          td = JSON.parse(xhrT.responseText);
+          traw = td.data && td.data[0] ? (td.data[0].raw_text || td.data[0].raw || '') : '';
+          if(traw) {
+            if(typeof formatTafDisplayRaw === 'function') traw = formatTafDisplayRaw(traw);
+            traw = traw.replace(/ (FM|TEMPO|BECMG|PROB\d+)/g, '\n  $1');
+            tafText += traw;
+          } else { tafText += 'NO DATA'; }
+        } catch(e) { tafText += 'PARSE ERROR'; }
+      } else { tafText += 'HTTP ' + xhrT.status; }
+      out.textContent = metarText + tafText;
+    };
+    xhrT.onerror = function() { out.textContent = metarText + '\n\nTAF: NETWORK ERROR'; };
+    xhrT.send();
+  };
+  xhrM.onerror = function() { out.textContent = 'NETWORK ERROR'; };
+  xhrM.send();
+}
+
+function wxRefreshMetar() {
+  wxUpdateJmaAsf(wxMetarIcao);
+  wxFetchMetarTaf(wxMetarIcao);
+}
+
+var WX_SATELLITE_TABLE = {
+  'ir': { band: 'b13', label: '赤外 B13', extUrl: 'https://www.jma.go.jp/bosai/map.html#5/38.169/138.999/&elem=ir&contents=himawari' },
+  'vis': { band: 'b03', label: '可視 B03', extUrl: 'https://www.jma.go.jp/bosai/map.html#5/38.169/138.999/&elem=vis&contents=himawari' },
+  'wv': { band: 'b08', label: '水蒸気 B08', extUrl: 'https://www.jma.go.jp/bosai/map.html#5/38.169/138.999/&elem=wv&contents=himawari' },
+  'tsas-n': { url: null, label: 'TSAS 北', extUrl: 'https://www.jma.go.jp/jp/gms/smallcenter.html?area=0' },
+  'tsas-s': { url: null, label: 'TSAS 南', extUrl: 'https://www.jma.go.jp/jp/gms/smallcenter.html?area=1' },
+  'radar': { url: null, label: '雨雲レーダー', extUrl: 'https://www.jma.go.jp/bosai/nowc/' }
+};
+
+function wxShowSatellite(key, btn) {
+  var btns = document.querySelectorAll('#wx-panel-satellite .wx-sub-tab-btn');
+  var i, entry, img, meta, err, extLink, url;
+  for(i = 0; i < btns.length; i++) { btns[i].classList.remove('wx-sub-active'); }
+  if(btn) btn.classList.add('wx-sub-active');
+  entry = WX_SATELLITE_TABLE[key];
+  if(!entry) return;
+  img = document.getElementById('wx-satellite-img');
+  meta = document.getElementById('wx-satellite-meta');
+  err = document.getElementById('wx-satellite-err');
+  extLink = document.getElementById('wx-satellite-extlink');
+  if(meta) meta.textContent = entry.label;
+  if(extLink) extLink.href = entry.extUrl;
+  url = entry.band ? wxHimawariUrl(entry.band) : entry.url;
+  if(url) {
+    img.style.display = 'block';
+    if(err) err.style.display = 'none';
+    img.src = url + '?t=' + new Date().getTime();
+  } else {
+    img.style.display = 'none';
+    if(err) err.style.display = 'block';
+  }
+}
+
+function wxSetSkewtAirport(icao, btn) {
+  var allBtns, i;
+  if(!icao || icao.length < 3) return;
+  wxSkewtIcao = String(icao).toUpperCase();
+  allBtns = document.querySelectorAll('#wx-panel-skewt .wx-airport-btn');
+  for(i = 0; i < allBtns.length; i++) { allBtns[i].classList.remove('wx-airport-active'); }
+  if(btn) btn.classList.add('wx-airport-active');
+  wxLoadSkewt(wxSkewtIcao);
+}
+
+function wxLoadSkewt(icao) {
+  var wmo = (typeof ICAO_TO_WMO !== 'undefined' && ICAO_TO_WMO[icao]) ? ICAO_TO_WMO[icao] : null;
+  var img = document.getElementById('wx-skewt-img');
+  var meta = document.getElementById('wx-skewt-meta');
+  var err = document.getElementById('wx-skewt-err');
+  var ttLink = document.getElementById('wx-skewt-tt-link');
+  var wyLink = document.getElementById('wx-skewt-wy-link');
+  var now, utcH, baseH, dateObj, wyUrl;
+  if(ttLink) ttLink.href = 'https://www.tropicaltidbits.com/analysis/soundings/?type=gfs&region=jap&location=' + icao;
+  if(!wmo) {
+    if(img) img.style.display = 'none';
+    if(err) err.style.display = 'block';
+    if(meta) meta.textContent = icao + ': WMO番号未登録';
+    return;
+  }
+  now = new Date();
+  utcH = now.getUTCHours();
+  baseH = utcH >= 12 ? 12 : 0;
+  dateObj = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), baseH, 0, 0));
+  wyUrl = (typeof buildSkewTUrl === 'function')
+    ? buildSkewTUrl(wmo, dateObj, true)
+    : ('https://weather.uwyo.edu/wsgi/sounding?datetime=' + dateObj.getUTCFullYear() + '-' + wxPad2(dateObj.getUTCMonth() + 1) + '-' + wxPad2(dateObj.getUTCDate()) + '+' + wxPad2(baseH) + ':00:00&id=' + wmo + '&type=PNG:SKEWT&src=FM35');
+  if(img) {
+    img.style.display = 'block';
+    img.onerror = function() {
+      var prevH = baseH === 12 ? 0 : 12;
+      var prevDate = (baseH === 0) ? new Date(now.getTime() - 86400000) : now;
+      var fbDate = new Date(Date.UTC(prevDate.getUTCFullYear(), prevDate.getUTCMonth(), prevDate.getUTCDate(), prevH, 0, 0));
+      var fallbackUrl = (typeof buildSkewTUrl === 'function')
+        ? buildSkewTUrl(wmo, fbDate, true)
+        : wyUrl;
+      img.onerror = function() {
+        img.style.display = 'none';
+        if(err) err.style.display = 'block';
+      };
+      img.src = fallbackUrl;
+    };
+    img.src = wyUrl;
+  }
+  if(err) err.style.display = 'none';
+  if(meta) meta.textContent = icao + ' (WMO:' + wmo + ') ' + dateObj.getUTCFullYear() + '-' + wxPad2(dateObj.getUTCMonth() + 1) + '-' + wxPad2(dateObj.getUTCDate()) + ' ' + wxPad2(baseH) + 'Z';
+  if(wyLink) wyLink.href = wyUrl;
 }
 
 // 起動時: 一瞬 WX で地図初期化 → Flight Plan に切替
@@ -13659,6 +14319,7 @@ if(WX_GFS_WIND_ON && typeof applyGfsWindLayer === 'function') applyGfsWindLayer(
       <div class="nav-sec-lbl">Briefings &amp; Tools</div>
       <button class="nav-item" id="nav-ccbrfg" onclick="navTo('ccbrfg')">👩‍✈️ Cabin Crew BRFG</button>
       <button class="nav-item" id="nav-docs" onclick="navTo('docs')">📄 DOCS</button>
+      <button class="nav-item" id="nav-wxbrief" onclick="navTo('wxbrief')">🌤 WX</button>
     </div>
   </div>
 </div>
