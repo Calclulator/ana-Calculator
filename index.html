@@ -199,6 +199,11 @@
   body.day-mode .wx-sub-tab-btn.wx-sub-active,body.day-mode .wx-airport-btn.wx-airport-active{background:#1565c0;color:#fff;border-color:#1565c0;}
   body.day-mode .wx-meta{color:#546e7a;}
   body.day-mode .wx-chart-img{background:#eef1f5;}
+  .wx-bulk-badge{display:inline-block;margin-left:4px;font-size:10px;vertical-align:middle;min-width:12px;}
+  .wx-bulk-badge.ok{color:#00cc44;}
+  .wx-bulk-badge.err{color:#cc4444;}
+  .wx-bulk-badge.loading{color:#ffaa00;}
+  #wx-bulk-btn:disabled{opacity:0.5;cursor:default;}
   .mp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-bottom:10px;}
   .mp-field{display:flex;flex-direction:column;gap:2px;}
   .mp-taf-period{border-top:.5px solid #1e2a38;padding:4px 0;font-size:11px;line-height:1.5;}
@@ -1246,15 +1251,20 @@
     <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.08em;">WX</span>
   </div>
   <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;">
+    <div id="wx-bulk-bar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 8px;background:#0a0a14;border-bottom:2px solid #1a3a6e;flex-shrink:0;">
+      <button type="button" onclick="wxBulkFetch()" id="wx-bulk-btn" style="background:#0d3b6e;color:#00d4ff;border:1px solid #00d4ff;border-radius:4px;padding:5px 14px;font-size:12px;font-family:inherit;cursor:pointer;white-space:nowrap;touch-action:manipulation;">一括取得</button>
+      <button type="button" onclick="wxBulkClear()" style="background:#2a0a0a;color:#cc4444;border:1px solid #cc4444;border-radius:4px;padding:5px 10px;font-size:12px;font-family:inherit;cursor:pointer;touch-action:manipulation;">クリア</button>
+      <span id="wx-bulk-ts" style="font-size:10px;color:#666;font-family:monospace;margin-left:4px;"></span>
+    </div>
     <div class="wx-tab-bar" style="display:flex;gap:4px;flex-wrap:wrap;padding:6px 8px;background:#111;border-bottom:1px solid #333;flex-shrink:0;">
-      <button type="button" onclick="showWxTab('metar')" id="wx-btn-metar" class="wx-tab-btn wx-tab-active">METAR/TAF</button>
-      <button type="button" onclick="showWxTab('tenkizu')" id="wx-btn-tenkizu" class="wx-tab-btn">天気図</button>
-      <button type="button" onclick="showWxTab('satellite')" id="wx-btn-satellite" class="wx-tab-btn">衛星</button>
-      <button type="button" onclick="showWxTab('sig')" id="wx-btn-sig" class="wx-tab-btn">SIG</button>
-      <button type="button" onclick="showWxTab('danmen')" id="wx-btn-danmen" class="wx-tab-btn">断面図</button>
-      <button type="button" onclick="showWxTab('skewt')" id="wx-btn-skewt" class="wx-tab-btn">SKEW-T</button>
-      <button type="button" onclick="showWxTab('kazan')" id="wx-btn-kazan" class="wx-tab-btn">火山</button>
-      <button type="button" onclick="showWxTab('kaigai')" id="wx-btn-kaigai" class="wx-tab-btn">海外</button>
+      <button type="button" onclick="showWxTab('metar')" id="wx-btn-metar" class="wx-tab-btn wx-tab-active">METAR/TAF<span class="wx-bulk-badge" id="wx-badge-metar"></span></button>
+      <button type="button" onclick="showWxTab('tenkizu')" id="wx-btn-tenkizu" class="wx-tab-btn">天気図<span class="wx-bulk-badge" id="wx-badge-tenkizu"></span></button>
+      <button type="button" onclick="showWxTab('satellite')" id="wx-btn-satellite" class="wx-tab-btn">衛星<span class="wx-bulk-badge" id="wx-badge-satellite"></span></button>
+      <button type="button" onclick="showWxTab('sig')" id="wx-btn-sig" class="wx-tab-btn">SIG<span class="wx-bulk-badge" id="wx-badge-sig"></span></button>
+      <button type="button" onclick="showWxTab('danmen')" id="wx-btn-danmen" class="wx-tab-btn">断面図<span class="wx-bulk-badge" id="wx-badge-danmen"></span></button>
+      <button type="button" onclick="showWxTab('skewt')" id="wx-btn-skewt" class="wx-tab-btn">SKEW-T<span class="wx-bulk-badge" id="wx-badge-skewt"></span></button>
+      <button type="button" onclick="showWxTab('kazan')" id="wx-btn-kazan" class="wx-tab-btn">火山<span class="wx-bulk-badge" id="wx-badge-kazan"></span></button>
+      <button type="button" onclick="showWxTab('kaigai')" id="wx-btn-kaigai" class="wx-tab-btn">海外<span class="wx-bulk-badge" id="wx-badge-kaigai"></span></button>
     </div>
 
     <div id="wx-panel-metar" class="wx-sub-panel">
@@ -2955,6 +2965,213 @@ function wxLoadSkewt(icao) {
   if(err) err.style.display = 'none';
   if(meta) meta.textContent = icao + ' (WMO:' + wmo + ') ' + dateObj.getUTCFullYear() + '-' + wxPad2(dateObj.getUTCMonth() + 1) + '-' + wxPad2(dateObj.getUTCDate()) + ' ' + wxPad2(baseH) + 'Z';
   if(wyLink) wyLink.href = wyUrl;
+}
+
+var wxBulkFetching = false;
+
+function wxBulkFinish() {
+  wxBulkFetching = false;
+  var btn = document.getElementById('wx-bulk-btn');
+  var ts, now, hh, mi;
+  if(btn) btn.disabled = false;
+  ts = document.getElementById('wx-bulk-ts');
+  if(ts) {
+    now = new Date();
+    hh = ('0' + now.getUTCHours()).slice(-2);
+    mi = ('0' + now.getUTCMinutes()).slice(-2);
+    ts.textContent = now.getUTCFullYear() + '/' +
+      ('0' + (now.getUTCMonth() + 1)).slice(-2) + '/' +
+      ('0' + now.getUTCDate()).slice(-2) +
+      ' ' + hh + ':' + mi + 'Z';
+  }
+}
+
+function wxBulkFetch() {
+  if(wxBulkFetching) return;
+  wxBulkFetching = true;
+  var btn = document.getElementById('wx-bulk-btn');
+  var tabs = ['metar', 'tenkizu', 'satellite', 'sig', 'danmen', 'skewt', 'kazan', 'kaigai'];
+  var i, badge, ts, done, total, key;
+  var markOk, markErr, fetchImgThenShow, bulkUrl;
+  if(btn) btn.disabled = true;
+  for(i = 0; i < tabs.length; i++) {
+    badge = document.getElementById('wx-badge-' + tabs[i]);
+    if(badge) { badge.textContent = '...'; badge.className = 'wx-bulk-badge loading'; }
+  }
+  ts = document.getElementById('wx-bulk-ts');
+  if(ts) ts.textContent = '取得中...';
+  done = 0;
+  total = 8;
+  markOk = function(tabId) {
+    var b = document.getElementById('wx-badge-' + tabId);
+    if(b) { b.textContent = '\u2713'; b.className = 'wx-bulk-badge ok'; }
+    done++;
+    if(done >= total) wxBulkFinish();
+  };
+  markErr = function(tabId) {
+    var b = document.getElementById('wx-badge-' + tabId);
+    if(b) { b.textContent = '\u2717'; b.className = 'wx-bulk-badge err'; }
+    done++;
+    if(done >= total) wxBulkFinish();
+  };
+  fetchImgThenShow = function(tabId, url, showFn) {
+    var img;
+    if(!url) {
+      if(showFn) showFn();
+      markErr(tabId);
+      return;
+    }
+    img = new Image();
+    img.onload = function() {
+      if(showFn) showFn();
+      markOk(tabId);
+    };
+    img.onerror = function() {
+      if(showFn) showFn();
+      markErr(tabId);
+    };
+    img.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 't=' + new Date().getTime();
+  };
+  bulkUrl = function(tabKey, chartKey) {
+    var table = WX_CHART_TABLES && WX_CHART_TABLES[tabKey];
+    var resolved;
+    if(!table || !table[chartKey]) return null;
+    resolved = wxResolvedEntry(table[chartKey]);
+    return resolved && resolved.url ? resolved.url : null;
+  };
+
+  markOk('kazan');
+
+  (function() {
+    var out = document.getElementById('wx-metar-output');
+    var xhrM = new XMLHttpRequest();
+    key = wxCheckwxKey();
+    xhrM.open('GET', 'https://api.checkwx.com/v2/metar/' + wxMetarIcao + '/decoded', true);
+    xhrM.setRequestHeader('X-API-Key', key);
+    xhrM.onload = function() {
+      var metarText = '--- METAR ---\n';
+      var ok = false;
+      var d, raw, xhrT;
+      if(xhrM.status === 200) {
+        try {
+          d = JSON.parse(xhrM.responseText);
+          raw = d.data && d.data[0] ? (d.data[0].raw_text || d.data[0].raw || '') : '';
+          if(raw) { metarText += raw; ok = true; }
+          else { metarText += 'NO DATA'; }
+        } catch(e) { metarText += 'PARSE ERROR'; }
+      } else { metarText += 'HTTP ' + xhrM.status; }
+      xhrT = new XMLHttpRequest();
+      xhrT.open('GET', 'https://api.checkwx.com/v2/taf/' + wxMetarIcao + '/decoded', true);
+      xhrT.setRequestHeader('X-API-Key', key);
+      xhrT.onload = function() {
+        var tafText = '\n\n--- TAF ---\n';
+        var td, traw;
+        if(xhrT.status === 200) {
+          try {
+            td = JSON.parse(xhrT.responseText);
+            traw = td.data && td.data[0] ? (td.data[0].raw_text || td.data[0].raw || '') : '';
+            if(traw) {
+              if(typeof formatTafDisplayRaw === 'function') traw = formatTafDisplayRaw(traw);
+              traw = traw.replace(/ (FM|TEMPO|BECMG|PROB\d+)/g, '\n  $1');
+              tafText += traw;
+            } else { tafText += 'NO DATA'; }
+          } catch(e) { tafText += 'PARSE ERROR'; }
+        } else { tafText += 'HTTP ' + xhrT.status; }
+        if(out) out.textContent = metarText + tafText;
+        wxUpdateJmaAsf(wxMetarIcao);
+        if(ok) markOk('metar'); else markErr('metar');
+      };
+      xhrT.onerror = function() {
+        if(out) out.textContent = metarText + '\n\nTAF: NETWORK ERROR';
+        markErr('metar');
+      };
+      xhrT.send();
+    };
+    xhrM.onerror = function() { markErr('metar'); };
+    xhrM.send();
+  })();
+
+  if(typeof fetchJmaWeatherMapList === 'function') {
+    fetchJmaWeatherMapList().then(function(list) {
+      var names = (list && list.asia && list.asia.now) ? list.asia.now : [];
+      var best = names.length ? names[names.length - 1] : null;
+      if(typeof apchPickClosestName === 'function') best = apchPickClosestName(names, new Date()) || best;
+      if(!best) {
+        wxShowChart('tenkizu', 'asas', null);
+        markErr('tenkizu');
+        return;
+      }
+      fetchImgThenShow('tenkizu', 'https://www.jma.go.jp/bosai/weather_map/data/png/' + best, function() {
+        wxShowChart('tenkizu', 'asas', null);
+      });
+    }, function() {
+      wxShowChart('tenkizu', 'asas', null);
+      markErr('tenkizu');
+    });
+  } else {
+    wxShowChart('tenkizu', 'asas', null);
+    markErr('tenkizu');
+  }
+
+  fetchImgThenShow('sig', bulkUrl('sig', 'fbjp'), function() { wxShowChart('sig', 'fbjp', null); });
+  fetchImgThenShow('danmen', bulkUrl('danmen', 'fxjp'), function() { wxShowChart('danmen', 'fxjp', null); });
+  fetchImgThenShow('kaigai', bulkUrl('kaigai', 'dwd-ana'), function() { wxShowChart('kaigai', 'dwd-ana', null); });
+
+  (function() {
+    var satUrl = (typeof wxHimawariUrl === 'function') ? wxHimawariUrl('b13') : null;
+    if(satUrl) {
+      fetchImgThenShow('satellite', satUrl, function() { wxShowSatellite('ir', null); });
+    } else {
+      wxShowSatellite('ir', null);
+      markOk('satellite');
+    }
+  })();
+
+  (function() {
+    var wmo = (typeof ICAO_TO_WMO !== 'undefined' && ICAO_TO_WMO[wxSkewtIcao]) ? ICAO_TO_WMO[wxSkewtIcao] : null;
+    var now, utcH, baseH, dateObj, wyUrl, probe;
+    if(!wmo) { markErr('skewt'); return; }
+    now = new Date();
+    utcH = now.getUTCHours();
+    baseH = utcH >= 12 ? 12 : 0;
+    dateObj = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), baseH, 0, 0));
+    wyUrl = (typeof buildSkewTUrl === 'function')
+      ? buildSkewTUrl(wmo, dateObj, true)
+      : ('https://weather.uwyo.edu/wsgi/sounding?datetime=' + dateObj.getUTCFullYear() + '-' + wxPad2(dateObj.getUTCMonth() + 1) + '-' + wxPad2(dateObj.getUTCDate()) + '+' + wxPad2(baseH) + ':00:00&id=' + wmo + '&type=PNG:SKEWT&src=FM35');
+    probe = new Image();
+    probe.onload = function() {
+      wxLoadSkewt(wxSkewtIcao);
+      markOk('skewt');
+    };
+    probe.onerror = function() {
+      wxLoadSkewt(wxSkewtIcao);
+      markErr('skewt');
+    };
+    probe.src = wyUrl;
+  })();
+}
+
+function wxBulkClear() {
+  var tabs = ['metar', 'tenkizu', 'satellite', 'sig', 'danmen', 'skewt', 'kazan', 'kaigai'];
+  var imgIds = ['wx-tenkizu-img', 'wx-sig-img', 'wx-danmen-img', 'wx-kaigai-img', 'wx-satellite-img', 'wx-skewt-img'];
+  var i, badge, ts, out, jmaImg, el, btn;
+  for(i = 0; i < tabs.length; i++) {
+    badge = document.getElementById('wx-badge-' + tabs[i]);
+    if(badge) { badge.textContent = ''; badge.className = 'wx-bulk-badge'; }
+  }
+  ts = document.getElementById('wx-bulk-ts');
+  if(ts) ts.textContent = '';
+  out = document.getElementById('wx-metar-output');
+  if(out) out.textContent = '---';
+  jmaImg = document.getElementById('wx-metar-jma-img');
+  if(jmaImg) { jmaImg.src = ''; jmaImg.style.display = 'none'; }
+  for(i = 0; i < imgIds.length; i++) {
+    el = document.getElementById(imgIds[i]);
+    if(el) { el.src = ''; el.style.display = 'none'; }
+  }
+  wxBulkFetching = false;
+  btn = document.getElementById('wx-bulk-btn');
+  if(btn) btn.disabled = false;
 }
 
 // 起動時: 一瞬 WX で地図初期化 → Flight Plan に切替
