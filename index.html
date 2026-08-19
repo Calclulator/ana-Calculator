@@ -164,6 +164,21 @@
   body.day-mode .apch-chart-img{background:#eef1f5;}
   body.day-mode .apch-ext-link{color:#1565c0;}
   @media (max-width:700px){.apch-grid{grid-template-columns:1fr;}}
+  .docs-nav-btn{padding:4px 10px;border:1px solid #555;background:#1a1a2e;color:#ccc;border-radius:4px;cursor:pointer;font-size:12px;font-family:inherit;touch-action:manipulation;}
+  .docs-nav-btn.active{background:#0f3460;color:#fff;border-color:#4a9eff;}
+  .docs-tab-content{overflow-y:auto;max-height:calc(100vh - 160px);font-size:13px;line-height:1.6;color:#ddd;flex:1;min-height:0;}
+  .docs-tab-content table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12px;}
+  .docs-tab-content th,.docs-tab-content td{border:1px solid #444;padding:4px 8px;vertical-align:top;}
+  .docs-tab-content th{background:#1e3a5f;color:#fff;text-align:center;}
+  .docs-tab-content h3{color:#7ab3ef;margin:12px 0 4px;font-size:13px;}
+  .docs-tab-content .section-title{background:#0f3460;color:#fff;padding:4px 8px;margin:10px 0 4px;border-radius:3px;font-weight:bold;}
+  body.day-mode .docs-nav-btn{background:#ffffff;color:#1a2a3a;border-color:#d0d8e4;}
+  body.day-mode .docs-nav-btn.active{background:#1565c0;color:#fff;border-color:#1565c0;}
+  body.day-mode .docs-tab-content{color:#1a2a3a;}
+  body.day-mode .docs-tab-content th,body.day-mode .docs-tab-content td{border-color:#d0d8e4;}
+  body.day-mode .docs-tab-content th{background:#1565c0;}
+  body.day-mode .docs-tab-content h3{color:#1565c0;}
+  body.day-mode .docs-tab-content .section-title{background:#1565c0;}
   .mp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-bottom:10px;}
   .mp-field{display:flex;flex-direction:column;gap:2px;}
   .mp-taf-period{border-top:.5px solid #1e2a38;padding:4px 0;font-size:11px;line-height:1.5;}
@@ -442,6 +457,33 @@
 <!-- ===== CC BRFG ===== -->
 <div id="ccbrfg-panel" class="panel">
   <!-- renderCcBrfgPanel() によって動的に生成 -->
+</div>
+
+<!-- ===== DOCS ===== -->
+<div id="docs-panel" class="panel">
+  <div class="bar">
+    <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.08em;">DOCS</span>
+  </div>
+  <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;padding:12px 14px;box-sizing:border-box;">
+    <div class="docs-tab-nav" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;flex-shrink:0;">
+      <button type="button" onclick="showDocsTab('docs-wx-mnm')" class="docs-nav-btn active" id="dnav-wx-mnm">WX MNM フロー</button>
+      <button type="button" onclick="showDocsTab('docs-cat1')" class="docs-nav-btn" id="dnav-cat1">CAT Ⅰ / ADEQUATE</button>
+      <button type="button" onclick="showDocsTab('docs-familiar')" class="docs-nav-btn" id="dnav-familiar">FAMILIAR / 空港資格</button>
+      <button type="button" onclick="showDocsTab('docs-fpl')" class="docs-nav-btn" id="dnav-fpl">FPL 記号一覧</button>
+      <button type="button" onclick="showDocsTab('docs-dg')" class="docs-nav-btn" id="dnav-dg">分類表(DG)</button>
+      <button type="button" onclick="showDocsTab('docs-erg')" class="docs-nav-btn" id="dnav-erg">ERG CODE</button>
+      <button type="button" onclick="showDocsTab('docs-pax')" class="docs-nav-btn" id="dnav-pax">配慮を要する旅客</button>
+      <button type="button" onclick="showDocsTab('docs-tarmac')" class="docs-nav-btn" id="dnav-tarmac">TARMAC DELAY</button>
+    </div>
+    <div id="docs-wx-mnm" class="docs-tab-content"></div>
+    <div id="docs-cat1" class="docs-tab-content" style="display:none;"></div>
+    <div id="docs-familiar" class="docs-tab-content" style="display:none;"></div>
+    <div id="docs-fpl" class="docs-tab-content" style="display:none;"></div>
+    <div id="docs-dg" class="docs-tab-content" style="display:none;"></div>
+    <div id="docs-erg" class="docs-tab-content" style="display:none;"></div>
+    <div id="docs-pax" class="docs-tab-content" style="display:none;"></div>
+    <div id="docs-tarmac" class="docs-tab-content" style="display:none;"></div>
+  </div>
 </div>
 
 <!-- ===== MEMO ===== -->
@@ -1321,7 +1363,7 @@ var lightningReconnectTimer = null;
 // TABS
 // =====================================================================
 function showTab(name) {
-  ['wx','fp','atm','atm-gfs','crew-rest','fdp','memo','ccbrfg','dump','curfew','holding','apch'].forEach(function(n) {
+  ['wx','fp','atm','atm-gfs','crew-rest','fdp','memo','ccbrfg','dump','curfew','holding','apch','docs'].forEach(function(n) {
     var p = document.getElementById(n+'-panel');
     if(p) p.classList.remove('active');
     var ni=document.getElementById('nav-'+n);
@@ -1413,6 +1455,24 @@ function navTo(tab){
   if(tab === 'curfew') renderCurfewPanel();
   if(tab === 'holding') renderHoldingPanel();
   if(tab === 'apch') renderApchPanel();
+  if(tab === 'docs') showDocsTab('docs-wx-mnm');
+}
+
+function showDocsTab(tabId) {
+  var tabs = document.querySelectorAll('.docs-tab-content');
+  var btns = document.querySelectorAll('.docs-nav-btn');
+  var i, j, target, activeBtn, suffix;
+  for(i = 0; i < tabs.length; i++) {
+    tabs[i].style.display = 'none';
+  }
+  for(j = 0; j < btns.length; j++) {
+    btns[j].classList.remove('active');
+  }
+  target = document.getElementById(tabId);
+  if(target) target.style.display = 'block';
+  suffix = String(tabId || '').indexOf('docs-') === 0 ? String(tabId).slice(5) : String(tabId || '');
+  activeBtn = document.getElementById('dnav-' + suffix);
+  if(activeBtn) activeBtn.classList.add('active');
 }
 
 // 起動時: 一瞬 WX で地図初期化 → Flight Plan に切替
@@ -12735,6 +12795,7 @@ if(WX_GFS_WIND_ON && typeof applyGfsWindLayer === 'function') applyGfsWindLayer(
     <div class="nav-sec">
       <div class="nav-sec-lbl">Briefings &amp; Tools</div>
       <button class="nav-item" id="nav-ccbrfg" onclick="navTo('ccbrfg')">👩‍✈️ Cabin Crew BRFG</button>
+      <button class="nav-item" id="nav-docs" onclick="navTo('docs')">📄 DOCS</button>
     </div>
   </div>
 </div>
