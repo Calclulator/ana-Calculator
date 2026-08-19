@@ -475,13 +475,555 @@
       <button type="button" onclick="showDocsTab('docs-pax')" class="docs-nav-btn" id="dnav-pax">配慮を要する旅客</button>
       <button type="button" onclick="showDocsTab('docs-tarmac')" class="docs-nav-btn" id="dnav-tarmac">TARMAC DELAY</button>
     </div>
-    <div id="docs-wx-mnm" class="docs-tab-content"></div>
-    <div id="docs-cat1" class="docs-tab-content" style="display:none;"></div>
-    <div id="docs-familiar" class="docs-tab-content" style="display:none;"></div>
-    <div id="docs-fpl" class="docs-tab-content" style="display:none;"></div>
-    <div id="docs-dg" class="docs-tab-content" style="display:none;"></div>
-    <div id="docs-erg" class="docs-tab-content" style="display:none;"></div>
-    <div id="docs-pax" class="docs-tab-content" style="display:none;"></div>
+    <div id="docs-wx-mnm" class="docs-tab-content">
+      <div class="section-title">出発地・目的地・代替 WX MNM Below 判定フロー</div>
+      <p style="font-size:11px;color:#aaa;">ANA OPERATIONS MANUAL (3-3-3 変更② / 3-4-2 ④ / S-3-6)</p>
+      <h3>【 出発地が L/D MNM 未満 】（計画時）</h3>
+      <table>
+        <tr><th>条件</th><th>結果</th></tr>
+        <tr><td>目的地/代替が規定範囲内(※3)？ → Yes</td><td>出発地代替 選定不要</td></tr>
+        <tr><td>出発地代替を選定可能？（規定範囲内(※3)にある / GPS以外の計器進入が可能）→ Yes</td><td>代替を選定し 出発可能</td></tr>
+        <tr><td>上記 No の場合</td><td>T/O MNM を L/D MNM 以上に設定 (※4)</td></tr>
+      </table>
+      <h3>【 目的地が断続して L/D MNM 未満 】（計画時）</h3>
+      <table>
+        <tr><th>条件</th><th>結果</th></tr>
+        <tr><td>代替1ヶ所で出発可能？（1500/5000以上 / 目的地or代替でGPS以外可）→ Yes</td><td>代替1ヶ所で出発可能</td></tr>
+        <tr><td>代替2ヶ所で出発可能？（代替を2ヶ所選定できる / 目的地or代替でGPS以外可）→ Yes</td><td>代替2ヶ所で出発可能</td></tr>
+        <tr><td>上記 No</td><td>Delay / Cancel または計画変更</td></tr>
+      </table>
+      <h3>【 目的地が L/D MNM 未満 】（飛行中）</h3>
+      <table>
+        <tr><th>条件</th><th>結果</th></tr>
+        <tr><td>代替へ DIV する？ → Yes</td><td>代替へ DIV</td></tr>
+        <tr><td>以下いずれか：回復まで待機可能な燃料 / 1500ft/5000m以上の代替 → Yes</td><td>飛行継続可</td></tr>
+        <tr><td>代替をさらに1ヶ所追加可能？ → Yes</td><td>飛行継続可</td></tr>
+        <tr><td>上記 No</td><td>目的地を変更</td></tr>
+      </table>
+      <h3>【 代替が ALTN MNM 未満 】（飛行中）</h3>
+      <table>
+        <tr><th>条件</th><th>結果</th></tr>
+        <tr><td>代替を変更可能か？ → Yes</td><td>代替を変更し飛行継続可</td></tr>
+        <tr><td>以下すべて：飛行時間6時間以内 / 到着前後1Hが規定値(※2)以上 / 目的地でGPS以外可 → Yes</td><td>飛行継続可</td></tr>
+        <tr><td>残燃料等から判断し代替選定不可？ → Yes</td><td>目的地を変更</td></tr>
+      </table>
+      <h3>【 両方が MNM 未満 】（飛行中）</h3>
+      <p>目的地を変更。新目的地に対し新代替を選定（推奨）。</p>
+      <h3>注釈</h3>
+      <table>
+        <tr><th>番号</th><th>内容</th></tr>
+        <tr><td>※2</td><td>ALTN MNM の規定値（到着前後 1 時間の気象条件）</td></tr>
+        <tr><td>※3</td><td>出発地代替飛行場の規定範囲 (OM 3-4-2 ④(2))：出発地から1発不作動巡航速度で1時間以内の距離にあること</td></tr>
+        <tr><td>※4</td><td>代替選定不可時の措置：T/O MNM を L/D MNM 以上に設定することで、代替選定なしで出発可能とする</td></tr>
+      </table>
+    </div>
+    <div id="docs-cat1" class="docs-tab-content" style="display:none;">
+      <div class="section-title">【参考】CAT Ⅰ 運航（5-2-4 ②(3)）</div>
+      <table>
+        <tr>
+          <th rowspan="2">DH</th>
+          <th colspan="2">Full Facilities</th>
+          <th colspan="2">Intermediate Facilities</th>
+          <th>Basic Facilities</th>
+          <th>NIL Facilities</th>
+        </tr>
+        <tr>
+          <th>TDZ &amp; CL AVBL</th>
+          <th>TDZ &amp;/or CL OUT</th>
+          <th>TDZ &amp; CL AVBL</th>
+          <th>TDZ &amp;/or CL OUT</th>
+          <th></th>
+          <th></th>
+        </tr>
+        <tr><td>200</td><td>550</td><td>750</td><td>700</td><td>750</td><td>800</td><td>1000</td></tr>
+        <tr><td>201–250</td><td>600</td><td>750</td><td>700</td><td>750</td><td>800</td><td>1000</td></tr>
+        <tr><td>251–300</td><td>650</td><td>750</td><td>800</td><td>800</td><td>900</td><td>1200</td></tr>
+        <tr><td>301 以上</td><td>800</td><td>800</td><td>900</td><td>900</td><td>1000</td><td>1200</td></tr>
+      </table>
+      <p style="font-size:11px;color:#aaa;">
+        (注1) CMV の下限値は 800m とする。<br>
+        (注2) RL・RTHL・RENL の不作動により滑走路の矩形が示されない場合、灯火構成は「NIL Facilities」とする。<br>
+        (注3) Simple TDZ は TDZ として取扱わない。
+      </p>
+      <div class="section-title">【参考】Alternate MNM の下限値（5-2-4 ③）</div>
+      <table>
+        <tr><th>進入方式</th><th>VIS or CIG-VIS</th></tr>
+        <tr><td>CAT Ⅲ 運航</td><td>1200</td></tr>
+        <tr><td>CAT Ⅱ 運航</td><td>300–1200</td></tr>
+        <tr><td>CAT Ⅰ 運航</td><td>600–2000</td></tr>
+        <tr><td>非精密進入または APV</td><td>800–3000</td></tr>
+        <tr><td>周回進入</td><td>800–3600</td></tr>
+      </table>
+      <p style="font-size:11px;color:#aaa;">
+        各飛行場の Alternate MNM は Company MNM Table に記載された値とする。<br>
+        上記値以上の MNM を Landing MNM とする進入方式では、DH/MDH に 100ft、RVR/CMV または VIS に 400m を加算した値を下限値とする。<br>
+        CAT Ⅱ・Ⅲの Alternate MNM を下限値とする場合は、一発動機不作動時でも CAT Ⅱ・Ⅲの着陸が可能であること。
+      </p>
+    </div>
+    <div id="docs-familiar" class="docs-tab-content" style="display:none;">
+      <div class="section-title">Unfamiliar Minima の設定（S-5-7）</div>
+      <p style="font-size:11px;color:#aaa;">機長が空港資格の飛行場要件を充足していない場合に適用する。(5-2-5)</p>
+      <table>
+        <tr><th></th><th>CAT Ⅰ・Ⅱ・Ⅲ機長 / BASIC1 機長</th></tr>
+        <tr><td>Take-off Minima および Alternate Minima</td><td>当該機長の Familiar Minima</td></tr>
+        <tr>
+          <td rowspan="3">Landing Minima</td>
+          <td>飛行場区分 A, B：当該機長の Familiar Minima</td>
+        </tr>
+        <tr><td>飛行場区分 C：当該機長の Familiar Minima (注)</td></tr>
+        <tr><td>飛行場区分 D：CIG および RVR/CMV または VIS は当該空港の Alternate Minima。MDH および DH は当該機長の Familiar Minima</td></tr>
+      </table>
+      <p style="font-size:11px;color:#aaa;">
+        (注) 区分 C の非精密進入・APV・周回進入にあっては、Familiar Minima の RVR/CMV または VIS に 400m を加算。ただし Alternate Minima を上限とする。
+      </p>
+      <div class="section-title">Alternate Minima（S-5-7）</div>
+      <table>
+        <tr><th>機長区分</th><th>Alternate Minima</th></tr>
+        <tr><td>CAT Ⅰ 機長</td><td>（基準値）</td></tr>
+        <tr><td>上記以外</td><td>CAT Ⅰ 機長の値（加算後の DH/MDH 上限 600ft、RVR/CMV または VIS 上限 3200m）</td></tr>
+      </table>
+      <div class="section-title">空港資格を保有しない空港での運用（S-8-1 抜粋）</div>
+      <p>以下の場合には空港資格を保有しない空港へ（から）の運航を計画・実施することができる。</p>
+      <p>① ダイバートを実施する場合、およびダイバート空港から正規飛行場を結ぶ路線を運航する場合</p>
+      <p>② Provisional / Refueling Airport を出発地または目的地飛行場として選定する場合（※事前の知識付与が必要）</p>
+      <div class="section-title">飛行場区分（S-8-1 抜粋）</div>
+      <table>
+        <tr><th>区分</th><th>空港（ICAO）</th></tr>
+        <tr><td>A1</td><td>RJCC, RJCW, RJCN, RJCK, RJCH, RJEC, RJSR, RJSK, RJSY, RJSS, RJSN, RJNT, RJNK, RJNW, RJTT, RJAA, RJGG, RJOO, RJBB, RJBE, RJOB, RJOA, RJOW, RJDC, RJOI, RJOR, RJOH, RJOS, RJOT, RJOK, RJOM, RJFM, RJFK, RJFU, RJFT, RJFO, RJFS, ROMY, ROIG, RJTH</td></tr>
+        <tr><td>A2</td><td>RJSA, RJAK, RJSY（その他の A 区分空港）</td></tr>
+        <tr><td>B</td><td>国内近距離国際線空港など</td></tr>
+        <tr><td>C</td><td>運航経験が一定以上必要な空港</td></tr>
+        <tr><td>D</td><td>特別な訓練・資格が必要な空港（CAT Ⅱ/Ⅲ対応等）</td></tr>
+      </table>
+      <p style="font-size:11px;color:#aaa;">※正確な区分リストは会社 Operations Manual S-8-1 を参照すること。上記は参考値。</p>
+    </div>
+    <div id="docs-fpl" class="docs-tab-content" style="display:none;">
+      <div class="section-title">【参考】飛行計画 (FPL) 記入記号 一覧（完全版）</div>
+      <p style="font-size:11px;color:#aaa;">
+        ※「国内線のみ」の L(ILS), O(VOR), V(VHF) は、外国FIR航行時「S」を記入すれば省略可能（国際線画像には表示なし）。<br>
+        ※「国際線のみ」の J1(ATN VDL2), EET, RMK は要件に応じて国内線でも使用される場合がある。
+      </p>
+      <h3>第8項 飛行方式及び飛行の種類</h3>
+      <table>
+        <tr><th>コード</th><th>飛行方式</th></tr>
+        <tr><td>I</td><td>IFR で飛行する場合</td></tr>
+        <tr><td>V</td><td>VFR で飛行する場合</td></tr>
+        <tr><td>Y</td><td>IFR で出発し飛行中に飛行方式を1回以上変更する場合</td></tr>
+        <tr><td>Z</td><td>VFR で出発し飛行中に飛行方式を1回以上変更する場合</td></tr>
+      </table>
+      <table>
+        <tr><th>コード</th><th>飛行の種類</th></tr>
+        <tr><td>S</td><td>航空運送事業（定期）に係る飛行（外国人国際航空運送事業者の行うもの及び臨時便を含む）</td></tr>
+        <tr><td>N</td><td>航空運送事業（定期以外）に係る飛行（外国人国際航空運送事業者の行うものを含む）</td></tr>
+        <tr><td>G</td><td>航空機使用事業に係る飛行、訓練飛行、試験飛行、空輸及び自家用機の行う飛行</td></tr>
+        <tr><td>M</td><td>軍用機の行う飛行</td></tr>
+        <tr><td>X</td><td>その他の飛行</td></tr>
+      </table>
+      <h3>第9項 後方乱気流区分</h3>
+      <table>
+        <tr><th>コード</th><th>区分</th></tr>
+        <tr><td>J</td><td>A380-800 型。最大離陸重量が Super 区分</td></tr>
+        <tr><td>H</td><td>最大離陸重量が 136,000kg（300,000ポンド）以上の航空機。※A380-800型は「J」を記入</td></tr>
+        <tr><td>M</td><td>最大離陸重量が 7,000kg 超〜136,000kg 未満の航空機</td></tr>
+        <tr><td>L</td><td>最大離陸重量が 7,000kg（15,500ポンド）以下の航空機</td></tr>
+      </table>
+      <h3>第10項 無線設備等装備の種類及び性能（a: 通信/航行）</h3>
+      <table>
+        <tr><th>コード</th><th>内容</th></tr>
+        <tr><td>N</td><td>規定により装備が義務づけられている使用可能な無線設備の一部または全部を装備していない場合</td></tr>
+        <tr><td>S</td><td>規定により装備が義務づけられている使用可能な無線設備を装備している場合</td></tr>
+        <tr><td>A</td><td>GBAS 着陸システム</td></tr>
+        <tr><td>B</td><td>LPV（APV with SBAS）</td></tr>
+        <tr><td>C</td><td>LORAN C</td></tr>
+        <tr><td>D</td><td>DME</td></tr>
+        <tr><td>E1</td><td>FMC WPR ACARS</td></tr>
+        <tr><td>E2</td><td>D-FIS ACARS</td></tr>
+        <tr><td>E3</td><td>PDC ACARS</td></tr>
+        <tr><td>F</td><td>ADF</td></tr>
+        <tr><td>G</td><td>GNSS</td></tr>
+        <tr><td>H</td><td>HF 無線電話</td></tr>
+        <tr><td>I</td><td>慣性航法装置</td></tr>
+        <tr><td>J1</td><td>CPDLC ATN VDL モード2（ATN B1 VDL Mode 2）</td></tr>
+        <tr><td>J2</td><td>CPDLC FANS 1/A HFDL</td></tr>
+        <tr><td>J3</td><td>CPDLC FANS 1/A VDL Mode A</td></tr>
+        <tr><td>J4</td><td>CPDLC FANS 1/A VDL Mode 2</td></tr>
+        <tr><td>J5</td><td>CPDLC FANS 1/A SATCOM (INMARSAT)</td></tr>
+        <tr><td>J6</td><td>CPDLC FANS 1/A SATCOM (MTSAT)</td></tr>
+        <tr><td>J7</td><td>CPDLC FANS 1/A SATCOM (Iridium)</td></tr>
+        <tr><td>L</td><td>ILS</td></tr>
+        <tr><td>M1</td><td>ATC RTF サテライト（INMARSAT）</td></tr>
+        <tr><td>M2</td><td>ATC RTF（MTSAT）</td></tr>
+        <tr><td>M3</td><td>ATC RTF（Iridium）</td></tr>
+        <tr><td>O</td><td>VOR</td></tr>
+        <tr><td>P1〜P9</td><td>RCP 仕様 (P1=RCP400, P2=RCP240, P3=RCP130, P4=RCP120, P5=RCP90, P6=RCP60, P7=未割当)</td></tr>
+        <tr><td>R</td><td>PBN 承認（第18項 PBN/ に続けて詳細を記入）</td></tr>
+        <tr><td>T</td><td>TACAN</td></tr>
+        <tr><td>U</td><td>UHF RTF</td></tr>
+        <tr><td>V</td><td>VHF RTF</td></tr>
+        <tr><td>W</td><td>RVSM 承認</td></tr>
+        <tr><td>X</td><td>MNPS 承認</td></tr>
+        <tr><td>Y</td><td>VHF 8.33kHz チャンネル間隔能力</td></tr>
+        <tr><td>Z</td><td>その他の装備（第18項 COM/, NAV/ または DAT/ に続けて記入）</td></tr>
+      </table>
+      <h3>第10項（b）監視装備</h3>
+      <table>
+        <tr><th>コード</th><th>内容</th></tr>
+        <tr><td>N</td><td>使用可能な監視装備なし</td></tr>
+        <tr><td>A</td><td>Mode A トランスポンダ</td></tr>
+        <tr><td>C</td><td>Mode A および C トランスポンダ</td></tr>
+        <tr><td>E</td><td>Mode S（航空機識別、気圧高度、拡張スクイッタ ADS-B）</td></tr>
+        <tr><td>H</td><td>Mode S（航空機識別、気圧高度、enhanced surveillance）</td></tr>
+        <tr><td>I</td><td>Mode S（航空機識別、気圧高度なし）</td></tr>
+        <tr><td>L</td><td>Mode S（航空機識別、気圧高度、extended squitter、enhanced surveillance）</td></tr>
+        <tr><td>P</td><td>Mode S（気圧高度、航空機識別なし）</td></tr>
+        <tr><td>S</td><td>Mode S（航空機識別および気圧高度）</td></tr>
+        <tr><td>X</td><td>Mode S（航空機識別なし、気圧高度なし）</td></tr>
+        <tr><td>B1</td><td>ADS-B 1090MHz 送信</td></tr>
+        <tr><td>B2</td><td>ADS-B 1090MHz 送受信</td></tr>
+        <tr><td>U1</td><td>ADS-B UAT 送信</td></tr>
+        <tr><td>U2</td><td>ADS-B UAT 送受信</td></tr>
+        <tr><td>V1</td><td>ADS-B VDL Mode 4 送信</td></tr>
+        <tr><td>V2</td><td>ADS-B VDL Mode 4 送受信</td></tr>
+        <tr><td>D1</td><td>ADS-C FANS 1/A</td></tr>
+        <tr><td>G1</td><td>ADS-C ATN</td></tr>
+      </table>
+      <h3>第18項 その他の情報</h3>
+      <table>
+        <tr><th>フィールド</th><th>内容</th></tr>
+        <tr><td>STS/</td><td>航空交通業務上特別の処理を必要とする理由（ALTRV, ATFMX, FFR, FLTCK, HAZMAT, HEAD, HOSP, HUM, MARSA, MEDEVAC, NONRVSM, SAR, STATE）</td></tr>
+        <tr><td>PBN/</td><td>RNAV・RNP の種別（A1, B1, B2, B3, B4, B5, B6, C1, D1, D2, D3, D4, L1, O1, O2, O3, O4, S1, S2, T1, T2）</td></tr>
+        <tr><td>NAV/</td><td>航行装備に関する追加情報</td></tr>
+        <tr><td>COM/</td><td>通信装備に関する追加情報</td></tr>
+        <tr><td>DAT/</td><td>データリンク能力（8.33kHz 等）</td></tr>
+        <tr><td>SUR/</td><td>監視装備（RSP 仕様等）</td></tr>
+        <tr><td>DEP/</td><td>出発飛行場の ICAO コード（第13項がZZZZの場合）</td></tr>
+        <tr><td>DEST/</td><td>目的飛行場の ICAO コード（第16項がZZZZの場合）</td></tr>
+        <tr><td>DOF/</td><td>飛行日（YYMMDD）</td></tr>
+        <tr><td>REG/</td><td>登録記号（第7項と異なる場合）</td></tr>
+        <tr><td>EET/</td><td>着地推定時間（FIR 識別子と時間）</td></tr>
+        <tr><td>SEL/</td><td>SELCAL コード</td></tr>
+        <tr><td>TYP/</td><td>航空機の型式（第9項がZZZZの場合）</td></tr>
+        <tr><td>CODE/</td><td>航空機アドレス（Mode S 等）</td></tr>
+        <tr><td>DLE/</td><td>en-route 遅延（地点と時間）</td></tr>
+        <tr><td>OPR/</td><td>運航者名称（第7項が ICAO コールサインでない場合）</td></tr>
+        <tr><td>ORGN/</td><td>FPL 送信機関の連絡先</td></tr>
+        <tr><td>PER/</td><td>機体性能（A〜E）</td></tr>
+        <tr><td>ALTN/</td><td>第2代替飛行場（第16項以外に2番目の代替がある場合）</td></tr>
+        <tr><td>RALT/</td><td>en-route 代替飛行場</td></tr>
+        <tr><td>TALT/</td><td>T/O 代替飛行場</td></tr>
+        <tr><td>RIF/</td><td>変更されたルート情報と新目的地飛行場</td></tr>
+        <tr><td>RMK/</td><td>備考（任意のテキスト）</td></tr>
+      </table>
+      <h3>PBN/ コード</h3>
+      <table>
+        <tr><th>コード</th><th>内容</th></tr>
+        <tr><td>A1</td><td>RNAV 10 (RNP 10)</td></tr>
+        <tr><td>B1</td><td>RNAV 5 全許可センサー</td></tr>
+        <tr><td>B2</td><td>RNAV 5 GNSS</td></tr>
+        <tr><td>B3</td><td>RNAV 5 DME/DME</td></tr>
+        <tr><td>B4</td><td>RNAV 5 VOR/DME</td></tr>
+        <tr><td>B5</td><td>RNAV 5 INS or IRS</td></tr>
+        <tr><td>B6</td><td>RNAV 5 LORAN C</td></tr>
+        <tr><td>C1</td><td>RNAV 2 全許可センサー</td></tr>
+        <tr><td>C2</td><td>RNAV 2 GNSS</td></tr>
+        <tr><td>C3</td><td>RNAV 2 DME/DME</td></tr>
+        <tr><td>C4</td><td>RNAV 2 DME/DME/IRU</td></tr>
+        <tr><td>D1</td><td>RNAV 1 全許可センサー</td></tr>
+        <tr><td>D2</td><td>RNAV 1 GNSS</td></tr>
+        <tr><td>D3</td><td>RNAV 1 DME/DME</td></tr>
+        <tr><td>D4</td><td>RNAV 1 DME/DME/IRU</td></tr>
+        <tr><td>L1</td><td>RNP 4</td></tr>
+        <tr><td>O1</td><td>Basic RNP 1 全許可センサー</td></tr>
+        <tr><td>O2</td><td>Basic RNP 1 GNSS</td></tr>
+        <tr><td>O3</td><td>Basic RNP 1 DME/DME</td></tr>
+        <tr><td>O4</td><td>Basic RNP 1 DME/DME/IRU</td></tr>
+        <tr><td>S1</td><td>RNP APCH</td></tr>
+        <tr><td>S2</td><td>RNP APCH with BARO-VNAV</td></tr>
+        <tr><td>T1</td><td>RNP AR APCH with RF (特別許可)</td></tr>
+        <tr><td>T2</td><td>RNP AR APCH without RF (特別許可)</td></tr>
+      </table>
+    </div>
+    <div id="docs-dg" class="docs-tab-content" style="display:none;">
+      <div class="section-title">危険物 隔離区分マトリクス</div>
+      <p style="font-size:11px;color:#aaa;">凡例: × = 混載禁止 / 注 = 条件付き / 空白 = 混載可</p>
+      <div style="overflow-x:auto;">
+        <table>
+          <tr>
+            <th></th>
+            <th>RCX/RGX/RXB~G</th><th>RXS</th><th>RFG</th><th>RNG/RCL/RPG</th>
+            <th>RFL</th><th>RFS</th><th>RSC</th><th>RFW</th>
+            <th>ROX</th><th>ROP</th><th>RCM</th><th>ELI/RLI等</th>
+          </tr>
+          <tr><td>火薬類 隔離区分S以外 [RCX/RGX/RXB~G]</td><td>注</td><td>注</td><td>×</td><td>×</td><td>×</td><td>×</td><td>×</td><td>×</td><td>×</td><td>×</td><td>×</td><td>×</td></tr>
+          <tr><td>火薬類 隔離区分S [RXS]</td><td>注</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+          <tr><td>引火性ガス [RFG]</td><td>×</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>×</td></tr>
+          <tr><td>その他のガス・毒性ガス [RNG/RCL/RPG]</td><td>×</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+          <tr><td>引火性液体 [RFL]</td><td>×</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>×</td><td></td><td></td><td>×</td></tr>
+          <tr><td>可燃性物質 [RFS]</td><td>×</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>×</td></tr>
+          <tr><td>自然発火性物質 [RSC]</td><td>×</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>×</td><td></td><td></td><td></td></tr>
+          <tr><td>水反応可燃性物質 [RFW]</td><td>×</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>×</td><td></td></tr>
+          <tr><td>酸化性物質 [ROX]</td><td>×</td><td></td><td></td><td></td><td>×</td><td></td><td>×</td><td></td><td></td><td></td><td></td><td>×</td></tr>
+          <tr><td>有機過酸化物 [ROP]</td><td>×</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+          <tr><td>腐食性物質 [RCM]</td><td>×</td><td></td><td></td><td></td><td></td><td></td><td></td><td>×</td><td></td><td></td><td></td><td></td></tr>
+          <tr><td>その他（リチウム電池等）[ELI/RLI等]</td><td>×</td><td></td><td>×</td><td></td><td>×</td><td>×</td><td></td><td></td><td>×</td><td></td><td></td><td></td></tr>
+        </table>
+      </div>
+      <div class="section-title">危険物分類表 (CLASSIFICATION)</div>
+      <table>
+        <tr><th>分類 Class</th><th>区分 DIV</th><th>Code</th><th>主な品名</th><th>事故時の応急処理</th></tr>
+        <tr>
+          <td rowspan="3">1 火薬類 Explosives</td>
+          <td>1.3C / 1.3G</td><td>RCX / RGX</td>
+          <td>信号炎管、発煙筒（※旅客機搭載禁止）</td>
+          <td>漏出：危険でなければ漏出または他の貨物との接触を最小限に押さえるよう容器の位置をかえる</td>
+        </tr>
+        <tr>
+          <td>1.4B〜1.4G</td><td>RXB〜RXG</td>
+          <td>爆竹、信管（※旅客機搭載禁止）</td>
+          <td>漏出：同上</td>
+        </tr>
+        <tr>
+          <td>1.4S</td><td>RXS</td>
+          <td>導火線、爆発リベット、弾丸、クラッカー等</td>
+          <td>漏出：同上</td>
+        </tr>
+        <tr><td rowspan="3">2 高圧ガス類 Gases</td><td>2.1 引火性ガス</td><td>RFG</td><td>ブタンガス、アセチレンガス、喫煙用ライター</td><td>漏出：バルブが開いている場合は閉める。火気厳禁。周囲を換気。</td></tr>
+        <tr><td>2.2 非引火性・非毒性ガス</td><td>RNG</td><td>ドライアイス、消火器（CO2）、液体窒素</td><td>漏出：換気。凍傷注意。</td></tr>
+        <tr><td>2.3 毒性ガス</td><td>RPG / RCL</td><td>殺虫剤スプレー、塩素ガス</td><td>漏出：呼吸器系保護。周囲の人員を退避。</td></tr>
+        <tr><td>3 引火性液体</td><td>—</td><td>RFL</td><td>塗料、接着剤、燃料、アルコール類</td><td>漏出：火気厳禁。換気。</td></tr>
+        <tr><td rowspan="3">4 可燃性固体等</td><td>4.1 可燃性固体</td><td>RFS</td><td>マッチ、金属粉</td><td>漏出：火気厳禁。</td></tr>
+        <tr><td>4.2 自然発火性物質</td><td>RSC</td><td>白リン</td><td>漏出：空気接触を避ける。水で冷却。</td></tr>
+        <tr><td>4.3 水反応可燃性物質</td><td>RFW</td><td>金属ナトリウム、カルシウムカーバイド</td><td>漏出：水をかけない。乾燥砂で覆う。</td></tr>
+        <tr><td rowspan="2">5 酸化性物質等</td><td>5.1 酸化性物質</td><td>ROX</td><td>漂白剤、過酸化物</td><td>漏出：他の化学品との接触を避ける。</td></tr>
+        <tr><td>5.2 有機過酸化物</td><td>ROP</td><td>過酸化ベンゾイル</td><td>漏出：熱・衝撃・汚染を避ける。</td></tr>
+        <tr><td rowspan="2">6 毒物・病原体</td><td>6.1 毒物</td><td>RPB</td><td>農薬、水銀化合物</td><td>漏出：皮膚・目に付着させない。手袋着用。</td></tr>
+        <tr><td>6.2 病原体</td><td>RIS</td><td>診断用検体、ウイルス培養物</td><td>漏出：接触を避ける。当局に通報。</td></tr>
+        <tr><td>7 放射性物質</td><td>—</td><td>RAR / RRW</td><td>医療用アイソトープ</td><td>漏出：パッケージを動かさない。有資格者を手配。</td></tr>
+        <tr><td>8 腐食性物質</td><td>—</td><td>RCM</td><td>硫酸、水酸化ナトリウム、蓄電池</td><td>漏出：皮膚・目に付着させない。手袋・目の保護具着用。</td></tr>
+        <tr><td>9 その他の有害物件</td><td>—</td><td>RMD / ICE / ELI / RLI</td><td>ドライアイス、リチウム電池、磁気材料</td><td>ドリルレターの指示通り。100%酸素使用。</td></tr>
+      </table>
+    </div>
+    <div id="docs-erg" class="docs-tab-content" style="display:none;">
+      <div class="section-title">ERG CODE — 機内危険物事故時の応急処置ガイド</div>
+      <p style="font-size:11px;color:#aaa;">各クラスの危険物が機内で事故を起こした場合の対応。ドリルレター（A/I/P/W/F/H等）は外装ラベルを参照。</p>
+      <div style="overflow-x:auto;">
+      <table>
+        <tr>
+          <th>Class</th>
+          <th>危険物の性質</th>
+          <th>事故の種類</th>
+          <th>認識方法</th>
+          <th>乗務員の保護</th>
+          <th>消火方法</th>
+          <th>特記事項</th>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td>爆発物</td>
+          <td>火災および/または爆発</td>
+          <td>煙、ガス、熱、ドリルレター指示通り</td>
+          <td>100%酸素を使用。"A""I""P"ドリルレターの場合は最大換気を確立し維持する</td>
+          <td>利用可能なすべての消火剤。標準的な消火手順を使用</td>
+          <td>急減圧の可能性</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>高圧ガス類（引火性・毒性等）</td>
+          <td>火災および/または爆発、有毒ガス放出</td>
+          <td>煙、ガス、熱、ドリルレター指示通り</td>
+          <td>100%酸素を使用。最大換気を確立し維持する</td>
+          <td>利用可能なすべての消火剤。標準的な消火手順を使用</td>
+          <td>急減圧の可能性</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>引火性液体または固体</td>
+          <td>火災および/または爆発</td>
+          <td>煙、ガス、熱、ドリルレター指示通り</td>
+          <td>100%酸素を使用。最大換気を確立し維持する。禁煙。電気系統を最小限に</td>
+          <td>利用可能なすべての消火剤。"W"の場合は水を使用しない</td>
+          <td>急減圧の可能性</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>空気に触れると自然発火する恐れがある</td>
+          <td>火災および/または爆発</td>
+          <td>煙、ガス、熱、ドリルレター指示通り</td>
+          <td>100%酸素を使用。最大換気を確立し維持する</td>
+          <td>利用可能なすべての消火剤。"W"の場合は水を使用しない</td>
+          <td>急減圧の可能性。"F"または"H"の場合は電気系統を最小限に</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>酸化性物質。他の物質を発火させる恐れがある</td>
+          <td>火災および/または爆発、腐食による損傷の可能性</td>
+          <td>目・鼻・喉への刺激。接触すると皮膚に損傷</td>
+          <td>100%酸素を使用。最大換気を確立し維持する</td>
+          <td>利用可能なすべての消火剤。"W"の場合は水を使用しない</td>
+          <td>急減圧の可能性</td>
+        </tr>
+        <tr>
+          <td>6</td>
+          <td>毒性。吸入・摂取・皮膚吸収で致命的になる恐れがある</td>
+          <td>有毒な液体または固体による汚染</td>
+          <td>急性毒性。影響が遅れて現れる可能性あり</td>
+          <td>100%酸素を使用。最大換気を確立し維持する。手袋なしで触らない</td>
+          <td>利用可能なすべての消火剤。"W"の場合は水を使用しない</td>
+          <td>急減圧の可能性。"F"または"H"の場合は電気系統を最小限に</td>
+        </tr>
+        <tr>
+          <td>7</td>
+          <td>破損した・遮蔽されていないパッケージからの放射線</td>
+          <td>漏出した放射性物質による汚染</td>
+          <td>放射線被ばく、人員の汚染</td>
+          <td>パッケージを動かさない。接触を避ける</td>
+          <td>利用可能なすべての消火剤</td>
+          <td>到着地に有資格者の手配を要請する</td>
+        </tr>
+        <tr>
+          <td>8</td>
+          <td>腐食性。皮膚接触でガスにより行動不能になる恐れがある</td>
+          <td>腐食による損傷の可能性</td>
+          <td>目・鼻・喉への刺激。接触すると皮膚に損傷</td>
+          <td>100%酸素を使用。最大換気を確立し維持する。手袋なしで触らない</td>
+          <td>利用可能なすべての消火剤。"W"の場合は水を使用しない</td>
+          <td>急減圧の可能性。"F"または"H"の場合は電気系統を最小限に</td>
+        </tr>
+        <tr>
+          <td>9</td>
+          <td>固有の危険性なし</td>
+          <td>ドリルレター指示通り</td>
+          <td>ドリルレター指示通り</td>
+          <td>100%酸素を使用。最大換気を確立し維持する</td>
+          <td>利用可能なすべての消火剤</td>
+          <td>急減圧の可能性</td>
+        </tr>
+      </table>
+      </div>
+      <h3>ドリルレターの意味</h3>
+      <table>
+        <tr><th>レター</th><th>意味</th></tr>
+        <tr><td>A</td><td>最大換気（Airborne ventilation）</td></tr>
+        <tr><td>I</td><td>換気（Increase ventilation）</td></tr>
+        <tr><td>P</td><td>換気（Pressurize / Passive ventilation）</td></tr>
+        <tr><td>W</td><td>水を使用しない（Do not use Water）</td></tr>
+        <tr><td>F</td><td>電気系統を最小限に（electrical Fire risk）</td></tr>
+        <tr><td>H</td><td>電気系統を最小限に（electrical Hazard）</td></tr>
+        <tr><td>E</td><td>爆発の危険（Explosive risk）</td></tr>
+        <tr><td>T</td><td>毒性（Toxic）</td></tr>
+      </table>
+    </div>
+    <div id="docs-pax" class="docs-tab-content" style="display:none;">
+      <div class="section-title">配慮を要する旅客（Special Passenger）一覧</div>
+      <div style="overflow-x:auto;">
+        <table>
+          <tr>
+            <th>コード</th>
+            <th>種別</th>
+            <th>説明</th>
+            <th>付添者</th>
+            <th>座席制限</th>
+            <th>搭乗数制限</th>
+          </tr>
+          <tr>
+            <td>WCHS</td>
+            <td>歩行困難旅客</td>
+            <td>階段昇降が不可能な旅客</td>
+            <td>—</td>
+            <td>非常口不可</td>
+            <td>制限なし</td>
+          </tr>
+          <tr>
+            <td>WCHR</td>
+            <td>軽度の歩行困難旅客</td>
+            <td>歩行・階段昇降可。空港内移動に車椅子を使用</td>
+            <td>—</td>
+            <td>非常口不可</td>
+            <td>制限なし</td>
+          </tr>
+          <tr>
+            <td>MEDA</td>
+            <td>傷病旅客</td>
+            <td>機内で酸素ボンベ・医療機器等の非日常的な医療支援が必要</td>
+            <td>原則必要（医師/看護師等）</td>
+            <td>非常口不可</td>
+            <td>制限なし</td>
+          </tr>
+          <tr>
+            <td>STCR</td>
+            <td>ストレッチャー旅客</td>
+            <td>着席した状態で航空機旅行を行うことができない</td>
+            <td>必要（医師/看護師等）</td>
+            <td>指定座席（付添者は隣席）</td>
+            <td>1機あたり1名。幼児同伴不可</td>
+          </tr>
+          <tr>
+            <td>DPNA</td>
+            <td>知的障がい旅客</td>
+            <td>緊急脱出が自身ではできず、他人の援助が必要</td>
+            <td>必要（付添者1名に対し2名まで）</td>
+            <td>非常口不可。付添者は隣席</td>
+            <td>制限なし。幼児・小児同伴不可</td>
+          </tr>
+          <tr>
+            <td>BLND</td>
+            <td>視覚障がい旅客</td>
+            <td>目の不自由な旅客。盲導犬は付添者とみなし1名に対し1頭まで同伴可</td>
+            <td>条件により必要（付添者1名に対し2名まで）</td>
+            <td>非常口不可。付添者は隣席</td>
+            <td>制限なし（単独搭乗時は制限あり）</td>
+          </tr>
+          <tr>
+            <td>DEAF</td>
+            <td>聴覚障がい旅客</td>
+            <td>耳の不自由な旅客。聴導犬は1名に対し1頭まで同伴可</td>
+            <td>—</td>
+            <td>非常口不可</td>
+            <td>制限なし</td>
+          </tr>
+          <tr>
+            <td>EXMO</td>
+            <td>妊婦</td>
+            <td>出産予定日より28日以内の旅客</td>
+            <td>予定日14日以内は医師の同伴が必要</td>
+            <td>非常口不可</td>
+            <td>制限なし</td>
+          </tr>
+          <tr>
+            <td>INFT / INST</td>
+            <td>幼児（座席保有幼児）</td>
+            <td>生後8日以上2歳未満（INSTは自身の座席を確保する幼児）</td>
+            <td>必要（12歳以上）。同伴者1名につき2名まで</td>
+            <td>非常口不可。酸素マスク数の制限あり</td>
+            <td>各装備座席数の20%以下</td>
+          </tr>
+          <tr>
+            <td>CHLD / UMNR</td>
+            <td>小児・単独搭乗</td>
+            <td>2歳以上12歳未満（UMNRは5〜12歳未満の単独搭乗）</td>
+            <td>5歳未満は12歳以上の同伴が必要</td>
+            <td>非常口不可</td>
+            <td>制限なし</td>
+          </tr>
+          <tr>
+            <td>PRIS</td>
+            <td>被疑者</td>
+            <td>逮捕・拘束され、厳重な護送が行われるべき者</td>
+            <td>国内: 1名に対し2名以上。国際: 1名につき3名</td>
+            <td>非常口不可。護送員の間等に指定</td>
+            <td>1機あたり3件以内・合計3人以内</td>
+          </tr>
+          <tr>
+            <td>DEPU / DEPA</td>
+            <td>出入国管理局から国外追放を命じられた者</td>
+            <td>退去を命じられた外国人またはその容疑者（DEPA=警備官同行、DEPU=同行なし）</td>
+            <td>DEPA: 警備官同行。DEPU: 同行なし</td>
+            <td>非常口不可</td>
+            <td>1機あたり1件（DAPUは1機1名）</td>
+          </tr>
+        </table>
+      </div>
+    </div>
     <div id="docs-tarmac" class="docs-tab-content" style="display:none;"></div>
   </div>
 </div>
