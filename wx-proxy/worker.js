@@ -22,12 +22,12 @@ async function handleRequest(request) {
     return new Response('Missing url param', { status: 400 });
   }
 
-  var allowedHosts = ['www.jma.go.jp', 'www.data.jma.go.jp'];
+  var allowedHosts = ['www.jma.go.jp', 'www.data.jma.go.jp', 'weather.uwyo.edu'];
   var targetHostname;
   try { targetHostname = new URL(targetUrl).hostname; }
   catch(e) { return new Response('Invalid url', { status: 400 }); }
   if (allowedHosts.indexOf(targetHostname) === -1) {
-    return new Response('Forbidden: only JMA domains allowed', { status: 403 });
+    return new Response('Forbidden: only allowed domains', { status: 403 });
   }
 
   try {

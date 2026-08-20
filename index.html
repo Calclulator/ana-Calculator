@@ -206,6 +206,28 @@
   .wx-bulk-badge.err{color:#cc4444;}
   .wx-bulk-badge.loading{color:#ffaa00;}
   #wx-bulk-btn:disabled{opacity:0.5;cursor:default;}
+  .wx-ofp-dropzone{border:2px dashed #2a4a7f;border-radius:6px;padding:24px;text-align:center;color:#666;font-size:12px;font-family:monospace;cursor:pointer;margin-bottom:10px;background:#0a0a14;user-select:none;}
+  .wx-ofp-dropzone.dragover{border-color:#00d4ff;color:#00d4ff;}
+  .wx-ofp-wp-table{width:100%;border-collapse:collapse;font-size:11px;font-family:monospace;margin-bottom:10px;}
+  .wx-ofp-wp-table th{background:#111;color:#aaa;padding:3px 6px;border:1px solid #333;text-align:left;}
+  .wx-ofp-wp-table td{padding:3px 6px;border:1px solid #222;color:#ccc;vertical-align:middle;}
+  .wx-ofp-wp-table tr:hover td{background:#0a1a2e;}
+  .wx-ofp-viewer{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.92);z-index:9999;flex-direction:column;align-items:center;justify-content:center;}
+  .wx-ofp-viewer.open{display:flex;}
+  .wx-ofp-viewer-img{max-width:90vw;max-height:80vh;object-fit:contain;border:1px solid #333;background:#111;}
+  .wx-ofp-viewer-nav{display:flex;gap:16px;margin-top:12px;align-items:center;}
+  .wx-ofp-viewer-btn{background:#0d3b6e;color:#00d4ff;border:1px solid #00d4ff;border-radius:4px;padding:8px 20px;font-size:18px;cursor:pointer;font-family:inherit;touch-action:manipulation;}
+  .wx-ofp-viewer-label{color:#aaa;font-size:12px;font-family:monospace;min-width:220px;text-align:center;}
+  .wx-ofp-viewer-close{position:absolute;top:16px;right:20px;background:none;color:#aaa;border:none;font-size:26px;cursor:pointer;line-height:1;}
+  .wx-ofp-guide{padding:12px 16px;max-width:800px;font-family:inherit;font-size:12px;line-height:1.75;color:#ccc;overflow-y:auto;max-height:72vh;}
+  .wx-ofp-guide h2{color:#00d4ff;font-size:13px;border-bottom:1px solid #1a3a6e;padding-bottom:4px;margin:18px 0 8px;}
+  .wx-ofp-guide h3{color:#7ab3ef;font-size:12px;margin:14px 0 4px;}
+  .wx-ofp-guide .gw{color:#ff6666;}
+  .wx-ofp-guide .go{color:#00cc44;}
+  .wx-ofp-guide .gc{color:#ffaa00;}
+  .wx-ofp-guide table{border-collapse:collapse;width:100%;margin:8px 0;}
+  .wx-ofp-guide th{background:#111;color:#aaa;padding:3px 8px;border:1px solid #333;font-size:11px;}
+  .wx-ofp-guide td{padding:4px 8px;border:1px solid #222;font-size:11px;}
   .mp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-bottom:10px;}
   .mp-field{display:flex;flex-direction:column;gap:2px;}
   .mp-taf-period{border-top:.5px solid #1e2a38;padding:4px 0;font-size:11px;line-height:1.5;}
@@ -1267,6 +1289,7 @@
       <button type="button" onclick="showWxTab('skewt')" id="wx-btn-skewt" class="wx-tab-btn">SKEW-T<span class="wx-bulk-badge" id="wx-badge-skewt"></span></button>
       <button type="button" onclick="showWxTab('kazan')" id="wx-btn-kazan" class="wx-tab-btn">火山<span class="wx-bulk-badge" id="wx-badge-kazan"></span></button>
       <button type="button" onclick="showWxTab('kaigai')" id="wx-btn-kaigai" class="wx-tab-btn">海外<span class="wx-bulk-badge" id="wx-badge-kaigai"></span></button>
+      <button type="button" onclick="showWxTab('ofp')" id="wx-btn-ofp" class="wx-tab-btn">OFP<span class="wx-bulk-badge" id="wx-badge-ofp"></span></button>
     </div>
 
     <div id="wx-panel-metar" class="wx-sub-panel">
@@ -1467,6 +1490,144 @@
         </div>
         <div style="margin-top:4px;">
           <a id="wx-kaigai-open" href="#" target="_blank" rel="noopener" class="wx-open-btn">OPEN</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="wx-panel-ofp" class="wx-sub-panel" style="display:none;">
+      <div class="wx-sub-tab-bar">
+        <button type="button" class="wx-sub-tab-btn wx-sub-active" onclick="wxOfpShowSubTab('fetch',this)">OFP SKEW-T</button>
+        <button type="button" class="wx-sub-tab-btn" onclick="wxOfpShowSubTab('guide',this)">読み方ガイド</button>
+      </div>
+
+      <div id="wx-ofp-sub-fetch">
+        <div id="wx-ofp-dropzone" class="wx-ofp-dropzone"
+             onclick="document.getElementById('wx-ofp-file-input').click()"
+             ondragover="event.preventDefault(); this.classList.add('dragover');"
+             ondragleave="this.classList.remove('dragover');"
+             ondrop="event.preventDefault(); this.classList.remove('dragover'); wxOfpHandleFile(event.dataTransfer.files[0]);">
+          OFP PDF をここにドロップ（またはクリックして選択）
+        </div>
+        <input id="wx-ofp-file-input" type="file" accept=".pdf" style="display:none;"
+               onchange="wxOfpHandleFile(this.files[0])">
+        <div id="wx-ofp-status" style="font-size:11px;color:#888;font-family:monospace;margin-bottom:8px;display:none;"></div>
+        <div id="wx-ofp-wp-wrap" style="display:none;">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
+            <button type="button" class="wx-sub-tab-btn" onclick="wxOfpSelectAll(true)">全選択</button>
+            <button type="button" class="wx-sub-tab-btn" onclick="wxOfpSelectAll(false)">全解除</button>
+            <button type="button" onclick="wxOfpFetchSelected()"
+              style="background:#0d3b6e;color:#00d4ff;border:1px solid #00d4ff;border-radius:4px;padding:5px 14px;font-size:12px;font-family:inherit;cursor:pointer;touch-action:manipulation;">
+              SKEW-T 取得
+            </button>
+            <span id="wx-ofp-fetch-status" style="font-size:11px;color:#888;font-family:monospace;"></span>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="wx-ofp-wp-table" id="wx-ofp-wp-table">
+              <thead>
+                <tr>
+                  <th style="width:24px;"></th>
+                  <th>#</th>
+                  <th>WP</th>
+                  <th>Lat</th>
+                  <th>Lon</th>
+                </tr>
+              </thead>
+              <tbody id="wx-ofp-wp-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="wx-ofp-saved-wrap" style="display:none;margin-top:10px;">
+          <div style="font-size:11px;color:#555;font-family:monospace;margin-bottom:4px;">保存済画像:</div>
+          <div id="wx-ofp-saved-list" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+          <button type="button" class="wx-sub-tab-btn" onclick="wxOfpClearDb()" style="margin-top:6px;color:#cc4444;border-color:#cc4444;">キャッシュクリア</button>
+        </div>
+      </div>
+
+      <div id="wx-ofp-sub-guide" style="display:none;">
+        <div class="wx-ofp-guide">
+          <h2>SKEW-T 読み方 &amp; 実務ガイド</h2>
+          <h3>1. 状態図の基本線</h3>
+          <p>
+            <span class="gw">・赤線 (T)</span> — 気温線。対流の増減を見る基準。<br>
+            <span class="go">・緑線 (Td)</span> — 露点温度線。T と Td の差（湿度）が小さいほど雲または霧が近い。<br>
+            ・気塊線 (Parcel Path) — 当該空気塊を持ち上げたときの通路。乾燥断熱線・湿潤断熱線との交点が指数解釈の基準。
+          </p>
+          <h3>2. 条件付き不安定 (Conditional Instability)</h3>
+          <p>
+            <span class="go">T 線が右傾き = 安定</span><br>
+            対流が発生しにくい。晴天なら安定層にとどまる。<br>
+            <span class="gw">T 線が左傾き = 不安定</span><br>
+            山岳などの地形や前線界面をトリガーに対流が発達しやすい。通過高度または飛行高度の変更を検討する。
+          </p>
+          <h3>3. 雲中飛行 (IMC) での飛行高度選択</h3>
+          <p>
+            <span class="go">T 線が右傾きの層を選ぶ</span> — スムーズ。傾きが緩い層はタービュランスを感じやすい。<br>
+            <span class="gw">逆転層 (Inversion) を先に確認</span> — 逆転層の上を先に確保し、逆転層から出る高度を決めてから通過する。<br>
+            IMC 内で逆転層を通過すると CB / タービュランスのリスクがある。逆転層を通過しない離脱高度を選ぶ。
+          </p>
+          <h3>4. 解析指数</h3>
+          <table>
+            <thead>
+              <tr><th>指数</th><th>目安</th><th>運航上の意味</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>CAPE (J/kg)</b></td>
+                <td>
+                  <span class="go">0 — 対流なし</span><br>
+                  <span class="gc">1000+ — 強い上昇気流</span><br>
+                  <span class="gw">2500+ — 激しい雷雨 / 雹リスク</span>
+                </td>
+                <td>飛行経路に CB が出そうなら dispatch 前に確認。CAPE 2500+ は出発時機を相談。</td>
+              </tr>
+              <tr>
+                <td><b>CIN (J/kg)</b></td>
+                <td>
+                  <span class="go">200+ — 対流発生しにくい</span><br>
+                  <span class="gc">50 — きっかけ次第で起こる</span><br>
+                  <span class="gw">約0 — 対流活発 (CAPE と組で発生)</span>
+                </td>
+                <td>CIN が 0 に近く CAPE が大きいと、トリガー待ちの対流。飛行中の発達を想定する。</td>
+              </tr>
+              <tr>
+                <td><b>SSI (ショワルター指数)</b></td>
+                <td>
+                  <span class="go">0以上 — 安定</span><br>
+                  <span class="gc">0未満 — 不安定</span><br>
+                  <span class="gw">-3以下 — 激しい発雷 / 雹 / 強CB</span>
+                </td>
+                <td>出発前に確認。SSI -3 以下なら経路を相談し、出発時機を調整。</td>
+              </tr>
+              <tr>
+                <td><b>PW (mm)<br>可降水量</b></td>
+                <td>大きいほど雲量大。霧を含んだ雲の層が厚い</td>
+                <td>大きい PW の層では雲中進入・集中豪雨に注意。</td>
+              </tr>
+              <tr>
+                <td><b>0°C / -10°C 層<br>着氷警戒</b></td>
+                <td>T と Td の差が 2°C 以内で IMC なら着氷開始</td>
+                <td>
+                  <span class="gc">T = 0°C、Td と差 2°C 以内</span> → Moderate Icing<br>
+                  <span class="gw">T = -10°C、Td と差 2°C 以内</span> → Severe Icing<br>
+                  着氷開始層を解析し、通過高度を決める。
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <h3>5. 合流 / 発散 (Confluence / Diffluence)</h3>
+          <p>
+            <span class="go">合流 (Confluence)</span> — 気流が集まる層。スムーズな飛行になりやすい。<br>
+            <span class="gw">発散 (Diffluence)</span> — 気流が広がる層。下層水蒸気が持ち上げられると CB を発達させやすい。<br>
+            SKEW-T の界面層を見ることでタービュランス層を避けられることもある。
+          </p>
+          <h3>6. ジェット気流の読み方</h3>
+          <p>
+            250–300 hPa 層の風の強さを再確認。風速が高いほど飛行時間は短縮するが、ジェットコア内のタービュランスに注意。<br>
+            ジェットコア付近では対流があると CAT（晴天乱気流）のリスクがあるため、コア内またはコア外で飛行して予防する。
+          </p>
+          <p style="color:#555;font-size:10px;margin-top:20px;">
+            データソース: University of Wyoming (GFS モデルサウンディング) — 解析はプレブリーフィングの参考とし、必ず最新の SIGMET / SIGWX を確認すること。
+          </p>
         </div>
       </div>
     </div>
@@ -3133,6 +3294,366 @@ function wxLoadSkewt(icao) {
   if(wyLink) wyLink.href = wyUrl;
 }
 
+var wxOfpWaypoints = [];
+var wxOfpImages = [];
+var wxOfpSlideIndex = 0;
+var WX_OFP_DB_NAME = 'wxOfpSkewt';
+var WX_OFP_DB_VERSION = 1;
+var WX_OFP_DB_STORE = 'images';
+
+function wxOfpShowSubTab(key, btn) {
+  var elFetch = document.getElementById('wx-ofp-sub-fetch');
+  var elGuide = document.getElementById('wx-ofp-sub-guide');
+  var btns = document.querySelectorAll('#wx-panel-ofp .wx-sub-tab-bar .wx-sub-tab-btn');
+  var i;
+  for(i = 0; i < btns.length; i++) { btns[i].classList.remove('wx-sub-active'); }
+  if(btn) btn.classList.add('wx-sub-active');
+  if(elFetch) elFetch.style.display = (key === 'fetch') ? 'block' : 'none';
+  if(elGuide) elGuide.style.display = (key === 'guide') ? 'block' : 'none';
+}
+
+function wxOfpSetStatus(msg) {
+  var el = document.getElementById('wx-ofp-status');
+  if(!el) return;
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function wxOfpHandleFile(file) {
+  var reader;
+  if(!file) return;
+  if(file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name || '')) {
+    wxOfpSetStatus('PDF ファイルを選択してください。');
+    return;
+  }
+  wxOfpSetStatus('PDF 解析中...');
+  reader = new FileReader();
+  reader.onload = function(e) {
+    var typedArray;
+    if(typeof pdfjsLib === 'undefined') {
+      wxOfpSetStatus('PDF.js 未ロード');
+      return;
+    }
+    typedArray = new Uint8Array(e.target.result);
+    pdfjsLib.getDocument({ data: typedArray }).promise.then(function(pdf) {
+      var pagePromises = [];
+      var p;
+      for(p = 1; p <= pdf.numPages; p++) {
+        pagePromises.push((function(pageNum) {
+          return pdf.getPage(pageNum).then(function(page) {
+            return page.getTextContent().then(function(tc) {
+              var parts = [];
+              var j;
+              for(j = 0; j < tc.items.length; j++) parts.push(tc.items[j].str);
+              return parts.join(' ');
+            });
+          });
+        })(p));
+      }
+      return Promise.all(pagePromises);
+    }).then(function(pages) {
+      var fullText = pages.join('\n');
+      var wps = wxOfpParsePdf(fullText);
+      var wpWrap;
+      if(wps.length === 0) {
+        wxOfpSetStatus('座標ウェイポイントが見つかりませんでした（DDMMNDDDMMEフォーマットを確認）。');
+        return;
+      }
+      wxOfpWaypoints = wps;
+      wxOfpRenderWpTable(wps);
+      wxOfpSetStatus(file.name + '  —  ' + wps.length + ' 座標地点を検出');
+      wpWrap = document.getElementById('wx-ofp-wp-wrap');
+      if(wpWrap) wpWrap.style.display = 'block';
+      wxOfpLoadSaved();
+    }).catch(function(err) {
+      wxOfpSetStatus('PDF 解析失敗: ' + (err && err.message ? err.message : err));
+    });
+  };
+  reader.onerror = function() { wxOfpSetStatus('ファイル読み込みエラー'); };
+  reader.readAsArrayBuffer(file);
+}
+
+function wxOfpParsePdf(text) {
+  var coordRe = /\b(\d{2}\d{2}[NS]\d{3}\d{2}[EW]|\d{2}[NS]\d{3}[EW])\b/g;
+  var seen = {};
+  var result = [];
+  var m, raw, parsed;
+  while((m = coordRe.exec(text)) !== null) {
+    raw = m[1];
+    if(seen[raw]) continue;
+    seen[raw] = true;
+    parsed = wxOfpParseCoord(raw);
+    if(!parsed) continue;
+    result.push({ name: raw, lat: parsed.lat, lon: parsed.lon });
+  }
+  return result;
+}
+
+function wxOfpParseCoord(str) {
+  var m1 = str.match(/^(\d{2})(\d{2})([NS])(\d{3})(\d{2})([EW])$/);
+  var m2, lat, lon;
+  if(m1) {
+    lat = parseInt(m1[1], 10) + parseInt(m1[2], 10) / 60;
+    lon = parseInt(m1[4], 10) + parseInt(m1[5], 10) / 60;
+    if(m1[3] === 'S') lat = -lat;
+    if(m1[6] === 'W') lon = -lon;
+    return { lat: lat.toFixed(2), lon: lon.toFixed(2) };
+  }
+  m2 = str.match(/^(\d{2})([NS])(\d{3})([EW])$/);
+  if(m2) {
+    lat = parseInt(m2[1], 10);
+    lon = parseInt(m2[3], 10);
+    if(m2[2] === 'S') lat = -lat;
+    if(m2[4] === 'W') lon = -lon;
+    return { lat: lat.toFixed(2), lon: lon.toFixed(2) };
+  }
+  return null;
+}
+
+function wxOfpRenderWpTable(wps) {
+  var tbody = document.getElementById('wx-ofp-wp-tbody');
+  var i, wp, html;
+  if(!tbody) return;
+  html = '';
+  for(i = 0; i < wps.length; i++) {
+    wp = wps[i];
+    html += '<tr>'
+      + '<td><input type="checkbox" checked data-idx="' + i + '"></td>'
+      + '<td>' + (i + 1) + '</td>'
+      + '<td>' + wp.name + '</td>'
+      + '<td>' + wp.lat + '</td>'
+      + '<td>' + wp.lon + '</td>'
+      + '</tr>';
+  }
+  tbody.innerHTML = html;
+}
+
+function wxOfpSelectAll(checked) {
+  var boxes = document.querySelectorAll('#wx-ofp-wp-tbody input[type=checkbox]');
+  var i;
+  for(i = 0; i < boxes.length; i++) { boxes[i].checked = checked; }
+}
+
+function wxOfpFetchSelected() {
+  var boxes = document.querySelectorAll('#wx-ofp-wp-tbody input[type=checkbox]:checked');
+  var statusEl = document.getElementById('wx-ofp-fetch-status');
+  var selected = [];
+  var i, idx, now, utcH, baseH, yyyy, mm, dd, hh, datetime, done, total;
+  if(!statusEl) return;
+  if(boxes.length === 0) {
+    statusEl.textContent = 'ウェイポイントを選択してください。';
+    return;
+  }
+  for(i = 0; i < boxes.length; i++) {
+    idx = parseInt(boxes[i].getAttribute('data-idx'), 10);
+    if(wxOfpWaypoints[idx]) selected.push(wxOfpWaypoints[idx]);
+  }
+  wxOfpImages = [];
+  done = 0;
+  total = selected.length;
+  statusEl.textContent = '取得中... 0/' + total;
+  now = new Date();
+  utcH = now.getUTCHours();
+  baseH = utcH >= 12 ? 12 : 0;
+  yyyy = now.getUTCFullYear();
+  mm = ('0' + (now.getUTCMonth() + 1)).slice(-2);
+  dd = ('0' + now.getUTCDate()).slice(-2);
+  hh = ('0' + baseH).slice(-2);
+  datetime = yyyy + '-' + mm + '-' + dd + '+' + hh + ':00:00';
+
+  function fetchOne(wp) {
+    var wyUrl = 'https://weather.uwyo.edu/wsgi/sounding?datetime=' + datetime
+      + '&id=' + wp.lat + ',' + wp.lon
+      + '&type=PNG:SKEWT&src=GFS';
+    var proxyUrl = WX_WORKER_PROXY + '?url=' + encodeURIComponent(wyUrl);
+    var xhr = new XMLHttpRequest();
+    function finish(dataUrl) {
+      wxOfpImages.push({ name: wp.name, lat: wp.lat, lon: wp.lon, url: wyUrl, dataUrl: dataUrl });
+      wxOfpSaveToDb(wp.name, wyUrl, dataUrl, function() {
+        done++;
+        statusEl.textContent = '取得中... ' + done + '/' + total;
+        if(done >= total) {
+          statusEl.textContent = '完了 ' + total + ' 地点  ← → で切替 / Esc で閉じる';
+          wxOfpLoadSaved();
+          wxOfpLaunchViewer(0);
+        }
+      });
+    }
+    xhr.open('GET', proxyUrl, true);
+    xhr.responseType = 'blob';
+    xhr.onload = function() {
+      var fr;
+      if(xhr.status >= 200 && xhr.status < 300 && xhr.response) {
+        fr = new FileReader();
+        fr.onloadend = function() { finish(fr.result); };
+        fr.onerror = function() { finish(wyUrl); };
+        fr.readAsDataURL(xhr.response);
+      } else {
+        finish(wyUrl);
+      }
+    };
+    xhr.onerror = function() { finish(wyUrl); };
+    xhr.send();
+  }
+
+  for(i = 0; i < selected.length; i++) fetchOne(selected[i]);
+}
+
+function wxOfpOpenDb(cb) {
+  var req = indexedDB.open(WX_OFP_DB_NAME, WX_OFP_DB_VERSION);
+  req.onupgradeneeded = function(e) {
+    var db = e.target.result;
+    if(!db.objectStoreNames.contains(WX_OFP_DB_STORE)) {
+      db.createObjectStore(WX_OFP_DB_STORE, { keyPath: 'name' });
+    }
+  };
+  req.onsuccess = function(e) { cb(e.target.result); };
+  req.onerror = function() { cb(null); };
+}
+
+function wxOfpStoreGetAll(store, cb) {
+  var records, cursorReq;
+  if(store.getAll) {
+    var req = store.getAll();
+    req.onsuccess = function(e) { cb(e.target.result || []); };
+    req.onerror = function() { cb([]); };
+    return;
+  }
+  records = [];
+  cursorReq = store.openCursor();
+  cursorReq.onsuccess = function(e) {
+    var cursor = e.target.result;
+    if(cursor) { records.push(cursor.value); cursor.continue(); }
+    else cb(records);
+  };
+  cursorReq.onerror = function() { cb([]); };
+}
+
+function wxOfpSaveToDb(name, url, dataUrl, cb) {
+  wxOfpOpenDb(function(db) {
+    var tx, store;
+    if(!db) { if(cb) cb(); return; }
+    tx = db.transaction(WX_OFP_DB_STORE, 'readwrite');
+    store = tx.objectStore(WX_OFP_DB_STORE);
+    store.put({ name: name, url: url, dataUrl: dataUrl, ts: (new Date()).getTime() });
+    tx.oncomplete = function() { if(cb) cb(); };
+    tx.onerror = function() { if(cb) cb(); };
+  });
+}
+
+function wxOfpRecordsToImages(records) {
+  var out = [];
+  var i, r;
+  for(i = 0; i < records.length; i++) {
+    r = records[i];
+    out.push({ name: r.name, lat: '', lon: '', url: r.url, dataUrl: r.dataUrl || r.url });
+  }
+  return out;
+}
+
+function wxOfpLoadSaved() {
+  wxOfpOpenDb(function(db) {
+    var tx, store;
+    if(!db) return;
+    tx = db.transaction(WX_OFP_DB_STORE, 'readonly');
+    store = tx.objectStore(WX_OFP_DB_STORE);
+    wxOfpStoreGetAll(store, function(records) {
+      var wrap = document.getElementById('wx-ofp-saved-wrap');
+      var list = document.getElementById('wx-ofp-saved-list');
+      var i, html;
+      if(!wrap || !list) return;
+      if(!records.length) { wrap.style.display = 'none'; return; }
+      wrap.style.display = 'block';
+      html = '';
+      for(i = 0; i < records.length; i++) {
+        html += '<button type="button" class="wx-sub-tab-btn" onclick="wxOfpViewFromDb(' + i + ')">'
+          + records[i].name + '</button>';
+      }
+      list.innerHTML = html;
+      if(wxOfpImages.length === 0) wxOfpImages = wxOfpRecordsToImages(records);
+    });
+  });
+}
+
+function wxOfpViewFromDb(idx) {
+  wxOfpOpenDb(function(db) {
+    var tx, store;
+    if(!db) return;
+    tx = db.transaction(WX_OFP_DB_STORE, 'readonly');
+    store = tx.objectStore(WX_OFP_DB_STORE);
+    wxOfpStoreGetAll(store, function(records) {
+      wxOfpImages = wxOfpRecordsToImages(records);
+      wxOfpLaunchViewer(idx);
+    });
+  });
+}
+
+function wxOfpClearDb() {
+  wxOfpOpenDb(function(db) {
+    var tx;
+    if(!db) return;
+    tx = db.transaction(WX_OFP_DB_STORE, 'readwrite');
+    tx.objectStore(WX_OFP_DB_STORE).clear();
+    tx.oncomplete = function() {
+      var wrap = document.getElementById('wx-ofp-saved-wrap');
+      var list = document.getElementById('wx-ofp-saved-list');
+      wxOfpImages = [];
+      if(wrap) wrap.style.display = 'none';
+      if(list) list.innerHTML = '';
+      wxOfpSetStatus('キャッシュをクリアしました。');
+    };
+  });
+}
+
+function wxOfpLaunchViewer(startIdx) {
+  var viewer;
+  if(wxOfpImages.length === 0) return;
+  wxOfpSlideIndex = startIdx || 0;
+  viewer = document.getElementById('wx-ofp-viewer');
+  if(viewer) viewer.classList.add('open');
+  wxOfpShowSlide(wxOfpSlideIndex);
+}
+
+function wxOfpShowSlide(idx) {
+  var img, label, entry;
+  if(idx < 0) idx = wxOfpImages.length - 1;
+  if(idx >= wxOfpImages.length) idx = 0;
+  wxOfpSlideIndex = idx;
+  img = document.getElementById('wx-ofp-viewer-img');
+  label = document.getElementById('wx-ofp-viewer-label');
+  entry = wxOfpImages[idx];
+  if(!entry || !img) return;
+  img.src = (entry.dataUrl && entry.dataUrl !== entry.url) ? entry.dataUrl : entry.url;
+  img.alt = entry.name;
+  if(label) {
+    label.textContent = (idx + 1) + ' / ' + wxOfpImages.length
+      + '  ' + entry.name
+      + (entry.lat ? '  (' + entry.lat + ', ' + entry.lon + ')' : '');
+  }
+}
+
+function wxOfpChangeSlide(dir) {
+  wxOfpShowSlide(wxOfpSlideIndex + dir);
+}
+
+function wxOfpCloseViewer() {
+  var viewer = document.getElementById('wx-ofp-viewer');
+  if(viewer) viewer.classList.remove('open');
+}
+
+document.addEventListener('keydown', function(e) {
+  var viewer = document.getElementById('wx-ofp-viewer');
+  var k, c;
+  if(!viewer || !viewer.classList.contains('open')) return;
+  k = e.key || '';
+  c = e.keyCode || 0;
+  if(k === 'ArrowLeft' || c === 37) wxOfpChangeSlide(-1);
+  if(k === 'ArrowRight' || c === 39) wxOfpChangeSlide(1);
+  if(k === 'Escape' || c === 27) wxOfpCloseViewer();
+});
+
+if(document.getElementById('wx-panel-ofp')) wxOfpLoadSaved();
+
 var wxBulkFetching = false;
 
 function wxBulkFinish() {
@@ -3156,7 +3677,7 @@ function wxBulkFetch() {
   if(wxBulkFetching) return;
   wxBulkFetching = true;
   var btn = document.getElementById('wx-bulk-btn');
-  var tabs = ['metar', 'tenkizu', 'satellite', 'sig', 'danmen', 'skewt', 'kazan', 'kaigai'];
+  var tabs = ['metar', 'tenkizu', 'satellite', 'sig', 'danmen', 'skewt', 'kazan', 'kaigai', 'ofp'];
   var i, badge, ts, done, total, key;
   var markOk, markErr, fetchImgThenShow, bulkUrl;
   if(btn) btn.disabled = true;
@@ -3167,7 +3688,7 @@ function wxBulkFetch() {
   ts = document.getElementById('wx-bulk-ts');
   if(ts) ts.textContent = '取得中...';
   done = 0;
-  total = 8;
+  total = 9;
   markOk = function(tabId) {
     var b = document.getElementById('wx-badge-' + tabId);
     if(b) { b.textContent = '\u2713'; b.className = 'wx-bulk-badge ok'; }
@@ -3207,6 +3728,7 @@ function wxBulkFetch() {
   };
 
   markOk('kazan');
+  markOk('ofp');
 
   (function() {
     var out = document.getElementById('wx-metar-output');
@@ -3333,7 +3855,7 @@ function wxBulkFetch() {
 }
 
 function wxBulkClear() {
-  var tabs = ['metar', 'tenkizu', 'satellite', 'sig', 'danmen', 'skewt', 'kazan', 'kaigai'];
+  var tabs = ['metar', 'tenkizu', 'satellite', 'sig', 'danmen', 'skewt', 'kazan', 'kaigai', 'ofp'];
   var imgIds = ['wx-sig-img', 'wx-danmen-img', 'wx-kaigai-img', 'wx-satellite-img', 'wx-skewt-img'];
   var i, badge, ts, out, jmaImg, el, btn, cv, ld;
   for(i = 0; i < tabs.length; i++) {
@@ -14775,6 +15297,15 @@ if(WX_GFS_WIND_ON && typeof applyGfsWindLayer === 'function') applyGfsWindLayer(
     <div style="height:8px;"></div>
     <div style="color:#90a4ae;font-size:12px;margin-bottom:4px;">プレビュー</div>
     <pre id="fp-note-text"></pre>
+  </div>
+</div>
+<div id="wx-ofp-viewer" class="wx-ofp-viewer" onclick="if(event.target===this) wxOfpCloseViewer()">
+  <button type="button" class="wx-ofp-viewer-close" onclick="wxOfpCloseViewer()">×</button>
+  <img id="wx-ofp-viewer-img" class="wx-ofp-viewer-img" src="" alt="SKEW-T">
+  <div class="wx-ofp-viewer-nav">
+    <button type="button" class="wx-ofp-viewer-btn" onclick="wxOfpChangeSlide(-1)">←</button>
+    <div class="wx-ofp-viewer-label" id="wx-ofp-viewer-label"></div>
+    <button type="button" class="wx-ofp-viewer-btn" onclick="wxOfpChangeSlide(1)">→</button>
   </div>
 </div>
 <div id="metar-overlay" onclick="closeMetarPanel()"></div>
