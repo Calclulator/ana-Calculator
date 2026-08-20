@@ -22,7 +22,17 @@ async function handleRequest(request) {
     return new Response('Missing url param', { status: 400 });
   }
 
-  var allowedHosts = ['www.jma.go.jp', 'www.data.jma.go.jp', 'weather.uwyo.edu'];
+  var allowedHosts = [
+    'www.jma.go.jp',
+    'www.data.jma.go.jp',
+    'weather.uwyo.edu',
+    'www.dwd.de',
+    'www.wpc.ncep.noaa.gov',
+    'ocean.weather.gov',
+    'www.bom.gov.au',
+    'www.amecs.co.jp',
+    'www3.metair.go.jp'
+  ];
   var targetHostname;
   try { targetHostname = new URL(targetUrl).hostname; }
   catch(e) { return new Response('Invalid url', { status: 400 }); }

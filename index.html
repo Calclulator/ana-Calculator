@@ -1366,6 +1366,7 @@
         <div class="wx-meta" id="wx-tenkizu-meta"></div>
         <div class="wx-pdf-loading" id="wx-tenkizu-loading">PDF 読み込み中...</div>
         <canvas id="wx-tenkizu-canvas"></canvas>
+        <img id="wx-tenkizu-img" class="wx-chart-img" src="" alt="" style="display:none;">
         <div id="wx-tenkizu-err" style="display:none;color:#888;font-size:11px;padding:8px;"></div>
         <div style="margin-top:4px;">
           <a id="wx-tenkizu-open" href="https://www.jma.go.jp/bosai/numericmap/#type=nwp" target="_blank" rel="noopener" class="wx-open-btn">JMA OPEN</a>
@@ -1387,10 +1388,7 @@
         <div class="wx-meta" id="wx-satellite-meta"></div>
         <img id="wx-satellite-img" class="wx-chart-img" src="" alt="衛星"
              onerror="this.style.display='none';document.getElementById('wx-satellite-err').style.display='block';">
-        <div id="wx-satellite-err" style="display:none;color:#888;font-size:11px;padding:16px;text-align:center;">
-          直接表示不可。外部リンクから:
-          <a id="wx-satellite-extlink" href="https://www.jma.go.jp/bosai/map.html#5/38.169/138.999/&amp;elem=ir&amp;contents=himawari" target="_blank" rel="noopener" style="color:#7ab3ef;">JMA ひまわりモニタ</a>
-        </div>
+        <div id="wx-satellite-err" style="display:none;color:#888;font-size:11px;padding:16px;text-align:center;">画像取得失敗</div>
       </div>
     </div>
 
@@ -1465,7 +1463,7 @@
       <div class="wx-chart-wrapper">
         <div class="wx-meta" id="wx-skewt-meta"></div>
         <img id="wx-skewt-img" class="wx-chart-img" src="" alt="Skew-T">
-        <div id="wx-skewt-err" style="display:none;color:#888;font-size:11px;padding:8px;">データなし。外部リンク:</div>
+        <div id="wx-skewt-err" style="display:none;color:#888;font-size:11px;padding:8px;">データなし</div>
         <div style="margin-top:4px;">
           <a id="wx-skewt-wy-link" href="https://weather.uwyo.edu/cgi-bin/bufrraob.py" target="_blank" rel="noopener" class="wx-open-btn">Wyoming</a>
           <a id="wx-skewt-tt-link" href="https://www.tropicaltidbits.com/analysis/soundings/" target="_blank" rel="noopener" class="wx-open-btn" style="margin-left:4px;">Tropicaltidbits</a>
@@ -1474,20 +1472,15 @@
     </div>
 
     <div id="wx-panel-kazan" class="wx-sub-panel" style="display:none;">
-      <div style="text-align:center;padding:32px 20px;color:#aaa;">
-        <div style="font-size:24px;margin-bottom:8px;">🌋</div>
-        <div style="font-size:13px;color:#7ab3ef;margin-bottom:6px;">降灰予報（動的マップ）</div>
-        <div style="font-size:11px;color:#888;margin-bottom:20px;">
-          セキュリティ設定により直接表示不可。<br>
-          下のボタンから外部ページを開いてください。
-        </div>
-        <a href="https://www.jma.go.jp/bosai/map.html#5/37.979/135/&amp;contents=ashfall" target="_blank" rel="noopener"
-           style="display:inline-block;background:#0d3b6e;color:#00d4ff;border:1px solid #00d4ff;border-radius:4px;padding:10px 24px;font-size:13px;font-family:inherit;text-decoration:none;margin-bottom:12px;">
-          LAUNCH JMA 降灰予報
-        </a>
-        <div>
+      <div class="wx-chart-wrapper">
+        <div class="wx-meta" id="wx-kazan-meta">降灰予報 / Tokyo VAAC</div>
+        <div class="wx-pdf-loading" id="wx-kazan-loading">読み込み中...</div>
+        <img id="wx-kazan-img" class="wx-chart-img" src="" alt="火山">
+        <div id="wx-kazan-err" style="display:none;color:#888;font-size:11px;padding:8px;">画像取得失敗</div>
+        <div style="margin-top:8px;">
+          <a href="https://www.jma.go.jp/bosai/map.html#5/37.979/135/&amp;contents=ashfall" target="_blank" rel="noopener" class="wx-open-btn">JMA 降灰予報</a>
           <a href="https://www.jma.go.jp/bosai/volcano/" target="_blank" rel="noopener" class="wx-open-btn">JMA 火山情報</a>
-          <a href="https://www.data.jma.go.jp/vaac/data/indexj.html" target="_blank" rel="noopener" class="wx-open-btn" style="margin-left:6px;">Tokyo VAAC</a>
+          <a href="https://www.data.jma.go.jp/vaac/data/indexj.html" target="_blank" rel="noopener" class="wx-open-btn">Tokyo VAAC</a>
         </div>
       </div>
     </div>
@@ -1506,10 +1499,7 @@
         <div class="wx-meta" id="wx-kaigai-meta"></div>
         <img id="wx-kaigai-img" class="wx-chart-img" src="" alt="海外天気図"
              onerror="this.style.display='none';document.getElementById('wx-kaigai-err').style.display='block';">
-        <div id="wx-kaigai-err" style="display:none;color:#888;font-size:11px;padding:8px;">
-          画像取得失敗（hotlink制限の可能性）。
-          <a id="wx-kaigai-extlink" href="#" target="_blank" rel="noopener" style="color:#7ab3ef;">外部リンク</a>
-        </div>
+        <div id="wx-kaigai-err" style="display:none;color:#888;font-size:11px;padding:8px;">画像取得失敗</div>
         <div style="margin-top:4px;">
           <a id="wx-kaigai-open" href="#" target="_blank" rel="noopener" class="wx-open-btn">OPEN</a>
         </div>
@@ -2767,6 +2757,126 @@ function showWxTab(tabId) {
   if(p) p.style.display = 'block';
   if(b) b.classList.add('wx-tab-active');
   if(tabId === 'metar') wxRefreshMetar();
+  if(tabId === 'kazan') wxFetchHtmlImage('kazan', 'https://www.data.jma.go.jp/vaac/data/indexj.html');
+}
+
+function wxProxyUrl(url) {
+  if(!url) return '';
+  if(!WX_WORKER_PROXY || WX_WORKER_PROXY.indexOf('YOUR_') >= 0) return url;
+  if(url.indexOf(WX_WORKER_PROXY) === 0) return url;
+  return WX_WORKER_PROXY + '?url=' + encodeURIComponent(url);
+}
+
+function wxBustUrl(url) {
+  if(!url) return '';
+  return url + (url.indexOf('?') >= 0 ? '&' : '?') + 't=' + new Date().getTime();
+}
+
+function wxAbsUrl(baseUrl, src) {
+  var slash;
+  if(!src) return '';
+  if(/^https?:\/\//i.test(src)) return src;
+  if(src.indexOf('//') === 0) return 'https:' + src;
+  if(src.charAt(0) === '/') {
+    slash = baseUrl.indexOf('/', 8);
+    return (slash >= 0 ? baseUrl.slice(0, slash) : baseUrl) + src;
+  }
+  slash = baseUrl.lastIndexOf('/');
+  return (slash >= 0 ? baseUrl.slice(0, slash + 1) : baseUrl) + src;
+}
+
+function wxExtractImgFromHtml(html, baseUrl) {
+  var re = /<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi;
+  var m, src, candidates, i, og;
+  candidates = [];
+  while((m = re.exec(html)) !== null) {
+    src = m[1];
+    if(!src || src.indexOf('data:') === 0) continue;
+    if(/\.(png|jpe?g|gif|webp)(\?|$)/i.test(src) || src.indexOf('/pict/') >= 0 || src.indexOf('/imgs/') >= 0 || src.indexOf('/data/') >= 0) {
+      candidates.push(src);
+    }
+  }
+  if(candidates.length) return wxAbsUrl(baseUrl, candidates[0]);
+  og = html.match(/property=["']og:image["'][^>]*content=["']([^"']+)["']/i)
+    || html.match(/content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
+  if(og) return wxAbsUrl(baseUrl, og[1]);
+  m = html.match(/https?:\/\/[^"'<>\s]+\.(?:png|jpe?g|gif)/i);
+  return m ? m[0] : '';
+}
+
+function wxDisplayChartImage(tabKey, url) {
+  var img = document.getElementById('wx-' + tabKey + '-img');
+  var err = document.getElementById('wx-' + tabKey + '-err');
+  var canvas = document.getElementById('wx-' + tabKey + '-canvas');
+  var loading = document.getElementById('wx-' + tabKey + '-loading');
+  if(canvas) canvas.style.display = 'none';
+  if(loading) loading.style.display = 'none';
+  if(!img) {
+    if(err) { err.style.display = 'block'; err.textContent = '画像取得失敗'; }
+    return;
+  }
+  if(err) err.style.display = 'none';
+  img.style.display = 'block';
+  img.onerror = function() {
+    img.style.display = 'none';
+    if(err) { err.style.display = 'block'; err.textContent = '画像取得失敗'; }
+  };
+  img.src = wxProxyUrl(wxBustUrl(url));
+}
+
+function wxFetchHtmlImage(tabKey, htmlUrl, doneFn) {
+  var img = document.getElementById('wx-' + tabKey + '-img');
+  var err = document.getElementById('wx-' + tabKey + '-err');
+  var canvas = document.getElementById('wx-' + tabKey + '-canvas');
+  var loading = document.getElementById('wx-' + tabKey + '-loading');
+  var xhr;
+  if(canvas) canvas.style.display = 'none';
+  if(img) img.style.display = 'none';
+  if(err) err.style.display = 'none';
+  if(loading) loading.style.display = 'block';
+  if(!htmlUrl) {
+    if(loading) loading.style.display = 'none';
+    if(err) { err.style.display = 'block'; err.textContent = '取得失敗'; }
+    if(doneFn) doneFn(false);
+    return;
+  }
+  xhr = new XMLHttpRequest();
+  xhr.open('GET', wxProxyUrl(htmlUrl), true);
+  xhr.onload = function() {
+    var found;
+    if(loading) loading.style.display = 'none';
+    if(xhr.status < 200 || xhr.status >= 300) {
+      if(err) { err.style.display = 'block'; err.textContent = '取得失敗 HTTP ' + xhr.status; }
+      if(doneFn) doneFn(false);
+      return;
+    }
+    found = wxExtractImgFromHtml(xhr.responseText || '', htmlUrl);
+    if(!found) {
+      if(err) { err.style.display = 'block'; err.textContent = '画像が見つかりませんでした'; }
+      if(doneFn) doneFn(false);
+      return;
+    }
+    if(!img) {
+      if(err) { err.style.display = 'block'; err.textContent = '画像取得失敗'; }
+      if(doneFn) doneFn(false);
+      return;
+    }
+    img.onload = function() { if(doneFn) doneFn(true); };
+    img.onerror = function() {
+      img.style.display = 'none';
+      if(err) { err.style.display = 'block'; err.textContent = '画像取得失敗'; }
+      if(doneFn) doneFn(false);
+    };
+    if(err) err.style.display = 'none';
+    img.style.display = 'block';
+    img.src = wxProxyUrl(wxBustUrl(found));
+  };
+  xhr.onerror = function() {
+    if(loading) loading.style.display = 'none';
+    if(err) { err.style.display = 'block'; err.textContent = '取得失敗'; }
+    if(doneFn) doneFn(false);
+  };
+  xhr.send();
 }
 
 function wxPad2(n) {
@@ -2884,13 +2994,14 @@ var WX_CHART_TABLES = {
       label: '850/700hPa'
     },
     'koku': {
-      url: null, pdfUrl: null,
+      url: 'https://www.data.jma.go.jp/airinfo/data/pict/ajpn_cmnt/qyya86-0.png',
+      pdfUrl: null,
       extUrl: 'https://www.data.jma.go.jp/airinfo/',
       label: '全国航空気象解説'
     },
     'tanki': {
       url: null, pdfUrl: null,
-      extUrl: 'https://www.data.jma.go.jp/airinfo/',
+      extUrl: 'https://www.data.jma.go.jp/fcd/yoho/manreki.html',
       label: '短期予報解説'
     }
   },
@@ -2902,16 +3013,19 @@ var WX_CHART_TABLES = {
     },
     'ubjp': {
       url: null,
+      dyn: 'ubjp',
       extUrl: 'https://www.data.jma.go.jp/airinfo/data/awfo_low-level_sigwx.html',
       label: 'UBJP 下層悪天予想図'
     },
     'abjp': {
       url: null,
+      dyn: 'abjp',
       extUrl: 'https://www.data.jma.go.jp/airinfo/data/awfo_low-level_detailed-sigwx.html',
       label: 'ABJP 下層悪天予想図（詳細）'
     },
     'fsas': {
       url: null,
+      kind: 'fsas',
       extUrl: 'https://www.jma.go.jp/bosai/numericmap/#type=nwp',
       label: 'FSAS 太平洋面予想図'
     },
@@ -2966,14 +3080,17 @@ function wxShowPdfOrFail(tabKey, resolved) {
   var img = document.getElementById('wx-' + tabKey + '-img');
   var err = document.getElementById('wx-' + tabKey + '-err');
   var open = document.getElementById('wx-' + tabKey + '-open');
-  var ext = document.getElementById('wx-' + tabKey + '-extlink');
+  var htmlUrl = resolved && (resolved.extUrl || resolved.url);
+  if(open && htmlUrl) open.href = htmlUrl;
+  if(htmlUrl && htmlUrl.indexOf('.pdf') < 0) {
+    wxFetchHtmlImage(tabKey, htmlUrl);
+    return;
+  }
   if(img) img.style.display = 'none';
   if(err) {
     err.style.display = 'block';
-    err.textContent = 'PDF / 外部表示: OPEN から開いてください';
+    err.textContent = '画像取得失敗';
   }
-  if(open) open.href = resolved.extUrl || resolved.url || 'https://www.data.jma.go.jp/airinfo/';
-  if(ext) ext.href = resolved.extUrl || resolved.url || 'https://www.data.jma.go.jp/airinfo/';
 }
 
 function wxShowChart(tabKey, chartKey, btn) {
@@ -2994,7 +3111,6 @@ function wxShowChart(tabKey, chartKey, btn) {
   ext = document.getElementById('wx-' + tabKey + '-extlink');
   if(meta) meta.textContent = resolved.label;
   if(open) open.href = resolved.extUrl || resolved.url || 'https://www.data.jma.go.jp/airinfo/';
-  if(ext) ext.href = resolved.extUrl || resolved.url || 'https://www.data.jma.go.jp/airinfo/';
   if(resolved.kind === 'asas') {
     wxLoadAsasPng(tabKey);
     return;
@@ -3004,13 +3120,14 @@ function wxShowChart(tabKey, chartKey, btn) {
     return;
   }
   if(!resolved.url || resolved.kind === 'pdf') {
+    if(resolved.extUrl && resolved.kind !== 'pdf') {
+      wxFetchHtmlImage(tabKey, resolved.extUrl);
+      return;
+    }
     wxShowPdfOrFail(tabKey, resolved);
     return;
   }
-  if(!img) return;
-  img.style.display = 'block';
-  if(err) err.style.display = 'none';
-  img.src = resolved.url + (resolved.url.indexOf('?') >= 0 ? '&' : '?') + 't=' + new Date().getTime();
+  wxDisplayChartImage(tabKey, resolved.url);
 }
 
 function wxLoadAsasPng(tabKey) {
@@ -3032,9 +3149,7 @@ function wxLoadAsasPng(tabKey) {
       return;
     }
     var imgUrl = 'https://www.jma.go.jp/bosai/weather_map/data/png/' + best;
-    img.style.display = 'block';
-    if(err) err.style.display = 'none';
-    img.src = imgUrl + '?t=' + new Date().getTime();
+    wxDisplayChartImage(tabKey, imgUrl);
     if(open) open.href = imgUrl;
   }, function() {
     wxShowPdfOrFail(tabKey, { url: pdf, label: 'ASAS' });
@@ -3068,9 +3183,7 @@ function wxLoadFsasPng(tabKey) {
       return;
     }
     var imgUrl = 'https://www.jma.go.jp/bosai/weather_map/data/png/' + best;
-    img.style.display = 'block';
-    if(err) err.style.display = 'none';
-    img.src = imgUrl + '?t=' + new Date().getTime();
+    wxDisplayChartImage(tabKey, imgUrl);
     if(open) open.href = imgUrl;
   }, function() {
     wxShowPdfOrFail(tabKey, { url: pdf, label: 'FSAS' });
@@ -3100,7 +3213,7 @@ function wxRenderPdf(tabKey, pdfUrl) {
     if(loading) loading.style.display = 'none';
     if(err) {
       err.style.display = 'block';
-      err.textContent = 'WX_WORKER_PROXY 未設定。OPEN から PDF を開いてください。';
+      err.textContent = 'PDF 読み込み失敗（プロキシ未設定）';
     }
     return;
   }
@@ -3144,22 +3257,32 @@ function wxShowPdfChart(tabKey, chartKey, btn) {
   open = document.getElementById('wx-' + tabKey + '-open');
   if(meta) meta.innerHTML = entry.label;
   if(open && entry.extUrl) open.href = entry.extUrl;
-  if(!entry.pdfUrl) {
-    canvas2 = document.getElementById('wx-' + tabKey + '-canvas');
-    loading2 = document.getElementById('wx-' + tabKey + '-loading');
-    err2 = document.getElementById('wx-' + tabKey + '-err');
+  if(entry.pdfUrl) {
+    hh = new Date().getUTCHours() >= 12 ? '12' : '00';
+    resolvedUrl = entry.pdfUrl.replace('{hh}', hh);
+    if(open && !entry.extUrl) open.href = resolvedUrl;
+    canvas2 = document.getElementById('wx-' + tabKey + '-img');
     if(canvas2) canvas2.style.display = 'none';
-    if(loading2) loading2.style.display = 'none';
-    if(err2) {
-      err2.style.display = 'block';
-      err2.textContent = '外部リンクから開いてください。';
-    }
+    wxRenderPdf(tabKey, resolvedUrl);
     return;
   }
-  hh = new Date().getUTCHours() >= 12 ? '12' : '00';
-  resolvedUrl = entry.pdfUrl.replace('{hh}', hh);
-  if(open && !entry.extUrl) open.href = resolvedUrl;
-  wxRenderPdf(tabKey, resolvedUrl);
+  canvas2 = document.getElementById('wx-' + tabKey + '-canvas');
+  loading2 = document.getElementById('wx-' + tabKey + '-loading');
+  if(canvas2) canvas2.style.display = 'none';
+  if(entry.url) {
+    wxDisplayChartImage(tabKey, entry.url);
+    return;
+  }
+  if(entry.extUrl) {
+    wxFetchHtmlImage(tabKey, entry.extUrl);
+    return;
+  }
+  err2 = document.getElementById('wx-' + tabKey + '-err');
+  if(loading2) loading2.style.display = 'none';
+  if(err2) {
+    err2.style.display = 'block';
+    err2.textContent = '画像取得失敗';
+  }
 }
 
 function wxRefreshPdfChart(tabKey) {
@@ -3189,7 +3312,7 @@ function wxUpdateJmaAsf(icao) {
   if(!img) return;
   img.style.display = 'block';
   if(err) err.style.display = 'none';
-  img.src = url + '?t=' + new Date().getTime();
+  img.src = wxProxyUrl(url + '?t=' + new Date().getTime());
   if(lnk) lnk.href = url;
 }
 
@@ -3259,7 +3382,7 @@ var WX_SATELLITE_TABLE = {
 
 function wxShowSatellite(key, btn) {
   var btns = document.querySelectorAll('#wx-panel-satellite .wx-sub-tab-btn');
-  var i, entry, img, meta, err, extLink, url;
+  var i, entry, img, meta, err, url;
   for(i = 0; i < btns.length; i++) { btns[i].classList.remove('wx-sub-active'); }
   if(btn) btn.classList.add('wx-sub-active');
   entry = WX_SATELLITE_TABLE[key];
@@ -3267,16 +3390,14 @@ function wxShowSatellite(key, btn) {
   img = document.getElementById('wx-satellite-img');
   meta = document.getElementById('wx-satellite-meta');
   err = document.getElementById('wx-satellite-err');
-  extLink = document.getElementById('wx-satellite-extlink');
   if(meta) meta.textContent = entry.label;
-  if(extLink) extLink.href = entry.extUrl;
   url = entry.band ? wxHimawariUrl(entry.band) : entry.url;
   if(url) {
-    img.style.display = 'block';
-    if(err) err.style.display = 'none';
-    img.src = url + '?t=' + new Date().getTime();
+    wxDisplayChartImage('satellite', url);
+  } else if(entry.extUrl) {
+    wxFetchHtmlImage('satellite', entry.extUrl);
   } else {
-    img.style.display = 'none';
+    if(img) img.style.display = 'none';
     if(err) err.style.display = 'block';
   }
 }
@@ -3326,9 +3447,9 @@ function wxLoadSkewt(icao) {
         img.style.display = 'none';
         if(err) err.style.display = 'block';
       };
-      img.src = fallbackUrl;
+      img.src = wxProxyUrl(fallbackUrl);
     };
-    img.src = wyUrl;
+    img.src = wxProxyUrl(wyUrl);
   }
   if(err) err.style.display = 'none';
   if(meta) meta.textContent = icao + ' (WMO:' + wmo + ') ' + dateObj.getUTCFullYear() + '-' + wxPad2(dateObj.getUTCMonth() + 1) + '-' + wxPad2(dateObj.getUTCDate()) + ' ' + wxPad2(baseH) + 'Z';
@@ -3400,10 +3521,12 @@ function wxOfpHandleFile(file) {
       return Promise.all(pagePromises);
     }).then(function(pages) {
       var fullText = pages.join('\n');
+      console.log('[OFP] extracted length:', fullText.length);
+      console.log('[OFP] first 1000 chars:\n', fullText.slice(0, 1000));
       var wps = wxOfpParsePdf(fullText);
       var wpWrap;
       if(wps.length === 0) {
-        wxOfpSetStatus('座標ウェイポイントが見つかりませんでした（DDMMNDDDMMEフォーマットを確認）。');
+        wxOfpSetStatus('座標ウェイポイントが見つかりませんでした（4フォーマットを確認）。');
         return;
       }
       wxOfpWaypoints = wps;
@@ -3421,40 +3544,76 @@ function wxOfpHandleFile(file) {
 }
 
 function wxOfpParsePdf(text) {
-  var coordRe = /\b(\d{2}\d{2}[NS]\d{3}\d{2}[EW]|\d{2}[NS]\d{3}[EW])\b/g;
+  // 5フォーマット（長い順）:
+  // 1. 353415N1414330E  DDMMSS[NS]DDDMMSS[EW]
+  // 2. 35349N141433E    DDMMM[NS]DDDMMM[EW]   (ANA 分1/10・半球が中)
+  // 3. 3534N14143E      DDMM[NS]DDDMM[EW]
+  // 4. 35N141E          DD[NS]DDD[EW]
+  // 5. N35349E141433    [NS]DDMMM[EW]DDDMMM  (ANA NAVLOG)
+  var coordRe = /\b(\d{6}[NS]\d{7}[EW]|\d{5}[NS]\d{6,7}[EW]|\d{4}[NS]\d{5}[EW]|\d{2}[NS]\d{3}[EW]|[NS]\d{5}[EW]\d{6,7})\b/g;
   var seen = {};
   var result = [];
   var m, raw, parsed;
+  var matches = [];
+  var latLongIdx;
+  console.log('[OFP] probe ANA     :', (text.match(/\b[NS]\d{5}[EW]\d{6,7}\b/g) || []).slice(0, 20));
+  console.log('[OFP] probe ANA-mid :', (text.match(/\b\d{5}[NS]\d{6,7}[EW]\b/g) || []).slice(0, 20));
+  console.log('[OFP] probe DDMMSS  :', (text.match(/\b\d{6}[NS]\d{7}[EW]\b/g) || []).slice(0, 20));
+  console.log('[OFP] probe DDMM    :', (text.match(/\b\d{4}[NS]\d{5}[EW]\b/g) || []).slice(0, 20));
+  console.log('[OFP] probe DD      :', (text.match(/\b\d{2}[NS]\d{3}[EW]\b/g) || []).slice(0, 20));
+  latLongIdx = text.search(/LAT\s*\/\s*LONG|[NS]\d{4,}/i);
+  if(latLongIdx >= 0) {
+    console.log('[OFP] around coord :', text.slice(Math.max(0, latLongIdx - 80), latLongIdx + 220));
+  }
   while((m = coordRe.exec(text)) !== null) {
     raw = m[1];
+    matches.push(raw);
     if(seen[raw]) continue;
     seen[raw] = true;
     parsed = wxOfpParseCoord(raw);
     if(!parsed) continue;
     result.push({ name: raw, lat: parsed.lat, lon: parsed.lon });
   }
+  console.log('[OFP] coord matches :', matches.length, matches.slice(0, 30));
+  console.log('[OFP] unique WPs    :', result.length, result.slice(0, 10));
   return result;
 }
 
 function wxOfpParseCoord(str) {
-  var m1 = str.match(/^(\d{2})(\d{2})([NS])(\d{3})(\d{2})([EW])$/);
-  var m2, lat, lon;
-  if(m1) {
-    lat = parseInt(m1[1], 10) + parseInt(m1[2], 10) / 60;
-    lon = parseInt(m1[4], 10) + parseInt(m1[5], 10) / 60;
-    if(m1[3] === 'S') lat = -lat;
-    if(m1[6] === 'W') lon = -lon;
-    return { lat: lat.toFixed(2), lon: lon.toFixed(2) };
-  }
-  m2 = str.match(/^(\d{2})([NS])(\d{3})([EW])$/);
-  if(m2) {
-    lat = parseInt(m2[1], 10);
-    lon = parseInt(m2[3], 10);
-    if(m2[2] === 'S') lat = -lat;
-    if(m2[4] === 'W') lon = -lon;
-    return { lat: lat.toFixed(2), lon: lon.toFixed(2) };
-  }
+  var s = String(str || '').replace(/\s+/g, '');
+  var m;
+  m = s.match(/^([NS])(\d+)([EW])(\d+)$/);
+  if(m) return wxOfpParseCoordParts(m[1], m[2], m[3], m[4]);
+  m = s.match(/^(\d+)([NS])(\d+)([EW])$/);
+  if(m) return wxOfpParseCoordParts(m[2], m[1], m[4], m[3]);
   return null;
+}
+
+function wxOfpParseCoordParts(ns, latStr, ew, lonStr) {
+  var latLen, lonLen, lat, lon;
+  latLen = latStr.length;
+  lonLen = lonStr.length;
+  lat = null;
+  lon = null;
+  if(latLen === 2 && lonLen === 3) {
+    lat = parseInt(latStr, 10);
+    lon = parseInt(lonStr, 10);
+  } else if(latLen === 4 && lonLen === 5) {
+    lat = parseInt(latStr.slice(0, 2), 10) + parseInt(latStr.slice(2), 10) / 60;
+    lon = parseInt(lonStr.slice(0, 3), 10) + parseInt(lonStr.slice(3), 10) / 60;
+  } else if(latLen === 6 && lonLen === 7) {
+    lat = parseInt(latStr.slice(0, 2), 10) + parseInt(latStr.slice(2, 4), 10) / 60 + parseInt(latStr.slice(4), 10) / 3600;
+    lon = parseInt(lonStr.slice(0, 3), 10) + parseInt(lonStr.slice(3, 5), 10) / 60 + parseInt(lonStr.slice(5), 10) / 3600;
+  } else if(latLen === 5 && (lonLen === 6 || lonLen === 7)) {
+    lat = parseInt(latStr.slice(0, 2), 10) + parseInt(latStr.slice(2), 10) / 600;
+    lon = parseInt(lonStr.slice(0, lonLen - 3), 10) + parseInt(lonStr.slice(lonLen - 3), 10) / 600;
+  } else {
+    console.log('[OFP] unmatched parts:', ns, latStr, ew, lonStr);
+    return null;
+  }
+  if(ns === 'S') lat = -lat;
+  if(ew === 'W') lon = -lon;
+  return { lat: lat.toFixed(2), lon: lon.toFixed(2) };
 }
 
 function wxOfpRenderWpTable(wps) {
@@ -3724,16 +3883,18 @@ function wxBulkFetch() {
   if(wxBulkFetching) return;
   wxBulkFetching = true;
   var btn = document.getElementById('wx-bulk-btn');
-  var tabs = ['metar', 'tenkizu', 'satellite', 'sig', 'danmen', 'skewt', 'kazan', 'kaigai', 'ofp'];
-  var i, badge, ts, done, total, key;
+  var tabs = ['metar', 'tenkizu', 'satellite', 'sig', 'danmen', 'skewt', 'kazan', 'kaigai'];
+  var i, badge, ts, done, total, key, ofpBadge;
   var markOk, markErr, fetchImgThenShow, bulkUrl, wxBulkUpdateProgress;
   if(btn) btn.disabled = true;
   for(i = 0; i < tabs.length; i++) {
     badge = document.getElementById('wx-badge-' + tabs[i]);
     if(badge) { badge.textContent = '...'; badge.className = 'wx-bulk-badge loading'; }
   }
+  ofpBadge = document.getElementById('wx-badge-ofp');
+  if(ofpBadge) { ofpBadge.textContent = '-'; ofpBadge.className = 'wx-bulk-badge'; }
   done = 0;
-  total = 9;
+  total = 8;
   ts = document.getElementById('wx-bulk-ts');
   if(ts) ts.textContent = '取得中 0 / ' + total;
   wxBulkUpdateProgress = function() {
@@ -3770,7 +3931,7 @@ function wxBulkFetch() {
       if(showFn) showFn();
       markErr(tabId);
     };
-    img.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 't=' + new Date().getTime();
+    img.src = wxProxyUrl(wxBustUrl(url));
   };
   bulkUrl = function(tabKey, chartKey) {
     var table = WX_CHART_TABLES && WX_CHART_TABLES[tabKey];
@@ -3780,8 +3941,9 @@ function wxBulkFetch() {
     return resolved && resolved.url ? resolved.url : null;
   };
 
-  markOk('kazan');
-  markOk('ofp');
+  wxFetchHtmlImage('kazan', 'https://www.data.jma.go.jp/vaac/data/indexj.html', function(ok) {
+    if(ok) markOk('kazan'); else markErr('kazan');
+  });
 
   (function() {
     var out = document.getElementById('wx-metar-output');
@@ -3903,13 +4065,13 @@ function wxBulkFetch() {
       wxLoadSkewt(wxSkewtIcao);
       markErr('skewt');
     };
-    probe.src = wyUrl;
+    probe.src = wxProxyUrl(wyUrl);
   })();
 }
 
 function wxBulkClear() {
   var tabs = ['metar', 'tenkizu', 'satellite', 'sig', 'danmen', 'skewt', 'kazan', 'kaigai', 'ofp'];
-  var imgIds = ['wx-sig-img', 'wx-danmen-img', 'wx-kaigai-img', 'wx-satellite-img', 'wx-skewt-img'];
+  var imgIds = ['wx-sig-img', 'wx-danmen-img', 'wx-kaigai-img', 'wx-satellite-img', 'wx-skewt-img', 'wx-kazan-img', 'wx-tenkizu-img'];
   var i, badge, ts, out, jmaImg, el, btn, cv, ld;
   for(i = 0; i < tabs.length; i++) {
     badge = document.getElementById('wx-badge-' + tabs[i]);
