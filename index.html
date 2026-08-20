@@ -3640,11 +3640,252 @@ function wxOfpSelectAll(checked) {
   for(i = 0; i < boxes.length; i++) { boxes[i].checked = checked; }
 }
 
+function wxOfpCurrentHourIso() {
+  var now = new Date();
+  var yyyy = now.getUTCFullYear();
+  var mm = ('0' + (now.getUTCMonth() + 1)).slice(-2);
+  var dd = ('0' + now.getUTCDate()).slice(-2);
+  var hh = ('0' + now.getUTCHours()).slice(-2);
+  return yyyy + '-' + mm + '-' + dd + 'T' + hh + ':00';
+}
+
+function wxOfpParseOpenMeteo(json, targetHour) {
+  var hourly, times, idx, i, ti, tms, diff, targetMs, best, bestDiff;
+  var p, T, RH, ws, wd, Td, arrT, arrRH, arrWs, arrWd, out, levels, hourStr;
+  out = [];
+  hourly = json && json.hourly ? json.hourly : null;
+  if(!hourly || !hourly.time || !hourly.time.length) return out;
+  times = hourly.time;
+  hourStr = String(targetHour || '');
+  idx = times.indexOf(hourStr);
+  if(idx < 0 && hourStr.length === 16) idx = times.indexOf(hourStr + ':00');
+  if(idx < 0) {
+    targetMs = new Date((hourStr.indexOf('Z') >= 0 ? hourStr : hourStr + 'Z')).getTime();
+    best = 0;
+    bestDiff = 1e15;
+    for(ti = 0; ti < times.length; ti++) {
+      tms = new Date((String(times[ti]).indexOf('Z') >= 0 ? times[ti] : String(times[ti]) + 'Z')).getTime();
+      if(isNaN(tms)) continue;
+      diff = Math.abs(tms - targetMs);
+      if(diff < bestDiff) { bestDiff = diff; best = ti; }
+    }
+    idx = best;
+  }
+  levels = (typeof OM_PLEVELS !== 'undefined' && OM_PLEVELS.length)
+    ? OM_PLEVELS
+    : [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200];
+  for(i = 0; i < levels.length; i++) {
+    p = levels[i];
+    arrT = hourly['temperature_' + p + 'hPa'];
+    arrRH = hourly['relative_humidity_' + p + 'hPa'] || hourly['relativehumidity_' + p + 'hPa'];
+    arrWs = hourly['windspeed_' + p + 'hPa'] || hourly['wind_speed_' + p + 'hPa'];
+    arrWd = hourly['winddirection_' + p + 'hPa'] || hourly['wind_direction_' + p + 'hPa'];
+    T = arrT ? arrT[idx] : null;
+    if(T === null || T === undefined) continue;
+    RH = arrRH && arrRH[idx] != null ? arrRH[idx] : 50;
+    ws = arrWs && arrWs[idx] != null ? arrWs[idx] : 0;
+    wd = arrWd && arrWd[idx] != null ? arrWd[idx] : 0;
+    Td = T - ((100 - RH) / 5);
+    out.push({ p: p, z: null, t: T, td: Td, d: wd, s: ws });
+  }
+  out.sort(function(a, b) { return b.p - a.p; });
+  return out;
+}
+
+function wxOfpDrawSkewt(canvas, levels, info) {
+  var ctx, W, H, padL, padR, padT, padB, pMax, pMin, tMin, tMax;
+  var i, p, t, x, y, lv, prev, mix, theta, tk, e, ln, td;
+  var isobars, isotherms, mixrs, thetas;
+  if(!canvas || !levels || !levels.length) return;
+  ctx = canvas.getContext('2d');
+  W = canvas.width;
+  H = canvas.height;
+  padL = 52;
+  padR = 70;
+  padT = 36;
+  padB = 40;
+  pMax = 1050;
+  pMin = 100;
+  tMin = -50;
+  tMax = 40;
+  for(i = 0; i < levels.length; i++) {
+    if(levels[i].t < tMin) tMin = Math.floor(levels[i].t / 10) * 10 - 10;
+    if(levels[i].t > tMax) tMax = Math.ceil(levels[i].t / 10) * 10 + 5;
+    if(levels[i].td !== null && levels[i].td < tMin) tMin = Math.floor(levels[i].td / 10) * 10 - 10;
+  }
+  if(tMin < -80) tMin = -80;
+  if(tMax > 45) tMax = 45;
+
+  function pToY(pp) {
+    return padT + (H - padT - padB) * (Math.log(pMax) - Math.log(pp)) / (Math.log(pMax) - Math.log(pMin));
+  }
+  function tToX(tt, pp) {
+    var yy = pToY(pp);
+    var x0 = padL + (W - padL - padR) * (tt - tMin) / (tMax - tMin);
+    return x0 + (H - padT - padB - (yy - padT)) * 0.75;
+  }
+
+  ctx.fillStyle = '#0a0a14';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.strokeStyle = '#1a2a4a';
+  ctx.lineWidth = 1;
+  isobars = [1000, 850, 700, 500, 400, 300, 250, 200, 150, 100];
+  for(i = 0; i < isobars.length; i++) {
+    p = isobars[i];
+    y = pToY(p);
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(W - padR, y);
+    ctx.stroke();
+    ctx.fillStyle = '#7ab3ef';
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(String(p), padL - 6, y + 4);
+  }
+
+  isotherms = [];
+  for(t = Math.ceil(tMin / 10) * 10; t <= tMax; t += 10) isotherms.push(t);
+  for(i = 0; i < isotherms.length; i++) {
+    t = isotherms[i];
+    ctx.beginPath();
+    ctx.strokeStyle = t === 0 ? '#4fc3f7' : '#2a3040';
+    ctx.lineWidth = t === 0 ? 1.5 : 1;
+    ctx.moveTo(tToX(t, pMax), pToY(pMax));
+    ctx.lineTo(tToX(t, pMin), pToY(pMin));
+    ctx.stroke();
+    ctx.fillStyle = t === 0 ? '#4fc3f7' : '#888';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(t), tToX(t, pMax) + 8, H - padB + 16);
+  }
+
+  mixrs = [1, 2, 4, 7, 10, 16];
+  ctx.strokeStyle = '#1a3a3a';
+  ctx.lineWidth = 1;
+  if(ctx.setLineDash) ctx.setLineDash([3, 4]);
+  for(i = 0; i < mixrs.length; i++) {
+    mix = mixrs[i] / 1000;
+    ctx.beginPath();
+    prev = false;
+    for(p = pMax; p >= pMin; p -= 20) {
+      e = mix * p / (0.622 + mix);
+      if(e <= 0) continue;
+      ln = Math.log(e / 6.112);
+      td = 243.5 * ln / (17.67 - ln);
+      x = tToX(td, p);
+      y = pToY(p);
+      if(!prev) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+      prev = true;
+    }
+    ctx.stroke();
+  }
+  if(ctx.setLineDash) ctx.setLineDash([]);
+
+  thetas = [250, 260, 270, 280, 290, 300, 310, 320, 330];
+  ctx.strokeStyle = '#1e2a1e';
+  for(i = 0; i < thetas.length; i++) {
+    theta = thetas[i];
+    ctx.beginPath();
+    prev = false;
+    for(p = pMax; p >= pMin; p -= 20) {
+      tk = theta * Math.pow(p / 1000, 0.286) - 273.15;
+      x = tToX(tk, p);
+      y = pToY(p);
+      if(!prev) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+      prev = true;
+    }
+    ctx.stroke();
+  }
+
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#00cc44';
+  ctx.beginPath();
+  prev = false;
+  for(i = 0; i < levels.length; i++) {
+    lv = levels[i];
+    if(lv.td === null || lv.p < pMin || lv.p > pMax) continue;
+    x = tToX(lv.td, lv.p);
+    y = pToY(lv.p);
+    if(!prev) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+    prev = true;
+  }
+  ctx.stroke();
+
+  ctx.strokeStyle = '#ff6666';
+  ctx.beginPath();
+  prev = false;
+  for(i = 0; i < levels.length; i++) {
+    lv = levels[i];
+    if(lv.p < pMin || lv.p > pMax) continue;
+    x = tToX(lv.t, lv.p);
+    y = pToY(lv.p);
+    if(!prev) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+    prev = true;
+  }
+  ctx.stroke();
+
+  ctx.strokeStyle = '#2a4a7f';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(padL, padT, W - padL - padR, H - padT - padB);
+
+  ctx.fillStyle = '#ccc';
+  ctx.font = '11px monospace';
+  ctx.textAlign = 'left';
+  for(i = 0; i < levels.length; i++) {
+    lv = levels[i];
+    if(isNaN(lv.d) || isNaN(lv.s) || lv.d === 99999) continue;
+    if(lv.p !== 1000 && lv.p !== 850 && lv.p !== 700 && lv.p !== 500 && lv.p !== 300 && lv.p !== 200) continue;
+    y = pToY(lv.p);
+    ctx.fillText(Math.round(lv.d) + '/' + Math.round(lv.s), W - padR + 6, y + 4);
+  }
+
+  ctx.fillStyle = '#4fc3f7';
+  ctx.font = '13px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText((info && info.name ? info.name : 'SKEW-T') + '  GFS', padL, 18);
+  ctx.fillStyle = '#888';
+  ctx.font = '11px monospace';
+  ctx.fillText(
+    (info && info.lat ? info.lat : '') + (info && info.lon ? ', ' + info.lon : '')
+      + (info && info.cycleLabel ? '  ' + info.cycleLabel : ''),
+    padL, 32
+  );
+  ctx.fillStyle = '#ff6666';
+  ctx.fillText('T', W - padR - 36, padT + 14);
+  ctx.fillStyle = '#00cc44';
+  ctx.fillText('Td', W - padR - 20, padT + 14);
+}
+
+function wxOfpOpenMeteoUrl(lat, lon, hourIso) {
+  var dateStr = String(hourIso).slice(0, 10);
+  var vars = [];
+  var i, levels;
+  levels = (typeof OM_PLEVELS !== 'undefined' && OM_PLEVELS.length)
+    ? OM_PLEVELS
+    : [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200];
+  for(i = 0; i < levels.length; i++) {
+    vars.push('temperature_' + levels[i] + 'hPa');
+    vars.push('relative_humidity_' + levels[i] + 'hPa');
+    vars.push('windspeed_' + levels[i] + 'hPa');
+    vars.push('winddirection_' + levels[i] + 'hPa');
+  }
+  return 'https://api.open-meteo.com/v1/forecast'
+    + '?latitude=' + lat + '&longitude=' + lon
+    + '&hourly=' + vars.join(',')
+    + '&start_date=' + dateStr + '&end_date=' + dateStr
+    + '&timezone=UTC&wind_speed_unit=kn';
+}
+
 function wxOfpFetchSelected() {
   var boxes = document.querySelectorAll('#wx-ofp-wp-tbody input[type=checkbox]:checked');
   var statusEl = document.getElementById('wx-ofp-fetch-status');
   var selected = [];
-  var i, idx, now, utcH, baseH, yyyy, mm, dd, hh, datetime, done, total;
+  var i, idx, hourIso, hourLabel, done, total;
   if(!statusEl) return;
   if(boxes.length === 0) {
     statusEl.textContent = 'ウェイポイントを選択してください。';
@@ -3657,48 +3898,68 @@ function wxOfpFetchSelected() {
   wxOfpImages = [];
   done = 0;
   total = selected.length;
-  statusEl.textContent = '取得中... 0/' + total;
-  now = new Date();
-  utcH = now.getUTCHours();
-  baseH = utcH >= 12 ? 12 : 0;
-  yyyy = now.getUTCFullYear();
-  mm = ('0' + (now.getUTCMonth() + 1)).slice(-2);
-  dd = ('0' + now.getUTCDate()).slice(-2);
-  hh = ('0' + baseH).slice(-2);
-  datetime = yyyy + '-' + mm + '-' + dd + '+' + hh + ':00:00';
+  hourIso = wxOfpCurrentHourIso();
+  hourLabel = hourIso.replace('T', ' ') + 'Z';
+  statusEl.textContent = '取得中... 0/' + total + '  ' + hourLabel;
+
+  function finishOne(wp, omUrl, dataUrl) {
+    wxOfpImages.push({ name: wp.name, lat: wp.lat, lon: wp.lon, url: omUrl, dataUrl: dataUrl });
+    wxOfpSaveToDb(wp.name, omUrl, dataUrl, function() {
+      done++;
+      statusEl.textContent = '取得中... ' + done + '/' + total + '  ' + hourLabel;
+      if(done >= total) {
+        statusEl.textContent = '完了 ' + total + ' 地点  ' + hourLabel + '  ← → で切替 / Esc で閉じる';
+        wxOfpLoadSaved();
+        wxOfpLaunchViewer(0);
+      }
+    });
+  }
 
   function fetchOne(wp) {
-    var wyUrl = 'https://weather.uwyo.edu/wsgi/sounding?datetime=' + datetime
-      + '&id=' + wp.lat + ',' + wp.lon
-      + '&type=PNG:SKEWT&src=GFS';
-    var proxyUrl = WX_WORKER_PROXY + '?url=' + encodeURIComponent(wyUrl);
+    var omUrl = wxOfpOpenMeteoUrl(wp.lat, wp.lon, hourIso);
     var xhr = new XMLHttpRequest();
-    function finish(dataUrl) {
-      wxOfpImages.push({ name: wp.name, lat: wp.lat, lon: wp.lon, url: wyUrl, dataUrl: dataUrl });
-      wxOfpSaveToDb(wp.name, wyUrl, dataUrl, function() {
-        done++;
-        statusEl.textContent = '取得中... ' + done + '/' + total;
-        if(done >= total) {
-          statusEl.textContent = '完了 ' + total + ' 地点  ← → で切替 / Esc で閉じる';
-          wxOfpLoadSaved();
-          wxOfpLaunchViewer(0);
-        }
-      });
-    }
-    xhr.open('GET', proxyUrl, true);
-    xhr.responseType = 'blob';
+    console.log('[OFP] Open-Meteo', wp.name, omUrl);
+    xhr.open('GET', omUrl, true);
     xhr.onload = function() {
-      var fr;
-      if(xhr.status >= 200 && xhr.status < 300 && xhr.response) {
-        fr = new FileReader();
-        fr.onloadend = function() { finish(fr.result); };
-        fr.onerror = function() { finish(wyUrl); };
-        fr.readAsDataURL(xhr.response);
-      } else {
-        finish(wyUrl);
+      var json, levels, canvas, dataUrl;
+      if(xhr.status < 200 || xhr.status >= 300) {
+        console.log('[OFP] Open-Meteo HTTP', xhr.status, wp.name);
+        finishOne(wp, omUrl, '');
+        return;
       }
+      try {
+        json = JSON.parse(xhr.responseText);
+      } catch(e) {
+        console.log('[OFP] Open-Meteo JSON error', wp.name);
+        finishOne(wp, omUrl, '');
+        return;
+      }
+      levels = wxOfpParseOpenMeteo(json, hourIso);
+      console.log('[OFP] OM levels', wp.name, levels.length);
+      if(!levels.length) {
+        finishOne(wp, omUrl, '');
+        return;
+      }
+      canvas = document.createElement('canvas');
+      canvas.width = 720;
+      canvas.height = 900;
+      wxOfpDrawSkewt(canvas, levels, {
+        name: wp.name,
+        lat: wp.lat,
+        lon: wp.lon,
+        cycleLabel: hourLabel
+      });
+      try {
+        dataUrl = canvas.toDataURL('image/png');
+      } catch(e2) {
+        dataUrl = '';
+      }
+      finishOne(wp, omUrl, dataUrl);
     };
-    xhr.onerror = function() { finish(wyUrl); };
+    xhr.onerror = function() {
+      console.log('[OFP] Open-Meteo network error', wp.name);
+      finishOne(wp, omUrl, '');
+    };
     xhr.send();
   }
 
@@ -3829,7 +4090,8 @@ function wxOfpShowSlide(idx) {
   label = document.getElementById('wx-ofp-viewer-label');
   entry = wxOfpImages[idx];
   if(!entry || !img) return;
-  img.src = (entry.dataUrl && entry.dataUrl !== entry.url) ? entry.dataUrl : entry.url;
+  if(entry.dataUrl && entry.dataUrl.indexOf('data:') === 0) img.src = entry.dataUrl;
+  else img.src = '';
   img.alt = entry.name;
   if(label) {
     label.textContent = (idx + 1) + ' / ' + wxOfpImages.length

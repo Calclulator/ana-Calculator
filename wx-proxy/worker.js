@@ -31,7 +31,8 @@ async function handleRequest(request) {
     'ocean.weather.gov',
     'www.bom.gov.au',
     'www.amecs.co.jp',
-    'www3.metair.go.jp'
+    'www3.metair.go.jp',
+    'rucsoundings.noaa.gov'
   ];
   var targetHostname;
   try { targetHostname = new URL(targetUrl).hostname; }
