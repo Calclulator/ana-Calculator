@@ -3692,173 +3692,407 @@ function wxOfpParseOpenMeteo(json, targetHour) {
   return out;
 }
 
-function wxOfpDrawSkewt(canvas, levels, info) {
-  var ctx, W, H, padL, padR, padT, padB, pMax, pMin, tMin, tMax;
-  var i, p, t, x, y, lv, prev, mix, theta, tk, e, ln, td;
-  var isobars, isotherms, mixrs, thetas;
-  if(!canvas || !levels || !levels.length) return;
+function wxOfpDrawWindBarb(ctx, x, y, speed_kt, dir_deg) {
+  ctx.save();
+  ctx.strokeStyle = '#dddddd';
+  ctx.fillStyle = '#dddddd';
+  ctx.lineWidth = 1.2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if(speed_kt < 2.5) {
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, 2 * Math.PI);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  var angle = (dir_deg - 90) * Math.PI / 180;
+  var dx = Math.cos(angle);
+  var dy = Math.sin(angle);
+  var perpX = -dy;
+  var perpY = dx;
+  var shaftLen = 26;
+  var barbH = 10;
+  var spacing = 5;
+  var pennants, rem, fulls, halfs, cx, cy, stepX, stepY, pi, fi, hi, nx, ny;
+
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + dx * shaftLen, y + dy * shaftLen);
+  ctx.stroke();
+
+  pennants = Math.floor(speed_kt / 50);
+  rem = speed_kt - pennants * 50;
+  fulls = Math.floor(rem / 10);
+  rem -= fulls * 10;
+  halfs = Math.round(rem / 5);
+
+  cx = x + dx * shaftLen;
+  cy = y + dy * shaftLen;
+  stepX = -dx * spacing;
+  stepY = -dy * spacing;
+
+  for(pi = 0; pi < pennants; pi++) {
+    nx = cx + stepX * 2;
+    ny = cy + stepY * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + perpX * barbH, cy + perpY * barbH);
+    ctx.lineTo(nx, ny);
+    ctx.closePath();
+    ctx.fill();
+    cx = nx; cy = ny;
+  }
+
+  if(pennants > 0) {
+    cx += stepX; cy += stepY;
+  }
+
+  for(fi = 0; fi < fulls; fi++) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + perpX * barbH, cy + perpY * barbH);
+    ctx.stroke();
+    cx += stepX; cy += stepY;
+  }
+
+  for(hi = 0; hi < halfs; hi++) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + perpX * barbH * 0.5, cy + perpY * barbH * 0.5);
+    ctx.stroke();
+    cx += stepX; cy += stepY;
+  }
+
+  ctx.restore();
+}
+
+function wxOfpDrawSkewt(levels, title, cb) {
+  var W = 720, H = 820;
+  var PAD_L = 68, PAD_R = 155, PAD_T = 52, PAD_B = 58;
+  var plotW = W - PAD_L - PAD_R;
+  var plotH = H - PAD_T - PAD_B;
+  var T_MIN = -50, T_RANGE = 100;
+  var SKEW = 1.0;
+  var P_BOT = 1050, P_TOP = 100;
+  var logPBot = Math.log(P_BOT);
+  var logPTop = Math.log(P_TOP);
+  var canvas, ctx, sorted, i, lv, dataUrl;
+  var mrVals, mi, w, mFirst, mp, es_mr, lnVal, Td_mr, mx, my;
+  var thetaArr, ai, theta_K, aFirst, ap, T_da, ax, ay;
+  var tw0Arr, wi, maTk, wap, maEs, maWs, maLv, maRd, maRv, maCp, maG;
+  var maNum, maDen, maDtdp, wx, wy;
+  var T_iso, is0C, PLIST, PMAJOR, pi2, pv, isMajor, pyy, pi3;
+  var T_lbl, lx, is0, FL_DATA, xFL, fi, fd, yfl;
+  var tFirst, tx, ty, dFirst, dx2, dy2;
+  var xBarb, spd_kt;
+  var T850, T500, Td850, T700, Td700, Dd700, KI, idxLines, xIdx, yIdx, ii;
+  var legendItems, ly, item;
+
+  function yP(p) {
+    var f = (logPBot - Math.log(p)) / (logPBot - logPTop);
+    return PAD_T + (1 - f) * plotH;
+  }
+
+  function xT(t, p) {
+    var f = (logPBot - Math.log(p)) / (logPBot - logPTop);
+    return PAD_L + ((t - T_MIN) / T_RANGE + SKEW * f) * plotW;
+  }
+
+  canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
   ctx = canvas.getContext('2d');
-  W = canvas.width;
-  H = canvas.height;
-  padL = 52;
-  padR = 70;
-  padT = 36;
-  padB = 40;
-  pMax = 1050;
-  pMin = 100;
-  tMin = -50;
-  tMax = 40;
+
+  sorted = [];
+  levels = levels || [];
   for(i = 0; i < levels.length; i++) {
-    if(levels[i].t < tMin) tMin = Math.floor(levels[i].t / 10) * 10 - 10;
-    if(levels[i].t > tMax) tMax = Math.ceil(levels[i].t / 10) * 10 + 5;
-    if(levels[i].td !== null && levels[i].td < tMin) tMin = Math.floor(levels[i].td / 10) * 10 - 10;
+    lv = levels[i];
+    sorted.push({
+      pres: lv.pres != null ? lv.pres : lv.p,
+      temp: lv.temp != null ? lv.temp : lv.t,
+      dwpt: lv.dwpt != null ? lv.dwpt : lv.td,
+      wspd: lv.wspd != null ? lv.wspd : lv.s,
+      wdir: lv.wdir != null ? lv.wdir : lv.d
+    });
   }
-  if(tMin < -80) tMin = -80;
-  if(tMax > 45) tMax = 45;
+  sorted.sort(function(a, b) { return b.pres - a.pres; });
 
-  function pToY(pp) {
-    return padT + (H - padT - padB) * (Math.log(pMax) - Math.log(pp)) / (Math.log(pMax) - Math.log(pMin));
-  }
-  function tToX(tt, pp) {
-    var yy = pToY(pp);
-    var x0 = padL + (W - padL - padR) * (tt - tMin) / (tMax - tMin);
-    return x0 + (H - padT - padB - (yy - padT)) * 0.75;
-  }
-
-  ctx.fillStyle = '#0a0a14';
+  ctx.fillStyle = '#0d1b2a';
   ctx.fillRect(0, 0, W, H);
 
-  ctx.strokeStyle = '#1a2a4a';
-  ctx.lineWidth = 1;
-  isobars = [1000, 850, 700, 500, 400, 300, 250, 200, 150, 100];
-  for(i = 0; i < isobars.length; i++) {
-    p = isobars[i];
-    y = pToY(p);
-    ctx.beginPath();
-    ctx.moveTo(padL, y);
-    ctx.lineTo(W - padR, y);
-    ctx.stroke();
-    ctx.fillStyle = '#7ab3ef';
-    ctx.font = '11px monospace';
-    ctx.textAlign = 'right';
-    ctx.fillText(String(p), padL - 6, y + 4);
-  }
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(PAD_L, PAD_T, plotW, plotH);
+  ctx.clip();
 
-  isotherms = [];
-  for(t = Math.ceil(tMin / 10) * 10; t <= tMax; t += 10) isotherms.push(t);
-  for(i = 0; i < isotherms.length; i++) {
-    t = isotherms[i];
+  mrVals = [1, 2, 4, 7, 10, 16, 20];
+  ctx.lineWidth = 0.7;
+  ctx.strokeStyle = '#1d7a3a';
+  if(ctx.setLineDash) ctx.setLineDash([4, 7]);
+  for(mi = 0; mi < mrVals.length; mi++) {
+    w = mrVals[mi];
     ctx.beginPath();
-    ctx.strokeStyle = t === 0 ? '#4fc3f7' : '#2a3040';
-    ctx.lineWidth = t === 0 ? 1.5 : 1;
-    ctx.moveTo(tToX(t, pMax), pToY(pMax));
-    ctx.lineTo(tToX(t, pMin), pToY(pMin));
-    ctx.stroke();
-    ctx.fillStyle = t === 0 ? '#4fc3f7' : '#888';
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(String(t), tToX(t, pMax) + 8, H - padB + 16);
-  }
-
-  mixrs = [1, 2, 4, 7, 10, 16];
-  ctx.strokeStyle = '#1a3a3a';
-  ctx.lineWidth = 1;
-  if(ctx.setLineDash) ctx.setLineDash([3, 4]);
-  for(i = 0; i < mixrs.length; i++) {
-    mix = mixrs[i] / 1000;
-    ctx.beginPath();
-    prev = false;
-    for(p = pMax; p >= pMin; p -= 20) {
-      e = mix * p / (0.622 + mix);
-      if(e <= 0) continue;
-      ln = Math.log(e / 6.112);
-      td = 243.5 * ln / (17.67 - ln);
-      x = tToX(td, p);
-      y = pToY(p);
-      if(!prev) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-      prev = true;
+    mFirst = true;
+    for(mp = 1000; mp >= 500; mp -= 5) {
+      es_mr = w * mp / (622 + w);
+      if(es_mr <= 0) continue;
+      lnVal = Math.log(es_mr / 6.112);
+      Td_mr = 243.5 * lnVal / (17.67 - lnVal);
+      mx = xT(Td_mr, mp); my = yP(mp);
+      if(mFirst) { ctx.moveTo(mx, my); mFirst = false; }
+      else ctx.lineTo(mx, my);
     }
     ctx.stroke();
   }
   if(ctx.setLineDash) ctx.setLineDash([]);
 
-  thetas = [250, 260, 270, 280, 290, 300, 310, 320, 330];
-  ctx.strokeStyle = '#1e2a1e';
-  for(i = 0; i < thetas.length; i++) {
-    theta = thetas[i];
+  thetaArr = [-30, -20, -10, 0, 10, 20, 30, 40, 50, 60, 70, 80];
+  ctx.lineWidth = 0.7;
+  ctx.strokeStyle = '#8a4000';
+  if(ctx.setLineDash) ctx.setLineDash([5, 5]);
+  for(ai = 0; ai < thetaArr.length; ai++) {
+    theta_K = thetaArr[ai] + 273.15;
     ctx.beginPath();
-    prev = false;
-    for(p = pMax; p >= pMin; p -= 20) {
-      tk = theta * Math.pow(p / 1000, 0.286) - 273.15;
-      x = tToX(tk, p);
-      y = pToY(p);
-      if(!prev) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-      prev = true;
+    aFirst = true;
+    for(ap = P_BOT; ap >= P_TOP; ap -= 5) {
+      T_da = theta_K * Math.pow(ap / 1000, 0.2854) - 273.15;
+      ax = xT(T_da, ap); ay = yP(ap);
+      if(aFirst) { ctx.moveTo(ax, ay); aFirst = false; }
+      else ctx.lineTo(ax, ay);
     }
     ctx.stroke();
   }
+  if(ctx.setLineDash) ctx.setLineDash([]);
 
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = '#00cc44';
-  ctx.beginPath();
-  prev = false;
-  for(i = 0; i < levels.length; i++) {
-    lv = levels[i];
-    if(lv.td === null || lv.p < pMin || lv.p > pMax) continue;
-    x = tToX(lv.td, lv.p);
-    y = pToY(lv.p);
-    if(!prev) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-    prev = true;
+  tw0Arr = [0, 5, 10, 15, 20, 24, 28, 32];
+  ctx.lineWidth = 0.8;
+  ctx.strokeStyle = '#2a8a3a';
+  if(ctx.setLineDash) ctx.setLineDash([2, 6]);
+  for(wi = 0; wi < tw0Arr.length; wi++) {
+    maTk = tw0Arr[wi] + 273.15;
+    ctx.beginPath();
+    ctx.moveTo(xT(tw0Arr[wi], 1000), yP(1000));
+    for(wap = 995; wap >= P_TOP; wap -= 5) {
+      maEs = 6.112 * Math.exp(17.67 * (maTk - 273.15) / (maTk - 29.65));
+      maWs = 0.622 * maEs / Math.max(wap + 5 - maEs, 0.01);
+      maLv = 2.5e6; maRd = 287; maRv = 461.5; maCp = 1004; maG = 9.81;
+      maNum = 1 + maLv * maWs / (maRd * maTk);
+      maDen = 1 + maLv * maLv * maWs / (maCp * maRv * maTk * maTk);
+      maDtdp = -(maG / maCp) * (maNum / maDen) * maRd * maTk / ((wap + 5) * maG * 100);
+      maTk = maTk + maDtdp * (-5);
+      if(maTk < 170) break;
+      wx = xT(maTk - 273.15, wap); wy = yP(wap);
+      ctx.lineTo(wx, wy);
+    }
+    ctx.stroke();
   }
-  ctx.stroke();
+  if(ctx.setLineDash) ctx.setLineDash([]);
 
-  ctx.strokeStyle = '#ff6666';
-  ctx.beginPath();
-  prev = false;
-  for(i = 0; i < levels.length; i++) {
-    lv = levels[i];
-    if(lv.p < pMin || lv.p > pMax) continue;
-    x = tToX(lv.t, lv.p);
-    y = pToY(lv.p);
-    if(!prev) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-    prev = true;
+  for(T_iso = -120; T_iso <= 60; T_iso += 10) {
+    is0C = (T_iso === 0);
+    ctx.lineWidth = is0C ? 1.8 : 0.6;
+    ctx.strokeStyle = is0C ? '#00cc77' : '#193c5c';
+    ctx.beginPath();
+    ctx.moveTo(xT(T_iso, P_BOT), yP(P_BOT));
+    ctx.lineTo(xT(T_iso, P_TOP), yP(P_TOP));
+    ctx.stroke();
   }
-  ctx.stroke();
 
-  ctx.strokeStyle = '#2a4a7f';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(padL, padT, W - padL - padR, H - padT - padB);
+  PLIST = [100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000];
+  PMAJOR = {100:1, 200:1, 300:1, 500:1, 700:1, 850:1, 925:1, 1000:1};
+  for(pi2 = 0; pi2 < PLIST.length; pi2++) {
+    pv = PLIST[pi2];
+    isMajor = !!PMAJOR[pv];
+    pyy = yP(pv);
+    ctx.beginPath();
+    ctx.moveTo(PAD_L, pyy);
+    ctx.lineTo(PAD_L + plotW, pyy);
+    ctx.strokeStyle = isMajor ? '#2a4a6a' : '#192a40';
+    ctx.lineWidth = isMajor ? 1.0 : 0.5;
+    ctx.stroke();
+  }
 
-  ctx.fillStyle = '#ccc';
+  ctx.restore();
+
+  ctx.textAlign = 'right';
   ctx.font = '11px monospace';
-  ctx.textAlign = 'left';
-  for(i = 0; i < levels.length; i++) {
-    lv = levels[i];
-    if(isNaN(lv.d) || isNaN(lv.s) || lv.d === 99999) continue;
-    if(lv.p !== 1000 && lv.p !== 850 && lv.p !== 700 && lv.p !== 500 && lv.p !== 300 && lv.p !== 200) continue;
-    y = pToY(lv.p);
-    ctx.fillText(Math.round(lv.d) + '/' + Math.round(lv.s), W - padR + 6, y + 4);
+  ctx.fillStyle = '#7ab4d4';
+  for(pi3 = 0; pi3 < PLIST.length; pi3++) {
+    pv = PLIST[pi3];
+    pyy = yP(pv);
+    ctx.fillText(pv + '', PAD_L - 5, pyy + 4);
+    ctx.beginPath();
+    ctx.moveTo(PAD_L - 4, pyy);
+    ctx.lineTo(PAD_L, pyy);
+    ctx.strokeStyle = '#7ab4d4';
+    ctx.lineWidth = 1;
+    ctx.stroke();
   }
 
-  ctx.fillStyle = '#4fc3f7';
-  ctx.font = '13px monospace';
+  ctx.save();
+  ctx.font = '10px sans-serif';
+  ctx.fillStyle = '#5a8aaa';
+  ctx.textAlign = 'center';
+  ctx.translate(14, PAD_T + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('hPa', 0, 0);
+  ctx.restore();
+
+  ctx.textAlign = 'center';
+  for(T_lbl = -40; T_lbl <= 40; T_lbl += 10) {
+    lx = xT(T_lbl, P_BOT);
+    if(lx < PAD_L || lx > PAD_L + plotW) continue;
+    is0 = (T_lbl === 0);
+    ctx.fillStyle = is0 ? '#00cc77' : '#5a8aaa';
+    ctx.font = is0 ? 'bold 9px sans-serif' : '9px sans-serif';
+    ctx.fillText(T_lbl + '°', lx, PAD_T + plotH + 16);
+  }
+  ctx.font = '10px sans-serif';
+  ctx.fillStyle = '#5a8aaa';
+  ctx.fillText('Temperature (°C)  —  skewed', PAD_L + plotW / 2, H - 5);
+
+  FL_DATA = [
+    {fl:'FL450', p:150}, {fl:'FL390', p:200}, {fl:'FL340', p:257},
+    {fl:'FL300', p:301}, {fl:'FL240', p:400}, {fl:'FL180', p:507},
+    {fl:'FL140', p:598}, {fl:'FL100', p:697}, {fl:'FL050', p:843}
+  ];
+  xFL = PAD_L + plotW + 6;
   ctx.textAlign = 'left';
-  ctx.fillText((info && info.name ? info.name : 'SKEW-T') + '  GFS', padL, 18);
-  ctx.fillStyle = '#888';
-  ctx.font = '11px monospace';
-  ctx.fillText(
-    (info && info.lat ? info.lat : '') + (info && info.lon ? ', ' + info.lon : '')
-      + (info && info.cycleLabel ? '  ' + info.cycleLabel : ''),
-    padL, 32
-  );
-  ctx.fillStyle = '#ff6666';
-  ctx.fillText('T', W - padR - 36, padT + 14);
-  ctx.fillStyle = '#00cc44';
-  ctx.fillText('Td', W - padR - 20, padT + 14);
+  ctx.font = '9px monospace';
+  ctx.fillStyle = '#a0c8e8';
+  for(fi = 0; fi < FL_DATA.length; fi++) {
+    fd = FL_DATA[fi];
+    yfl = yP(fd.p);
+    ctx.beginPath();
+    ctx.moveTo(PAD_L + plotW, yfl);
+    ctx.lineTo(PAD_L + plotW + 4, yfl);
+    ctx.strokeStyle = '#4a7a9a';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillText(fd.fl, xFL, yfl + 3);
+  }
+
+  if(sorted.length > 0) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(PAD_L, PAD_T, plotW, plotH);
+    ctx.clip();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    ctx.beginPath();
+    tFirst = true;
+    for(i = 0; i < sorted.length; i++) {
+      lv = sorted[i];
+      if(lv.temp === null || lv.temp === undefined) continue;
+      tx = xT(lv.temp, lv.pres); ty = yP(lv.pres);
+      if(tFirst) { ctx.moveTo(tx, ty); tFirst = false; }
+      else ctx.lineTo(tx, ty);
+    }
+    ctx.strokeStyle = '#ff4444';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    ctx.beginPath();
+    dFirst = true;
+    for(i = 0; i < sorted.length; i++) {
+      lv = sorted[i];
+      if(lv.dwpt === null || lv.dwpt === undefined) continue;
+      dx2 = xT(lv.dwpt, lv.pres); dy2 = yP(lv.pres);
+      if(dFirst) { ctx.moveTo(dx2, dy2); dFirst = false; }
+      else ctx.lineTo(dx2, dy2);
+    }
+    ctx.strokeStyle = '#44ccff';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    for(i = 0; i < sorted.length; i++) {
+      lv = sorted[i];
+      if(lv.temp !== null && lv.temp !== undefined) {
+        ctx.beginPath();
+        ctx.arc(xT(lv.temp, lv.pres), yP(lv.pres), 2.5, 0, 2 * Math.PI);
+        ctx.fillStyle = '#ff8888';
+        ctx.fill();
+      }
+      if(lv.dwpt !== null && lv.dwpt !== undefined) {
+        ctx.beginPath();
+        ctx.arc(xT(lv.dwpt, lv.pres), yP(lv.pres), 2.5, 0, 2 * Math.PI);
+        ctx.fillStyle = '#66ddff';
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  xBarb = PAD_L + plotW + 100;
+  for(i = 0; i < sorted.length; i++) {
+    lv = sorted[i];
+    spd_kt = lv.wspd || 0;
+    wxOfpDrawWindBarb(ctx, xBarb, yP(lv.pres), spd_kt, lv.wdir || 0);
+  }
+
+  T850 = null; T500 = null; Td850 = null; T700 = null; Td700 = null;
+  for(i = 0; i < sorted.length; i++) {
+    lv = sorted[i];
+    if(lv.pres === 850) { T850 = lv.temp; Td850 = lv.dwpt; }
+    if(lv.pres === 700) { T700 = lv.temp; Td700 = lv.dwpt; }
+    if(lv.pres === 500) { T500 = lv.temp; }
+  }
+  idxLines = [];
+  if(T850 !== null && T500 !== null) {
+    Dd700 = (T700 !== null && Td700 !== null) ? (T700 - Td700) : 30;
+    KI = (T850 - T500) + (Td850 !== null ? Td850 : 0) - Dd700;
+    idxLines.push('K: ' + KI.toFixed(0));
+  }
+  if(T850 !== null) idxLines.push('T850: ' + T850.toFixed(0) + '°C');
+  if(T500 !== null) idxLines.push('T500: ' + T500.toFixed(0) + '°C');
+
+  if(idxLines.length > 0) {
+    xIdx = PAD_L + plotW + 6;
+    yIdx = PAD_T + plotH - 10 - (idxLines.length - 1) * 14;
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#90b8d8';
+    ctx.textAlign = 'left';
+    for(ii = 0; ii < idxLines.length; ii++) {
+      ctx.fillText(idxLines[ii], xIdx, yIdx + ii * 14);
+    }
+  }
+
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 13px sans-serif';
+  ctx.fillStyle = '#e0f0ff';
+  ctx.fillText(title || 'SKEW-T', W / 2, PAD_T - 10);
+
+  ctx.strokeStyle = '#3a6a8a';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(PAD_L, PAD_T, plotW, plotH);
+
+  legendItems = [
+    { color: '#ff4444', label: 'Temp' },
+    { color: '#44ccff', label: 'Dewpt' },
+    { color: '#00cc77', label: '0°C' },
+    { color: '#2a8a3a', label: 'Moist' },
+    { color: '#8a4000', label: 'Dry' }
+  ];
+  ctx.textAlign = 'left';
+  ctx.font = '9px sans-serif';
+  lx = PAD_L + 4; ly = PAD_T + plotH - 8;
+  for(ii = 0; ii < legendItems.length; ii++) {
+    item = legendItems[ii];
+    ctx.fillStyle = item.color;
+    ctx.fillRect(lx, ly - 6, 18, 3);
+    ctx.fillStyle = '#c0d8f0';
+    ctx.fillText(item.label, lx + 22, ly);
+    lx += 72;
+  }
+
+  dataUrl = '';
+  try { dataUrl = canvas.toDataURL('image/png'); } catch(e) { dataUrl = ''; }
+  if(typeof cb === 'function') cb(dataUrl);
 }
 
 function wxOfpOpenMeteoUrl(lat, lon, hourIso) {
@@ -3921,7 +4155,7 @@ function wxOfpFetchSelected() {
     console.log('[OFP] Open-Meteo', wp.name, omUrl);
     xhr.open('GET', omUrl, true);
     xhr.onload = function() {
-      var json, levels, canvas, dataUrl;
+      var json, levels;
       if(xhr.status < 200 || xhr.status >= 300) {
         console.log('[OFP] Open-Meteo HTTP', xhr.status, wp.name);
         finishOne(wp, omUrl, '');
@@ -3940,21 +4174,11 @@ function wxOfpFetchSelected() {
         finishOne(wp, omUrl, '');
         return;
       }
-      canvas = document.createElement('canvas');
-      canvas.width = 720;
-      canvas.height = 900;
-      wxOfpDrawSkewt(canvas, levels, {
-        name: wp.name,
-        lat: wp.lat,
-        lon: wp.lon,
-        cycleLabel: hourLabel
-      });
-      try {
-        dataUrl = canvas.toDataURL('image/png');
-      } catch(e2) {
-        dataUrl = '';
-      }
-      finishOne(wp, omUrl, dataUrl);
+      wxOfpDrawSkewt(
+        levels,
+        wp.name + '  ' + wp.lat + ', ' + wp.lon + '  ' + hourLabel,
+        function(pngUrl) { finishOne(wp, omUrl, pngUrl || ''); }
+      );
     };
     xhr.onerror = function() {
       console.log('[OFP] Open-Meteo network error', wp.name);
