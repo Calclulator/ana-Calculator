@@ -314,6 +314,28 @@
     #crew-rest-panel .cr-box,#crew-rest-panel .cr-block{background:#fff!important;border-color:#ccc!important;}
     #crew-rest-panel .cr-inp{background:#fff!important;color:#111!important;}
   }
+  body.day-mode .wx-tab-btn{background:#e8f0f8;color:#1a3a6e;border-color:#7ab3ef;}
+  body.day-mode .wx-tab-btn.wx-tab-active{background:#1a5fa8;color:#ffffff;border-color:#1a5fa8;}
+  body.day-mode .wx-sub-panel{background:#ffffff;color:#111111;}
+  body.day-mode .wx-sub-tab-btn{background:#f0f4f8;color:#222222;border-color:#aac4e0;}
+  body.day-mode .wx-sub-tab-btn.wx-sub-active{background:#1a5fa8;color:#ffffff;border-color:#1a5fa8;}
+  body.day-mode .wx-meta{color:#333333;}
+  body.day-mode .wx-pdf-loading{color:#b86a00;}
+  body.day-mode #wx-bulk-bar{background:#dce8f5;border-bottom-color:#7ab3ef;}
+  body.day-mode #wx-bulk-ts{color:#333333;}
+  body.day-mode .wx-airport-btn{background:#f0f4f8;color:#222222;border-color:#aac4e0;}
+  body.day-mode .wx-airport-btn.wx-airport-active{background:#1a5fa8;color:#ffffff;border-color:#1a5fa8;}
+  body.day-mode #wx-metar-output{background:#f5f8fc;color:#111111;border-color:#aac4e0;}
+  body.day-mode .wx-ofp-dropzone{background:#f0f4f8;color:#444444;border-color:#7ab3ef;}
+  body.day-mode .wx-ofp-wp-table th{background:#dce8f5;color:#111111;border-color:#aac4e0;}
+  body.day-mode .wx-ofp-wp-table td{color:#111111;border-color:#c8d8e8;}
+  body.day-mode .wx-ofp-wp-table tr:hover td{background:#cce0f5;}
+  body.day-mode .wx-ofp-guide{color:#111111;}
+  body.day-mode .wx-ofp-guide h2{color:#1a3a6e;border-bottom-color:#7ab3ef;}
+  body.day-mode .wx-ofp-guide h3{color:#1a5fa8;}
+  body.day-mode #wx-ofp-status,body.day-mode #wx-ofp-fetch-status{color:#333333;}
+  body.day-mode #wx-ofp-saved-wrap > div{color:#333333;}
+  body.day-mode .wx-tab-bar{background:#dce8f5;border-bottom-color:#7ab3ef;}
 </style>
 </head>
 <body>
@@ -3679,26 +3701,32 @@ function wxBulkFetch() {
   var btn = document.getElementById('wx-bulk-btn');
   var tabs = ['metar', 'tenkizu', 'satellite', 'sig', 'danmen', 'skewt', 'kazan', 'kaigai', 'ofp'];
   var i, badge, ts, done, total, key;
-  var markOk, markErr, fetchImgThenShow, bulkUrl;
+  var markOk, markErr, fetchImgThenShow, bulkUrl, wxBulkUpdateProgress;
   if(btn) btn.disabled = true;
   for(i = 0; i < tabs.length; i++) {
     badge = document.getElementById('wx-badge-' + tabs[i]);
     if(badge) { badge.textContent = '...'; badge.className = 'wx-bulk-badge loading'; }
   }
-  ts = document.getElementById('wx-bulk-ts');
-  if(ts) ts.textContent = '取得中...';
   done = 0;
   total = 9;
+  ts = document.getElementById('wx-bulk-ts');
+  if(ts) ts.textContent = '取得中 0 / ' + total;
+  wxBulkUpdateProgress = function() {
+    var tsEl = document.getElementById('wx-bulk-ts');
+    if(tsEl) tsEl.textContent = '取得中 ' + done + ' / ' + total;
+  };
   markOk = function(tabId) {
     var b = document.getElementById('wx-badge-' + tabId);
     if(b) { b.textContent = '\u2713'; b.className = 'wx-bulk-badge ok'; }
     done++;
+    wxBulkUpdateProgress();
     if(done >= total) wxBulkFinish();
   };
   markErr = function(tabId) {
     var b = document.getElementById('wx-badge-' + tabId);
     if(b) { b.textContent = '\u2717'; b.className = 'wx-bulk-badge err'; }
     done++;
+    wxBulkUpdateProgress();
     if(done >= total) wxBulkFinish();
   };
   fetchImgThenShow = function(tabId, url, showFn) {
