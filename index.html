@@ -326,6 +326,7 @@
   body.day-mode .wx-airport-btn{background:#f0f4f8;color:#222222;border-color:#aac4e0;}
   body.day-mode .wx-airport-btn.wx-airport-active{background:#1a5fa8;color:#ffffff;border-color:#1a5fa8;}
   body.day-mode #wx-metar-output{background:#f5f8fc;color:#111111;border-color:#aac4e0;}
+  body.day-mode .wx-metar-sec-lbl,body.day-mode .wx-atis-sec-lbl{color:#333333;border-bottom-color:#cccccc;}
   body.day-mode .wx-ofp-dropzone{background:#f0f4f8;color:#444444;border-color:#7ab3ef;}
   body.day-mode .wx-ofp-wp-table th{background:#dce8f5;color:#111111;border-color:#aac4e0;}
   body.day-mode .wx-ofp-wp-table td{color:#111111;border-color:#c8d8e8;}
@@ -1315,16 +1316,9 @@
     </div>
 
     <div id="wx-panel-metar" class="wx-sub-panel">
-      <div class="wx-airport-selector">
+      <div class="wx-airport-selector" id="wx-metar-selector">
         <span style="color:#aaa;font-size:11px;">空港:</span>
-        <button type="button" class="wx-airport-btn wx-airport-active" onclick="wxSetMetarAirport('RJTT',this)">羽田</button>
-        <button type="button" class="wx-airport-btn" onclick="wxSetMetarAirport('RJAA',this)">成田</button>
-        <button type="button" class="wx-airport-btn" onclick="wxSetMetarAirport('RJCC',this)">新千歳</button>
-        <button type="button" class="wx-airport-btn" onclick="wxSetMetarAirport('RJGG',this)">中部</button>
-        <button type="button" class="wx-airport-btn" onclick="wxSetMetarAirport('RJOO',this)">伊丹</button>
-        <button type="button" class="wx-airport-btn" onclick="wxSetMetarAirport('RJBB',this)">関西</button>
-        <button type="button" class="wx-airport-btn" onclick="wxSetMetarAirport('RJFF',this)">福岡</button>
-        <button type="button" class="wx-airport-btn" onclick="wxSetMetarAirport('ROAH',this)">那覇</button>
+        <span id="wx-metar-station-btns"></span>
         <input id="wx-metar-icao" type="text" placeholder="ICAO" maxlength="4"
           style="width:60px;background:#111;color:#fff;border:1px solid #555;border-radius:3px;padding:2px 6px;font-size:12px;font-family:monospace;text-transform:uppercase;"
           oninput="this.value=this.value.toUpperCase()">
@@ -1332,8 +1326,11 @@
         <button type="button" class="wx-refresh-btn" onclick="wxRefreshMetar()">REFRESH</button>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:280px;">
+        <div style="flex:1;min-width:280px;" id="wx-metar-container">
+          <div class="wx-metar-sec-lbl" style="font-size:11px;font-weight:bold;color:#aaa;margin-bottom:2px;border-bottom:1px solid #333;">METAR / TAF</div>
           <pre id="wx-metar-output" style="font-family:monospace;font-size:12px;color:#ccc;background:#0a0a0a;border:1px solid #333;border-radius:4px;padding:8px;min-height:200px;white-space:pre-wrap;line-height:1.5;margin:0;">LOADING...</pre>
+          <div class="wx-atis-sec-lbl" style="font-size:11px;font-weight:bold;color:#aaa;margin:8px 0 2px;border-bottom:1px solid #333;">ATIS</div>
+          <div id="wx-atis-box"></div>
         </div>
         <div style="flex:1;min-width:280px;">
           <div class="wx-meta">JMA 空港逐次予報図</div>
@@ -1444,30 +1441,20 @@
     <div id="wx-panel-skewt" class="wx-sub-panel" style="display:none;">
       <div class="wx-airport-selector">
         <span style="color:#aaa;font-size:11px;">空港:</span>
-        <button type="button" class="wx-airport-btn wx-airport-active" onclick="wxSetSkewtAirport('RJTT',this)">羽田</button>
-        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('RJAA',this)">成田</button>
-        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('RJCC',this)">新千歳</button>
-        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('RJGG',this)">中部</button>
-        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('RJOO',this)">伊丹</button>
-        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('RJBB',this)">関西</button>
-        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('RJFF',this)">福岡</button>
-        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('ROAH',this)">那覇</button>
-        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('WSSS',this)">シンガポール</button>
-        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport('WMKK',this)">KL</button>
-        <input id="wx-skewt-icao" type="text" placeholder="ICAO" maxlength="4"
-          style="width:60px;background:#111;color:#fff;border:1px solid #555;border-radius:3px;padding:2px 6px;font-size:12px;font-family:monospace;text-transform:uppercase;"
-          oninput="this.value=this.value.toUpperCase()">
-        <button type="button" class="wx-airport-btn" onclick="wxSetSkewtAirport(document.getElementById('wx-skewt-icao').value,null)">GO</button>
-        <button type="button" class="wx-refresh-btn" onclick="wxLoadSkewt(wxSkewtIcao)">REFRESH</button>
+        <button type="button" class="wx-airport-btn wx-airport-active" onclick="wxSkewtLoad('SIN')" id="wx-skewt-btn-SIN">SIN</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSkewtLoad('KUL')" id="wx-skewt-btn-KUL">KUL</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSkewtLoad('SGN')" id="wx-skewt-btn-SGN">SGN</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSkewtLoad('SYD')" id="wx-skewt-btn-SYD">SYD</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSkewtLoad('BKK')" id="wx-skewt-btn-BKK">BKK</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSkewtLoad('TSA')" id="wx-skewt-btn-TSA">TSA</button>
+        <button type="button" class="wx-refresh-btn" onclick="wxSkewtLoad(wxSkewtCode)">REFRESH</button>
       </div>
       <div class="wx-chart-wrapper">
         <div class="wx-meta" id="wx-skewt-meta"></div>
-        <img id="wx-skewt-img" class="wx-chart-img" src="" alt="Skew-T">
-        <div id="wx-skewt-err" style="display:none;color:#888;font-size:11px;padding:8px;">データなし</div>
-        <div style="margin-top:4px;">
-          <a id="wx-skewt-wy-link" href="https://weather.uwyo.edu/cgi-bin/bufrraob.py" target="_blank" rel="noopener" class="wx-open-btn">Wyoming</a>
-          <a id="wx-skewt-tt-link" href="https://www.tropicaltidbits.com/analysis/soundings/" target="_blank" rel="noopener" class="wx-open-btn" style="margin-left:4px;">Tropicaltidbits</a>
+        <div id="wx-skewt-container">
+          <img id="wx-skewt-img" class="wx-chart-img" src="" alt="Skew-T">
         </div>
+        <div id="wx-skewt-err" style="display:none;color:#888;font-size:11px;padding:8px;">データなし</div>
       </div>
     </div>
 
@@ -2756,8 +2743,11 @@ function showWxTab(tabId) {
   b = document.getElementById('wx-btn-' + tabId);
   if(p) p.style.display = 'block';
   if(b) b.classList.add('wx-tab-active');
-  if(tabId === 'metar') wxRefreshMetar();
-  if(tabId === 'kazan') wxFetchHtmlImage('kazan', 'https://www.data.jma.go.jp/vaac/data/indexj.html');
+  if(tabId === 'metar') {
+    wxRenderMetarStationButtons();
+    wxRefreshMetar();
+  }
+  if(tabId === 'kazan') wxLoadKazan();
 }
 
 function wxProxyUrl(url) {
@@ -2933,7 +2923,31 @@ function wxHimawariUrl(band) {
 }
 
 var wxMetarIcao = 'RJTT';
+var WX_METAR_STATIONS = [
+  { code: 'RJTT', name: 'Tokyo Haneda' },
+  { code: 'RJAA', name: 'Tokyo Narita' },
+  { code: 'RJBB', name: 'Osaka Kansai' },
+  { code: 'ROAH', name: 'Naha' },
+  { code: 'RCSS', name: 'Taipei Songshan' },
+  { code: 'VVTS', name: 'Ho Chi Minh' },
+  { code: 'VVDN', name: 'Da Nang' },
+  { code: 'VTBS', name: 'Bangkok' },
+  { code: 'WSSS', name: 'Singapore' },
+  { code: 'WMKK', name: 'Kuala Lumpur' },
+  { code: 'RPLL', name: 'Manila' },
+  { code: 'VHHH', name: 'Hong Kong' },
+  { code: 'WBKK', name: 'Kota Kinabalu' }
+];
 var wxSkewtIcao = 'RJTT';
+var wxSkewtCode = 'SIN';
+var WX_SKEWT_STATIONS = [
+  { code: 'SIN', name: 'Singapore',       lat:  1.3521, lon: 103.8198 },
+  { code: 'KUL', name: 'Kuala Lumpur',    lat:  2.7456, lon: 101.7099 },
+  { code: 'SGN', name: 'Ho Chi Minh',     lat: 10.8188, lon: 106.6520 },
+  { code: 'SYD', name: 'Sydney',          lat: -33.9399, lon: 151.1753 },
+  { code: 'BKK', name: 'Bangkok',         lat: 13.6811, lon: 100.7479 },
+  { code: 'TSA', name: 'Taipei Songshan', lat: 25.0694, lon: 121.5525 }
+];
 
 var WX_WORKER_PROXY = 'https://ana-wx-proxy.nomadic-tamuzo00.workers.dev';
 
@@ -2953,7 +2967,7 @@ var WX_CHART_TABLES = {
     },
     'fsas48': {
       url: null,
-      pdfUrl: 'https://www.data.jma.go.jp/yoho/data/wxchart/quick/FSAS48_COLOR_ASIA.pdf',
+      pdfUrl: 'https://www.data.jma.go.jp/fcd/yoho/data/wxchart/quick/FSAS48_COLOR_ASIA.pdf',
       extUrl: 'https://www.jma.go.jp/bosai/numericmap/#type=nwp',
       label: 'FSAS 48h 太平洋予想'
     },
@@ -3000,8 +3014,9 @@ var WX_CHART_TABLES = {
       label: '全国航空気象解説'
     },
     'tanki': {
-      url: null, pdfUrl: null,
-      extUrl: 'https://www.data.jma.go.jp/fcd/yoho/manreki.html',
+      url: null,
+      pdfUrl: 'https://www.data.jma.go.jp/yoho/data/jishin/kaisetsu_tanki_latest.pdf',
+      extUrl: 'https://www.jma.go.jp/jma/kishou/know/expert/index.html',
       label: '短期予報解説'
     }
   },
@@ -3018,8 +3033,7 @@ var WX_CHART_TABLES = {
       label: 'UBJP 下層悪天予想図'
     },
     'abjp': {
-      url: null,
-      dyn: 'abjp',
+      url: 'https://www.data.jma.go.jp/airinfo/data/pict/low-level_sigwx_p/Lsigp_Fig305.png',
       extUrl: 'https://www.data.jma.go.jp/airinfo/data/awfo_low-level_detailed-sigwx.html',
       label: 'ABJP 下層悪天予想図（詳細）'
     },
@@ -3293,15 +3307,102 @@ function wxRefreshPdfChart(tabKey) {
   if(activeBtn) activeBtn.click();
 }
 
+function wxRenderMetarStationButtons() {
+  var wrap = document.getElementById('wx-metar-station-btns');
+  var i, st, html;
+  if(!wrap || !WX_METAR_STATIONS) return;
+  html = '';
+  for(i = 0; i < WX_METAR_STATIONS.length; i++) {
+    st = WX_METAR_STATIONS[i];
+    html += '<button type="button" class="wx-airport-btn' + (st.code === wxMetarIcao ? ' wx-airport-active' : '')
+      + '" id="wx-metar-btn-' + st.code + '" title="' + st.name + '" onclick="wxSetMetarAirport(\'' + st.code + '\',this)">'
+      + st.code + '</button>';
+  }
+  wrap.innerHTML = html;
+}
+
+wxRenderMetarStationButtons();
+
 function wxSetMetarAirport(icao, btn) {
-  var allBtns, i;
+  var allBtns, i, match;
   if(!icao || icao.length < 3) return;
   wxMetarIcao = String(icao).toUpperCase();
   allBtns = document.querySelectorAll('#wx-panel-metar .wx-airport-btn');
   for(i = 0; i < allBtns.length; i++) { allBtns[i].classList.remove('wx-airport-active'); }
-  if(btn) btn.classList.add('wx-airport-active');
+  match = document.getElementById('wx-metar-btn-' + wxMetarIcao);
+  if(match) match.classList.add('wx-airport-active');
+  else if(btn) btn.classList.add('wx-airport-active');
   wxUpdateJmaAsf(wxMetarIcao);
   wxFetchMetarTaf(wxMetarIcao);
+}
+
+function wxUpdateJmaAsf(icao) {
+  var url = 'https://www.data.jma.go.jp/airinfo/data/pict/taf/QMCD98_' + icao + '.png';
+  var img = document.getElementById('wx-metar-jma-img');
+  var lnk = document.getElementById('wx-metar-jma-link');
+  var err = document.getElementById('wx-metar-jma-err');
+  if(!img) return;
+  img.style.display = 'block';
+  if(err) err.style.display = 'none';
+  img.src = wxProxyUrl(url + '?t=' + new Date().getTime());
+  if(lnk) lnk.href = url;
+}
+
+function wxCheckwxKey() {
+  if(typeof CHECKWX_API_KEY === 'string' && CHECKWX_API_KEY) return CHECKWX_API_KEY;
+  return 'eb52e4c6ca254584842adb8dc574b4f8';
+}
+
+function wxFetchAtis(icao, containerId) {
+  var container = document.getElementById(containerId);
+  var url, proxyUrl, xhr;
+  if(!container) return;
+  icao = String(icao || '').toUpperCase();
+  container.innerHTML = '<span style="color:#888;font-size:11px;">ATIS 取得中...</span>';
+  url = 'https://atis.guru/atis/' + icao;
+  proxyUrl = wxProxyUrl(url);
+  xhr = new XMLHttpRequest();
+  xhr.open('GET', proxyUrl, true);
+  xhr.responseType = 'text';
+  xhr.onload = function() {
+    var html, preMatch, divMatch, bodyMatch, atisLine, atisText, re;
+    if(xhr.status === 200 && xhr.responseText) {
+      html = xhr.responseText;
+      atisText = '';
+      preMatch = html.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+      if(preMatch) atisText = String(preMatch[1]).replace(/<[^>]+>/g, '').replace(/^\s+|\s+$/g, '');
+      if(!atisText) {
+        divMatch = html.match(/class="atis[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+        if(divMatch) atisText = String(divMatch[1]).replace(/<[^>]+>/g, '').replace(/^\s+|\s+$/g, '');
+      }
+      if(!atisText) {
+        bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        if(bodyMatch) {
+          html = String(bodyMatch[1]).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+          re = new RegExp('(' + icao + '[\\s\\S]{20,600})', 'i');
+          atisLine = html.match(re);
+          if(atisLine) atisText = String(atisLine[1]).replace(/^\s+|\s+$/g, '');
+          else atisText = html.substring(0, 600);
+        }
+      }
+      if(atisText) {
+        container.innerHTML =
+          '<div style="font-family:monospace;font-size:11px;white-space:pre-wrap;'
+          + 'background:#f5f5f0;border:1px solid #ccc;padding:6px;border-radius:3px;'
+          + 'color:#111;line-height:1.5;">'
+          + atisText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          + '</div>';
+      } else {
+        container.innerHTML = '<span style="color:#888;font-size:11px;">ATIS データなし (' + icao + ')</span>';
+      }
+    } else {
+      container.innerHTML = '<span style="color:#f66;font-size:11px;">ATIS 取得エラー HTTP ' + xhr.status + '</span>';
+    }
+  };
+  xhr.onerror = function() {
+    container.innerHTML = '<span style="color:#f66;font-size:11px;">ATIS 通信エラー</span>';
+  };
+  xhr.send();
 }
 
 function wxUpdateJmaAsf(icao) {
@@ -3326,6 +3427,7 @@ function wxFetchMetarTaf(icao) {
   var xhrM, key;
   if(!out) return;
   out.textContent = 'FETCHING ' + icao + '...';
+  wxFetchAtis(icao, 'wx-atis-box');
   key = wxCheckwxKey();
   xhrM = new XMLHttpRequest();
   xhrM.open('GET', 'https://api.checkwx.com/v2/metar/' + icao + '/decoded', true);
@@ -3380,6 +3482,94 @@ var WX_SATELLITE_TABLE = {
   'radar': { url: null, label: '雨雲レーダー', extUrl: 'https://www.jma.go.jp/bosai/nowc/' }
 };
 
+function wxRadarUrl() {
+  var now = new Date();
+  var utcMin = Math.floor(now.getUTCMinutes() / 5) * 5 - 10;
+  var d = new Date(Date.UTC(
+    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
+    now.getUTCHours(), utcMin < 0 ? utcMin + 60 : utcMin
+  ));
+  if(utcMin < 0) d = new Date(d.getTime() - 60 * 60 * 1000);
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  var ts = '' + d.getUTCFullYear()
+    + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate())
+    + pad(d.getUTCHours()) + pad(d.getUTCMinutes());
+  return 'https://www.jma.go.jp/bosai/img/nowc/radar/' + ts + '00-05-nowc.png';
+}
+
+function wxTsasUrl(hemi) {
+  var t = new Date(Date.now() - 25 * 60000);
+  var m = t.getUTCMinutes() < 30 ? 0 : 30;
+  t.setUTCMinutes(m, 0, 0);
+  var folder = hemi === 's' ? 'TSAS2' : 'TSAS1';
+  var prefix = hemi === 's' ? 'QNIA20' : 'QNIA10';
+  return 'https://www3.metair.go.jp/pict/' + folder + '/' + prefix + '_RJTD_' + wxStamp(t) + wxPad2(m) + '00.png';
+}
+
+function wxLoadRadarTiles() {
+  var xhr = new XMLHttpRequest();
+  var img = document.getElementById('wx-satellite-img');
+  var err = document.getElementById('wx-satellite-err');
+  xhr.open('GET', wxProxyUrl('https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes_N1.json'), true);
+  xhr.onload = function() {
+    var arr, last, canvas, ctx, pending, failed, tiles, i;
+    try { arr = JSON.parse(xhr.responseText); } catch(e) { arr = null; }
+    last = arr && arr.length ? arr[arr.length - 1] : null;
+    if(!last) {
+      wxFetchHtmlImage('satellite', 'https://www.jma.go.jp/bosai/nowc/');
+      return;
+    }
+    tiles = [[6, 2, 0, 0], [7, 2, 256, 0], [6, 3, 0, 256], [7, 3, 256, 256]];
+    canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = 512;
+    ctx = canvas.getContext('2d');
+    pending = tiles.length; failed = 0;
+    function finish() {
+      if(!img) return;
+      if(failed >= tiles.length) {
+        img.style.display = 'none';
+        if(err) err.style.display = 'block';
+        return;
+      }
+      try { img.src = canvas.toDataURL('image/png'); img.style.display = 'block'; if(err) err.style.display = 'none'; }
+      catch(e2) {
+        img.style.display = 'none';
+        if(err) err.style.display = 'block';
+      }
+    }
+    for(i = 0; i < tiles.length; i++) {
+      (function(tile) {
+        var im = new Image();
+        im.onload = function() {
+          ctx.drawImage(im, tile[2], tile[3], 256, 256);
+          pending--;
+          if(pending <= 0) finish();
+        };
+        im.onerror = function() {
+          failed++; pending--;
+          if(pending <= 0) finish();
+        };
+        im.src = wxProxyUrl('https://www.jma.go.jp/bosai/jmatile/data/nowc/'
+          + last.basetime + '/none/' + last.validtime + '/surf/hrpns/3/' + tile[0] + '/' + tile[1] + '.png');
+      })(tiles[i]);
+    }
+  };
+  xhr.onerror = function() {
+    wxFetchHtmlImage('satellite', 'https://www.jma.go.jp/bosai/nowc/');
+  };
+  xhr.send();
+}
+
+function wxLoadKazan(doneFn) {
+  wxFetchHtmlImage('kazan', 'https://www.jma.go.jp/jp/volcano/', function(ok) {
+    if(ok) { if(doneFn) doneFn(true); return; }
+    wxFetchHtmlImage('kazan', 'https://www.data.jma.go.jp/vois/data/obs/volcam/volcam.php', function(ok2) {
+      if(ok2) { if(doneFn) doneFn(true); return; }
+      wxFetchHtmlImage('kazan', 'https://www.data.jma.go.jp/vaac/data/indexj.html', doneFn);
+    });
+  });
+}
+
 function wxShowSatellite(key, btn) {
   var btns = document.querySelectorAll('#wx-panel-satellite .wx-sub-tab-btn');
   var i, entry, img, meta, err, url;
@@ -3392,8 +3582,23 @@ function wxShowSatellite(key, btn) {
   err = document.getElementById('wx-satellite-err');
   if(meta) meta.textContent = entry.label;
   url = entry.band ? wxHimawariUrl(entry.band) : entry.url;
+  if(key === 'radar') url = wxRadarUrl();
+  if(key === 'tsas-n') url = wxTsasUrl('n');
+  if(key === 'tsas-s') url = wxTsasUrl('s');
   if(url) {
-    wxDisplayChartImage('satellite', url);
+    if(img) {
+      if(err) err.style.display = 'none';
+      img.style.display = 'block';
+      img.onerror = function() {
+        if(key === 'radar') { wxLoadRadarTiles(); return; }
+        if(entry.extUrl) wxFetchHtmlImage('satellite', entry.extUrl);
+        else {
+          img.style.display = 'none';
+          if(err) err.style.display = 'block';
+        }
+      };
+      img.src = wxProxyUrl(wxBustUrl(url));
+    }
   } else if(entry.extUrl) {
     wxFetchHtmlImage('satellite', entry.extUrl);
   } else {
@@ -3402,58 +3607,101 @@ function wxShowSatellite(key, btn) {
   }
 }
 
+function wxSkewtLoad(code, doneFn) {
+  var st = null;
+  var i, btn, LEVELS, vars, li, lp, targetHour, apiUrl, xhr, container, meta, err;
+  for(i = 0; i < WX_SKEWT_STATIONS.length; i++) {
+    if(WX_SKEWT_STATIONS[i].code === code) { st = WX_SKEWT_STATIONS[i]; break; }
+  }
+  if(!st) {
+    if(doneFn) doneFn(false);
+    return;
+  }
+  wxSkewtCode = st.code;
+  wxSkewtIcao = st.code;
+  for(i = 0; i < WX_SKEWT_STATIONS.length; i++) {
+    btn = document.getElementById('wx-skewt-btn-' + WX_SKEWT_STATIONS[i].code);
+    if(btn) {
+      btn.style.fontWeight = (WX_SKEWT_STATIONS[i].code === code) ? 'bold' : 'normal';
+      if(WX_SKEWT_STATIONS[i].code === code) btn.classList.add('wx-airport-active');
+      else btn.classList.remove('wx-airport-active');
+    }
+  }
+  container = document.getElementById('wx-skewt-container');
+  meta = document.getElementById('wx-skewt-meta');
+  err = document.getElementById('wx-skewt-err');
+  if(err) err.style.display = 'none';
+  if(meta) meta.textContent = st.code + ' (' + st.name + ') 取得中...';
+  if(container) container.innerHTML = '<span style="color:#666;font-size:12px;">取得中...</span>';
+
+  LEVELS = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100];
+  vars = [];
+  for(li = 0; li < LEVELS.length; li++) {
+    lp = LEVELS[li];
+    vars.push('temperature_' + lp + 'hPa');
+    vars.push('dewpoint_' + lp + 'hPa');
+    vars.push('windspeed_' + lp + 'hPa');
+    vars.push('winddirection_' + lp + 'hPa');
+    vars.push('geopotential_height_' + lp + 'hPa');
+  }
+  targetHour = wxOfpCurrentHourIso();
+  apiUrl = 'https://api.open-meteo.com/v1/forecast'
+    + '?latitude=' + st.lat.toFixed(4)
+    + '&longitude=' + st.lon.toFixed(4)
+    + '&hourly=' + vars.join(',')
+    + '&models=gfs_seamless&forecast_days=2&timezone=UTC';
+
+  xhr = new XMLHttpRequest();
+  xhr.open('GET', apiUrl, true);
+  xhr.responseType = 'text';
+  xhr.onload = function() {
+    var json, levels, ttl;
+    if(xhr.status === 200 && xhr.responseText) {
+      try { json = JSON.parse(xhr.responseText); } catch(e) { json = null; }
+      if(json) {
+        levels = wxOfpParseOpenMeteo(json, targetHour);
+        if(levels.length > 0) {
+          ttl = st.code + ' (' + st.name + ')  ' + targetHour + 'Z  GFS SKEW-T';
+          if(meta) meta.textContent = ttl;
+          wxOfpDrawSkewt(levels, ttl, function(dataUrl) {
+            var img;
+            if(container) {
+              img = document.createElement('img');
+              img.id = 'wx-skewt-img';
+              img.className = 'wx-chart-img';
+              img.src = dataUrl;
+              img.style.maxWidth = '100%';
+              container.innerHTML = '';
+              container.appendChild(img);
+            }
+            if(doneFn) doneFn(!!dataUrl);
+          });
+        } else {
+          if(container) container.innerHTML = '<span style="color:#f66">データなし (' + st.code + '  ' + targetHour + 'Z)</span>';
+          if(doneFn) doneFn(false);
+        }
+      } else {
+        if(container) container.innerHTML = '<span style="color:#f66">JSON 解析エラー</span>';
+        if(doneFn) doneFn(false);
+      }
+    } else {
+      if(container) container.innerHTML = '<span style="color:#f66">取得エラー HTTP ' + xhr.status + '</span>';
+      if(doneFn) doneFn(false);
+    }
+  };
+  xhr.onerror = function() {
+    if(container) container.innerHTML = '<span style="color:#f66">通信エラー</span>';
+    if(doneFn) doneFn(false);
+  };
+  xhr.send();
+}
+
 function wxSetSkewtAirport(icao, btn) {
-  var allBtns, i;
-  if(!icao || icao.length < 3) return;
-  wxSkewtIcao = String(icao).toUpperCase();
-  allBtns = document.querySelectorAll('#wx-panel-skewt .wx-airport-btn');
-  for(i = 0; i < allBtns.length; i++) { allBtns[i].classList.remove('wx-airport-active'); }
-  if(btn) btn.classList.add('wx-airport-active');
-  wxLoadSkewt(wxSkewtIcao);
+  wxSkewtLoad(icao);
 }
 
 function wxLoadSkewt(icao) {
-  var wmo = (typeof ICAO_TO_WMO !== 'undefined' && ICAO_TO_WMO[icao]) ? ICAO_TO_WMO[icao] : null;
-  var img = document.getElementById('wx-skewt-img');
-  var meta = document.getElementById('wx-skewt-meta');
-  var err = document.getElementById('wx-skewt-err');
-  var ttLink = document.getElementById('wx-skewt-tt-link');
-  var wyLink = document.getElementById('wx-skewt-wy-link');
-  var now, utcH, baseH, dateObj, wyUrl;
-  if(ttLink) ttLink.href = 'https://www.tropicaltidbits.com/analysis/soundings/?type=gfs&region=jap&location=' + icao;
-  if(!wmo) {
-    if(img) img.style.display = 'none';
-    if(err) err.style.display = 'block';
-    if(meta) meta.textContent = icao + ': WMO番号未登録';
-    return;
-  }
-  now = new Date();
-  utcH = now.getUTCHours();
-  baseH = utcH >= 12 ? 12 : 0;
-  dateObj = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), baseH, 0, 0));
-  wyUrl = (typeof buildSkewTUrl === 'function')
-    ? buildSkewTUrl(wmo, dateObj, true)
-    : ('https://weather.uwyo.edu/wsgi/sounding?datetime=' + dateObj.getUTCFullYear() + '-' + wxPad2(dateObj.getUTCMonth() + 1) + '-' + wxPad2(dateObj.getUTCDate()) + '+' + wxPad2(baseH) + ':00:00&id=' + wmo + '&type=PNG:SKEWT&src=FM35');
-  if(img) {
-    img.style.display = 'block';
-    img.onerror = function() {
-      var prevH = baseH === 12 ? 0 : 12;
-      var prevDate = (baseH === 0) ? new Date(now.getTime() - 86400000) : now;
-      var fbDate = new Date(Date.UTC(prevDate.getUTCFullYear(), prevDate.getUTCMonth(), prevDate.getUTCDate(), prevH, 0, 0));
-      var fallbackUrl = (typeof buildSkewTUrl === 'function')
-        ? buildSkewTUrl(wmo, fbDate, true)
-        : wyUrl;
-      img.onerror = function() {
-        img.style.display = 'none';
-        if(err) err.style.display = 'block';
-      };
-      img.src = wxProxyUrl(fallbackUrl);
-    };
-    img.src = wxProxyUrl(wyUrl);
-  }
-  if(err) err.style.display = 'none';
-  if(meta) meta.textContent = icao + ' (WMO:' + wmo + ') ' + dateObj.getUTCFullYear() + '-' + wxPad2(dateObj.getUTCMonth() + 1) + '-' + wxPad2(dateObj.getUTCDate()) + ' ' + wxPad2(baseH) + 'Z';
-  if(wyLink) wyLink.href = wyUrl;
+  wxSkewtLoad(icao || wxSkewtCode);
 }
 
 var wxOfpWaypoints = [];
@@ -3650,8 +3898,8 @@ function wxOfpCurrentHourIso() {
 }
 
 function wxOfpParseOpenMeteo(json, targetHour) {
-  var hourly, times, idx, i, ti, tms, diff, targetMs, best, bestDiff;
-  var p, T, RH, ws, wd, Td, arrT, arrRH, arrWs, arrWd, out, levels, hourStr;
+  var hourly, times, idx, i, ti, tms, diff, targetMs, best, bestDiff, key, m;
+  var p, T, RH, ws, wd, Td, arrT, arrRH, arrTd, arrWs, arrWd, out, levels, hourStr, seen;
   out = [];
   hourly = json && json.hourly ? json.hourly : null;
   if(!hourly || !hourly.time || !hourly.time.length) return out;
@@ -3671,12 +3919,24 @@ function wxOfpParseOpenMeteo(json, targetHour) {
     }
     idx = best;
   }
-  levels = (typeof OM_PLEVELS !== 'undefined' && OM_PLEVELS.length)
-    ? OM_PLEVELS
-    : [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200];
+  levels = [];
+  seen = {};
+  for(key in hourly) {
+    if(!Object.prototype.hasOwnProperty.call(hourly, key)) continue;
+    m = String(key).match(/^temperature_(\d+)hPa$/);
+    if(m) {
+      p = parseInt(m[1], 10);
+      if(!seen[p]) { seen[p] = 1; levels.push(p); }
+    }
+  }
+  if(!levels.length) {
+    levels = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100];
+  }
+  levels.sort(function(a, b) { return b - a; });
   for(i = 0; i < levels.length; i++) {
     p = levels[i];
     arrT = hourly['temperature_' + p + 'hPa'];
+    arrTd = hourly['dewpoint_' + p + 'hPa'] || hourly['dew_point_' + p + 'hPa'];
     arrRH = hourly['relative_humidity_' + p + 'hPa'] || hourly['relativehumidity_' + p + 'hPa'];
     arrWs = hourly['windspeed_' + p + 'hPa'] || hourly['wind_speed_' + p + 'hPa'];
     arrWd = hourly['winddirection_' + p + 'hPa'] || hourly['wind_direction_' + p + 'hPa'];
@@ -3685,125 +3945,97 @@ function wxOfpParseOpenMeteo(json, targetHour) {
     RH = arrRH && arrRH[idx] != null ? arrRH[idx] : 50;
     ws = arrWs && arrWs[idx] != null ? arrWs[idx] : 0;
     wd = arrWd && arrWd[idx] != null ? arrWd[idx] : 0;
-    Td = T - ((100 - RH) / 5);
-    out.push({ p: p, z: null, t: T, td: Td, d: wd, s: ws });
+    if(arrTd && arrTd[idx] != null) Td = arrTd[idx];
+    else Td = T - ((100 - RH) / 5);
+    out.push({
+      p: p, z: null, t: T, td: Td, d: wd, s: ws,
+      pres: p, temp: T, dwpt: Td, wdir: wd, wspd: ws
+    });
   }
-  out.sort(function(a, b) { return b.p - a.p; });
+  out.sort(function(a, b) { return b.pres - a.pres; });
   return out;
 }
 
 function wxOfpDrawWindBarb(ctx, x, y, speed_kt, dir_deg) {
   ctx.save();
-  ctx.strokeStyle = '#dddddd';
-  ctx.fillStyle = '#dddddd';
-  ctx.lineWidth = 1.2;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#222222'; ctx.fillStyle = '#222222';
+  ctx.lineWidth = 1.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
   if(speed_kt < 2.5) {
-    ctx.beginPath();
-    ctx.arc(x, y, 4, 0, 2 * Math.PI);
-    ctx.stroke();
-    ctx.restore();
-    return;
+    ctx.beginPath(); ctx.arc(x, y, 4, 0, 2 * Math.PI); ctx.stroke();
+    ctx.restore(); return;
   }
 
   var angle = (dir_deg - 90) * Math.PI / 180;
-  var dx = Math.cos(angle);
-  var dy = Math.sin(angle);
-  var perpX = -dy;
-  var perpY = dx;
-  var shaftLen = 26;
-  var barbH = 10;
-  var spacing = 5;
-  var pennants, rem, fulls, halfs, cx, cy, stepX, stepY, pi, fi, hi, nx, ny;
+  var dx = Math.cos(angle), dy = Math.sin(angle);
+  var perpX = -dy, perpY = dx;
+  var shaftLen = 26, barbH = 10, spacing = 5;
+  var pn, rem, fl, hl, cx, cy, sx, sy, pi, fi, hi, nx, ny;
 
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x + dx * shaftLen, y + dy * shaftLen);
-  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + dx * shaftLen, y + dy * shaftLen); ctx.stroke();
 
-  pennants = Math.floor(speed_kt / 50);
-  rem = speed_kt - pennants * 50;
-  fulls = Math.floor(rem / 10);
-  rem -= fulls * 10;
-  halfs = Math.round(rem / 5);
+  pn = Math.floor(speed_kt / 50);
+  rem = speed_kt - pn * 50;
+  fl = Math.floor(rem / 10); rem -= fl * 10;
+  hl = Math.round(rem / 5);
 
-  cx = x + dx * shaftLen;
-  cy = y + dy * shaftLen;
-  stepX = -dx * spacing;
-  stepY = -dy * spacing;
+  cx = x + dx * shaftLen; cy = y + dy * shaftLen;
+  sx = -dx * spacing; sy = -dy * spacing;
 
-  for(pi = 0; pi < pennants; pi++) {
-    nx = cx + stepX * 2;
-    ny = cy + stepY * 2;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + perpX * barbH, cy + perpY * barbH);
-    ctx.lineTo(nx, ny);
-    ctx.closePath();
-    ctx.fill();
+  for(pi = 0; pi < pn; pi++) {
+    nx = cx + sx * 2; ny = cy + sy * 2;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + perpX * barbH, cy + perpY * barbH); ctx.lineTo(nx, ny);
+    ctx.closePath(); ctx.fill();
     cx = nx; cy = ny;
   }
+  if(pn > 0) { cx += sx; cy += sy; }
 
-  if(pennants > 0) {
-    cx += stepX; cy += stepY;
+  for(fi = 0; fi < fl; fi++) {
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + perpX * barbH, cy + perpY * barbH); ctx.stroke();
+    cx += sx; cy += sy;
   }
-
-  for(fi = 0; fi < fulls; fi++) {
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + perpX * barbH, cy + perpY * barbH);
-    ctx.stroke();
-    cx += stepX; cy += stepY;
+  for(hi = 0; hi < hl; hi++) {
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + perpX * barbH * 0.5, cy + perpY * barbH * 0.5); ctx.stroke();
+    cx += sx; cy += sy;
   }
-
-  for(hi = 0; hi < halfs; hi++) {
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + perpX * barbH * 0.5, cy + perpY * barbH * 0.5);
-    ctx.stroke();
-    cx += stepX; cy += stepY;
-  }
-
   ctx.restore();
 }
 
 function wxOfpDrawSkewt(levels, title, cb) {
-  var W = 720, H = 820;
-  var PAD_L = 68, PAD_R = 155, PAD_T = 52, PAD_B = 58;
+  var W = 870, H = 820;
+  var PAD_L = 70, PAD_R = 220, PAD_T = 50, PAD_B = 55;
   var plotW = W - PAD_L - PAD_R;
   var plotH = H - PAD_T - PAD_B;
   var T_MIN = -50, T_RANGE = 100;
   var SKEW = 1.0;
   var P_BOT = 1050, P_TOP = 100;
-  var logPBot = Math.log(P_BOT);
-  var logPTop = Math.log(P_TOP);
+  var logPBot = Math.log(P_BOT), logPTop = Math.log(P_TOP);
   var canvas, ctx, sorted, i, lv, dataUrl;
-  var mrVals, mi, w, mFirst, mp, es_mr, lnVal, Td_mr, mx, my;
-  var thetaArr, ai, theta_K, aFirst, ap, T_da, ax, ay;
-  var tw0Arr, wi, maTk, wap, maEs, maWs, maLv, maRd, maRv, maCp, maG;
-  var maNum, maDen, maDtdp, wx, wy;
-  var T_iso, is0C, PLIST, PMAJOR, pi2, pv, isMajor, pyy, pi3;
-  var T_lbl, lx, is0, FL_DATA, xFL, fi, fd, yfl;
-  var tFirst, tx, ty, dFirst, dx2, dy2;
-  var xBarb, spd_kt;
-  var T850, T500, Td850, T700, Td700, Dd700, KI, idxLines, xIdx, yIdx, ii;
-  var legendItems, ly, item;
+  var mrVals, mi, w, mFst, mp, esM, lM, TdM;
+  var thetaArr, ai, thK, aFst, ap, Tda;
+  var tw0Arr, wi, maTk, wap, maEs, maWs, maNum, maDen, maDtp;
+  var Ti, is0, PLIST, PMAJ, pi2, pv, pi3, py;
+  var Tl, lx2, is0l, FL_DATA, fi, fd, yfl;
+  var dgzBot, dgzTop, dgzY1, dgzY2, li;
+  var wbFst, esT, esTd, rh, tw, dFst, tFst;
+  var xBarb, hodoX, hodoR, hodoCX, hodoCY, ktScale, hr, hFst, spd2, dRad, u, v, hx, hy;
+  var idxX, idxY, T850, T500, Td850, T700, Td700, Dd700, KI, idxRows, ii, row;
+  var lgItems, lgX, lgY;
 
   function yP(p) {
     var f = (logPBot - Math.log(p)) / (logPBot - logPTop);
     return PAD_T + (1 - f) * plotH;
   }
-
   function xT(t, p) {
     var f = (logPBot - Math.log(p)) / (logPBot - logPTop);
     return PAD_L + ((t - T_MIN) / T_RANGE + SKEW * f) * plotW;
   }
 
   canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
+  canvas.width = W; canvas.height = H;
   ctx = canvas.getContext('2d');
 
   sorted = [];
@@ -3812,283 +4044,293 @@ function wxOfpDrawSkewt(levels, title, cb) {
     lv = levels[i];
     sorted.push({
       pres: lv.pres != null ? lv.pres : lv.p,
-      temp: lv.temp != null ? lv.temp : lv.t,
-      dwpt: lv.dwpt != null ? lv.dwpt : lv.td,
-      wspd: lv.wspd != null ? lv.wspd : lv.s,
-      wdir: lv.wdir != null ? lv.wdir : lv.d
+      temp: lv.temp != null ? lv.temp : (lv.t != null ? lv.t : lv.T),
+      dwpt: lv.dwpt != null ? lv.dwpt : (lv.td != null ? lv.td : lv.Td),
+      wspd: lv.wspd != null ? lv.wspd : (lv.s != null ? lv.s : lv.ws),
+      wdir: lv.wdir != null ? lv.wdir : (lv.d != null ? lv.d : lv.wd)
     });
   }
   sorted.sort(function(a, b) { return b.pres - a.pres; });
 
-  ctx.fillStyle = '#0d1b2a';
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#f9f9f7'; ctx.fillRect(PAD_L, PAD_T, plotW, plotH);
 
   ctx.save();
-  ctx.beginPath();
-  ctx.rect(PAD_L, PAD_T, plotW, plotH);
-  ctx.clip();
+  ctx.beginPath(); ctx.rect(PAD_L, PAD_T, plotW, plotH); ctx.clip();
 
   mrVals = [1, 2, 4, 7, 10, 16, 20];
-  ctx.lineWidth = 0.7;
-  ctx.strokeStyle = '#1d7a3a';
-  if(ctx.setLineDash) ctx.setLineDash([4, 7]);
+  ctx.lineWidth = 0.7; ctx.strokeStyle = '#66aa55';
+  if(ctx.setLineDash) ctx.setLineDash([3, 6]);
   for(mi = 0; mi < mrVals.length; mi++) {
     w = mrVals[mi];
-    ctx.beginPath();
-    mFirst = true;
-    for(mp = 1000; mp >= 500; mp -= 5) {
-      es_mr = w * mp / (622 + w);
-      if(es_mr <= 0) continue;
-      lnVal = Math.log(es_mr / 6.112);
-      Td_mr = 243.5 * lnVal / (17.67 - lnVal);
-      mx = xT(Td_mr, mp); my = yP(mp);
-      if(mFirst) { ctx.moveTo(mx, my); mFirst = false; }
-      else ctx.lineTo(mx, my);
+    ctx.beginPath(); mFst = true;
+    for(mp = 1000; mp >= 600; mp -= 5) {
+      esM = w * mp / (622 + w);
+      if(esM <= 0) continue;
+      lM = Math.log(esM / 6.112);
+      TdM = 243.5 * lM / (17.67 - lM);
+      if(mFst) { ctx.moveTo(xT(TdM, mp), yP(mp)); mFst = false; }
+      else ctx.lineTo(xT(TdM, mp), yP(mp));
     }
     ctx.stroke();
   }
   if(ctx.setLineDash) ctx.setLineDash([]);
 
   thetaArr = [-30, -20, -10, 0, 10, 20, 30, 40, 50, 60, 70, 80];
-  ctx.lineWidth = 0.7;
-  ctx.strokeStyle = '#8a4000';
+  ctx.lineWidth = 0.7; ctx.strokeStyle = '#cc8800';
   if(ctx.setLineDash) ctx.setLineDash([5, 5]);
   for(ai = 0; ai < thetaArr.length; ai++) {
-    theta_K = thetaArr[ai] + 273.15;
-    ctx.beginPath();
-    aFirst = true;
+    thK = thetaArr[ai] + 273.15;
+    ctx.beginPath(); aFst = true;
     for(ap = P_BOT; ap >= P_TOP; ap -= 5) {
-      T_da = theta_K * Math.pow(ap / 1000, 0.2854) - 273.15;
-      ax = xT(T_da, ap); ay = yP(ap);
-      if(aFirst) { ctx.moveTo(ax, ay); aFirst = false; }
-      else ctx.lineTo(ax, ay);
+      Tda = thK * Math.pow(ap / 1000, 0.2854) - 273.15;
+      if(aFst) { ctx.moveTo(xT(Tda, ap), yP(ap)); aFst = false; }
+      else ctx.lineTo(xT(Tda, ap), yP(ap));
     }
     ctx.stroke();
   }
   if(ctx.setLineDash) ctx.setLineDash([]);
 
   tw0Arr = [0, 5, 10, 15, 20, 24, 28, 32];
-  ctx.lineWidth = 0.8;
-  ctx.strokeStyle = '#2a8a3a';
-  if(ctx.setLineDash) ctx.setLineDash([2, 6]);
+  ctx.lineWidth = 0.7; ctx.strokeStyle = '#8888cc';
+  if(ctx.setLineDash) ctx.setLineDash([2, 5]);
   for(wi = 0; wi < tw0Arr.length; wi++) {
     maTk = tw0Arr[wi] + 273.15;
-    ctx.beginPath();
-    ctx.moveTo(xT(tw0Arr[wi], 1000), yP(1000));
+    ctx.beginPath(); ctx.moveTo(xT(tw0Arr[wi], 1000), yP(1000));
     for(wap = 995; wap >= P_TOP; wap -= 5) {
       maEs = 6.112 * Math.exp(17.67 * (maTk - 273.15) / (maTk - 29.65));
       maWs = 0.622 * maEs / Math.max(wap + 5 - maEs, 0.01);
-      maLv = 2.5e6; maRd = 287; maRv = 461.5; maCp = 1004; maG = 9.81;
-      maNum = 1 + maLv * maWs / (maRd * maTk);
-      maDen = 1 + maLv * maLv * maWs / (maCp * maRv * maTk * maTk);
-      maDtdp = -(maG / maCp) * (maNum / maDen) * maRd * maTk / ((wap + 5) * maG * 100);
-      maTk = maTk + maDtdp * (-5);
+      maNum = 1 + 2.5e6 * maWs / (287 * maTk);
+      maDen = 1 + 2.5e6 * 2.5e6 * maWs / (1004 * 461.5 * maTk * maTk);
+      maDtp = -(9.81 / 1004) * (maNum / maDen) * 287 * maTk / ((wap + 5) * 9.81 * 100);
+      maTk += maDtp * (-5);
       if(maTk < 170) break;
-      wx = xT(maTk - 273.15, wap); wy = yP(wap);
-      ctx.lineTo(wx, wy);
+      ctx.lineTo(xT(maTk - 273.15, wap), yP(wap));
     }
     ctx.stroke();
   }
   if(ctx.setLineDash) ctx.setLineDash([]);
 
-  for(T_iso = -120; T_iso <= 60; T_iso += 10) {
-    is0C = (T_iso === 0);
-    ctx.lineWidth = is0C ? 1.8 : 0.6;
-    ctx.strokeStyle = is0C ? '#00cc77' : '#193c5c';
+  for(Ti = -120; Ti <= 60; Ti += 10) {
+    is0 = (Ti === 0);
+    ctx.lineWidth = is0 ? 1.5 : 0.6;
+    ctx.strokeStyle = is0 ? '#009966' : '#cccccc';
     ctx.beginPath();
-    ctx.moveTo(xT(T_iso, P_BOT), yP(P_BOT));
-    ctx.lineTo(xT(T_iso, P_TOP), yP(P_TOP));
+    ctx.moveTo(xT(Ti, P_BOT), yP(P_BOT));
+    ctx.lineTo(xT(Ti, P_TOP), yP(P_TOP));
     ctx.stroke();
   }
 
   PLIST = [100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000];
-  PMAJOR = {100:1, 200:1, 300:1, 500:1, 700:1, 850:1, 925:1, 1000:1};
+  PMAJ = {100:1, 200:1, 300:1, 500:1, 700:1, 850:1, 925:1, 1000:1};
   for(pi2 = 0; pi2 < PLIST.length; pi2++) {
     pv = PLIST[pi2];
-    isMajor = !!PMAJOR[pv];
-    pyy = yP(pv);
-    ctx.beginPath();
-    ctx.moveTo(PAD_L, pyy);
-    ctx.lineTo(PAD_L + plotW, pyy);
-    ctx.strokeStyle = isMajor ? '#2a4a6a' : '#192a40';
-    ctx.lineWidth = isMajor ? 1.0 : 0.5;
-    ctx.stroke();
+    ctx.strokeStyle = PMAJ[pv] ? '#999999' : '#dddddd';
+    ctx.lineWidth = PMAJ[pv] ? 0.8 : 0.4;
+    ctx.beginPath(); ctx.moveTo(PAD_L, yP(pv)); ctx.lineTo(PAD_L + plotW, yP(pv)); ctx.stroke();
   }
 
   ctx.restore();
 
-  ctx.textAlign = 'right';
-  ctx.font = '11px monospace';
-  ctx.fillStyle = '#7ab4d4';
+  ctx.textAlign = 'right'; ctx.font = '11px monospace'; ctx.fillStyle = '#333333';
   for(pi3 = 0; pi3 < PLIST.length; pi3++) {
-    pv = PLIST[pi3];
-    pyy = yP(pv);
-    ctx.fillText(pv + '', PAD_L - 5, pyy + 4);
-    ctx.beginPath();
-    ctx.moveTo(PAD_L - 4, pyy);
-    ctx.lineTo(PAD_L, pyy);
-    ctx.strokeStyle = '#7ab4d4';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    pv = PLIST[pi3]; py = yP(pv);
+    ctx.fillText(pv + '', PAD_L - 4, py + 4);
+    ctx.beginPath(); ctx.moveTo(PAD_L - 3, py); ctx.lineTo(PAD_L, py);
+    ctx.strokeStyle = '#555555'; ctx.lineWidth = 1; ctx.stroke();
   }
 
-  ctx.save();
-  ctx.font = '10px sans-serif';
-  ctx.fillStyle = '#5a8aaa';
-  ctx.textAlign = 'center';
-  ctx.translate(14, PAD_T + plotH / 2);
-  ctx.rotate(-Math.PI / 2);
-  ctx.fillText('hPa', 0, 0);
+  ctx.save(); ctx.translate(14, PAD_T + plotH / 2); ctx.rotate(-Math.PI / 2);
+  ctx.font = '10px sans-serif'; ctx.fillStyle = '#333333'; ctx.textAlign = 'center';
+  ctx.fillText('Pressure (hPa)', 0, 0);
   ctx.restore();
 
   ctx.textAlign = 'center';
-  for(T_lbl = -40; T_lbl <= 40; T_lbl += 10) {
-    lx = xT(T_lbl, P_BOT);
-    if(lx < PAD_L || lx > PAD_L + plotW) continue;
-    is0 = (T_lbl === 0);
-    ctx.fillStyle = is0 ? '#00cc77' : '#5a8aaa';
-    ctx.font = is0 ? 'bold 9px sans-serif' : '9px sans-serif';
-    ctx.fillText(T_lbl + '°', lx, PAD_T + plotH + 16);
+  for(Tl = -40; Tl <= 40; Tl += 10) {
+    lx2 = xT(Tl, P_BOT);
+    if(lx2 < PAD_L || lx2 > PAD_L + plotW) continue;
+    is0l = (Tl === 0);
+    ctx.fillStyle = is0l ? '#009966' : '#555555';
+    ctx.font = is0l ? 'bold 9px sans-serif' : '9px sans-serif';
+    ctx.fillText(Tl + '°', lx2, PAD_T + plotH + 15);
   }
-  ctx.font = '10px sans-serif';
-  ctx.fillStyle = '#5a8aaa';
-  ctx.fillText('Temperature (°C)  —  skewed', PAD_L + plotW / 2, H - 5);
+  ctx.font = '10px sans-serif'; ctx.fillStyle = '#333333';
+  ctx.fillText('Temperature (°C)', PAD_L + plotW / 2, H - 4);
 
   FL_DATA = [
-    {fl:'FL450', p:150}, {fl:'FL390', p:200}, {fl:'FL340', p:257},
-    {fl:'FL300', p:301}, {fl:'FL240', p:400}, {fl:'FL180', p:507},
-    {fl:'FL140', p:598}, {fl:'FL100', p:697}, {fl:'FL050', p:843}
+    {fl:'FL450',p:150},{fl:'FL390',p:200},{fl:'FL340',p:257},
+    {fl:'FL300',p:301},{fl:'FL240',p:400},{fl:'FL180',p:507},
+    {fl:'FL140',p:598},{fl:'FL100',p:697},{fl:'FL050',p:843}
   ];
-  xFL = PAD_L + plotW + 6;
-  ctx.textAlign = 'left';
-  ctx.font = '9px monospace';
-  ctx.fillStyle = '#a0c8e8';
+  ctx.textAlign = 'left'; ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#cc0000';
   for(fi = 0; fi < FL_DATA.length; fi++) {
-    fd = FL_DATA[fi];
-    yfl = yP(fd.p);
-    ctx.beginPath();
-    ctx.moveTo(PAD_L + plotW, yfl);
-    ctx.lineTo(PAD_L + plotW + 4, yfl);
-    ctx.strokeStyle = '#4a7a9a';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.fillText(fd.fl, xFL, yfl + 3);
+    fd = FL_DATA[fi]; yfl = yP(fd.p);
+    ctx.beginPath(); ctx.moveTo(PAD_L + plotW, yfl); ctx.lineTo(PAD_L + plotW + 4, yfl);
+    ctx.strokeStyle = '#cc0000'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillText(fd.fl, PAD_L + plotW + 6, yfl + 3);
+  }
+
+  dgzBot = null; dgzTop = null;
+  for(li = 0; li < sorted.length; li++) {
+    lv = sorted[li];
+    if(lv.temp !== null && lv.temp !== undefined && lv.temp <= -10 && lv.temp >= -20) {
+      if(dgzBot === null) dgzBot = lv.pres;
+      dgzTop = lv.pres;
+    }
+  }
+  if(dgzBot !== null && dgzTop !== null && dgzBot !== dgzTop) {
+    if(ctx.setLineDash) ctx.setLineDash([5, 3]);
+    ctx.lineWidth = 1.5; ctx.strokeStyle = '#ff3333';
+    dgzY1 = yP(dgzBot); dgzY2 = yP(dgzTop);
+    ctx.beginPath(); ctx.moveTo(PAD_L - 10, dgzY1); ctx.lineTo(PAD_L + 2, dgzY1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(PAD_L - 10, dgzY2); ctx.lineTo(PAD_L + 2, dgzY2); ctx.stroke();
+    if(ctx.setLineDash) ctx.setLineDash([]);
+    ctx.font = '8px sans-serif'; ctx.fillStyle = '#ff3333'; ctx.textAlign = 'right';
+    ctx.fillText('DGZ', PAD_L - 2, (dgzY1 + dgzY2) / 2 + 3);
   }
 
   if(sorted.length > 0) {
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(PAD_L, PAD_T, plotW, plotH);
-    ctx.clip();
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.rect(PAD_L, PAD_T, plotW, plotH); ctx.clip();
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 
     ctx.beginPath();
-    tFirst = true;
-    for(i = 0; i < sorted.length; i++) {
-      lv = sorted[i];
-      if(lv.temp === null || lv.temp === undefined) continue;
-      tx = xT(lv.temp, lv.pres); ty = yP(lv.pres);
-      if(tFirst) { ctx.moveTo(tx, ty); tFirst = false; }
-      else ctx.lineTo(tx, ty);
+    wbFst = true;
+    for(li = 0; li < sorted.length; li++) {
+      lv = sorted[li];
+      if(lv.temp === null || lv.dwpt === null || lv.temp === undefined || lv.dwpt === undefined) continue;
+      esT = Math.exp(17.67 * lv.temp / (lv.temp + 243.5));
+      esTd = Math.exp(17.67 * lv.dwpt / (lv.dwpt + 243.5));
+      rh = esTd / esT;
+      tw = lv.temp - (1 - rh) * (lv.temp - lv.dwpt) * 0.37;
+      if(wbFst) { ctx.moveTo(xT(tw, lv.pres), yP(lv.pres)); wbFst = false; }
+      else ctx.lineTo(xT(tw, lv.pres), yP(lv.pres));
     }
-    ctx.strokeStyle = '#ff4444';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
+    ctx.strokeStyle = '#aa44aa'; ctx.lineWidth = 1.2; ctx.stroke();
 
-    ctx.beginPath();
-    dFirst = true;
-    for(i = 0; i < sorted.length; i++) {
-      lv = sorted[i];
+    ctx.beginPath(); dFst = true;
+    for(li = 0; li < sorted.length; li++) {
+      lv = sorted[li];
       if(lv.dwpt === null || lv.dwpt === undefined) continue;
-      dx2 = xT(lv.dwpt, lv.pres); dy2 = yP(lv.pres);
-      if(dFirst) { ctx.moveTo(dx2, dy2); dFirst = false; }
-      else ctx.lineTo(dx2, dy2);
+      if(dFst) { ctx.moveTo(xT(lv.dwpt, lv.pres), yP(lv.pres)); dFst = false; }
+      else ctx.lineTo(xT(lv.dwpt, lv.pres), yP(lv.pres));
     }
-    ctx.strokeStyle = '#44ccff';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
+    ctx.strokeStyle = '#00aa00'; ctx.lineWidth = 2.5; ctx.stroke();
 
-    for(i = 0; i < sorted.length; i++) {
-      lv = sorted[i];
+    ctx.beginPath(); tFst = true;
+    for(li = 0; li < sorted.length; li++) {
+      lv = sorted[li];
+      if(lv.temp === null || lv.temp === undefined) continue;
+      if(tFst) { ctx.moveTo(xT(lv.temp, lv.pres), yP(lv.pres)); tFst = false; }
+      else ctx.lineTo(xT(lv.temp, lv.pres), yP(lv.pres));
+    }
+    ctx.strokeStyle = '#ff2200'; ctx.lineWidth = 2.5; ctx.stroke();
+
+    for(li = 0; li < sorted.length; li++) {
+      lv = sorted[li];
       if(lv.temp !== null && lv.temp !== undefined) {
-        ctx.beginPath();
-        ctx.arc(xT(lv.temp, lv.pres), yP(lv.pres), 2.5, 0, 2 * Math.PI);
-        ctx.fillStyle = '#ff8888';
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(xT(lv.temp, lv.pres), yP(lv.pres), 2, 0, 2 * Math.PI);
+        ctx.fillStyle = '#ff4444'; ctx.fill();
       }
       if(lv.dwpt !== null && lv.dwpt !== undefined) {
-        ctx.beginPath();
-        ctx.arc(xT(lv.dwpt, lv.pres), yP(lv.pres), 2.5, 0, 2 * Math.PI);
-        ctx.fillStyle = '#66ddff';
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(xT(lv.dwpt, lv.pres), yP(lv.pres), 2, 0, 2 * Math.PI);
+        ctx.fillStyle = '#00cc00'; ctx.fill();
       }
     }
-
     ctx.restore();
   }
 
   xBarb = PAD_L + plotW + 100;
-  for(i = 0; i < sorted.length; i++) {
-    lv = sorted[i];
-    spd_kt = lv.wspd || 0;
-    wxOfpDrawWindBarb(ctx, xBarb, yP(lv.pres), spd_kt, lv.wdir || 0);
+  for(li = 0; li < sorted.length; li++) {
+    lv = sorted[li];
+    wxOfpDrawWindBarb(ctx, xBarb, yP(lv.pres), (lv.wspd || 0) * 0.53996, lv.wdir || 0);
   }
 
+  hodoX = PAD_L + plotW + 135;
+  hodoR = 65;
+  hodoCX = hodoX + hodoR + 5; hodoCY = PAD_T + hodoR + 10;
+
+  ctx.fillStyle = '#f4f4f4';
+  ctx.fillRect(hodoX, PAD_T, hodoR * 2 + 10, hodoR * 2 + 10);
+  ctx.strokeStyle = '#aaaaaa'; ctx.lineWidth = 0.5;
+  ctx.strokeRect(hodoX, PAD_T, hodoR * 2 + 10, hodoR * 2 + 10);
+
+  ktScale = hodoR / 80;
+  ctx.strokeStyle = '#cccccc'; ctx.lineWidth = 0.5;
+  for(hr = 20; hr <= 80; hr += 20) {
+    ctx.beginPath(); ctx.arc(hodoCX, hodoCY, hr * ktScale, 0, 2 * Math.PI); ctx.stroke();
+  }
+  ctx.beginPath(); ctx.moveTo(hodoX + 2, hodoCY); ctx.lineTo(hodoX + hodoR * 2 + 8, hodoCY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(hodoCX, PAD_T + 2); ctx.lineTo(hodoCX, PAD_T + hodoR * 2 + 8); ctx.stroke();
+
+  if(sorted.length > 0) {
+    ctx.lineWidth = 1.5; ctx.strokeStyle = '#0055cc';
+    ctx.beginPath(); hFst = true;
+    for(li = sorted.length - 1; li >= 0; li--) {
+      lv = sorted[li];
+      if(!lv.wspd || lv.pres < 250) continue;
+      spd2 = lv.wspd * 0.53996;
+      dRad = lv.wdir * Math.PI / 180;
+      u = -spd2 * Math.sin(dRad);
+      v = -spd2 * Math.cos(dRad);
+      hx = hodoCX + u * ktScale; hy = hodoCY - v * ktScale;
+      if(hFst) { ctx.moveTo(hx, hy); hFst = false; } else ctx.lineTo(hx, hy);
+    }
+    ctx.stroke();
+  }
+  ctx.font = '8px sans-serif'; ctx.fillStyle = '#333333'; ctx.textAlign = 'center';
+  ctx.fillText('Hodograph (wind in kt)', hodoCX, PAD_T + hodoR * 2 + 22);
+
+  idxX = hodoX; idxY = PAD_T + hodoR * 2 + 32;
   T850 = null; T500 = null; Td850 = null; T700 = null; Td700 = null;
-  for(i = 0; i < sorted.length; i++) {
-    lv = sorted[i];
+  for(li = 0; li < sorted.length; li++) {
+    lv = sorted[li];
     if(lv.pres === 850) { T850 = lv.temp; Td850 = lv.dwpt; }
     if(lv.pres === 700) { T700 = lv.temp; Td700 = lv.dwpt; }
-    if(lv.pres === 500) { T500 = lv.temp; }
+    if(lv.pres === 500) T500 = lv.temp;
   }
-  idxLines = [];
+
+  ctx.font = '9px monospace'; ctx.textAlign = 'left';
+  idxRows = [];
   if(T850 !== null && T500 !== null) {
     Dd700 = (T700 !== null && Td700 !== null) ? (T700 - Td700) : 30;
     KI = (T850 - T500) + (Td850 !== null ? Td850 : 0) - Dd700;
-    idxLines.push('K: ' + KI.toFixed(0));
+    idxRows.push({ lbl: 'K-Index:', val: KI.toFixed(0), col: KI > 30 ? '#cc0000' : (KI > 20 ? '#cc7700' : '#333333') });
+    idxRows.push({ lbl: 'T850-T500:', val: (T850 - T500).toFixed(1) + 'K', col: '#333333' });
   }
-  if(T850 !== null) idxLines.push('T850: ' + T850.toFixed(0) + '°C');
-  if(T500 !== null) idxLines.push('T500: ' + T500.toFixed(0) + '°C');
+  if(T850 !== null) idxRows.push({ lbl: 'T850:', val: T850.toFixed(1) + '°C', col: '#333333' });
+  if(T700 !== null) idxRows.push({ lbl: 'T700:', val: T700.toFixed(1) + '°C', col: '#333333' });
+  if(T500 !== null) idxRows.push({ lbl: 'T500:', val: T500.toFixed(1) + '°C', col: '#333333' });
+  if(Td850 !== null) idxRows.push({ lbl: 'Td850:', val: Td850.toFixed(1) + '°C', col: '#00aa00' });
 
-  if(idxLines.length > 0) {
-    xIdx = PAD_L + plotW + 6;
-    yIdx = PAD_T + plotH - 10 - (idxLines.length - 1) * 14;
-    ctx.font = '9px monospace';
-    ctx.fillStyle = '#90b8d8';
+  for(ii = 0; ii < idxRows.length; ii++) {
+    row = idxRows[ii];
+    ctx.fillStyle = '#555555'; ctx.fillText(row.lbl, idxX, idxY + ii * 14);
+    ctx.fillStyle = row.col; ctx.textAlign = 'right';
+    ctx.fillText(row.val, idxX + hodoR * 2 + 10, idxY + ii * 14);
     ctx.textAlign = 'left';
-    for(ii = 0; ii < idxLines.length; ii++) {
-      ctx.fillText(idxLines[ii], xIdx, yIdx + ii * 14);
-    }
   }
 
-  ctx.textAlign = 'center';
-  ctx.font = 'bold 13px sans-serif';
-  ctx.fillStyle = '#e0f0ff';
-  ctx.fillText(title || 'SKEW-T', W / 2, PAD_T - 10);
+  ctx.textAlign = 'center'; ctx.font = 'bold 13px sans-serif'; ctx.fillStyle = '#000000';
+  ctx.fillText(title || 'SKEW-T', PAD_L + plotW / 2, PAD_T - 10);
 
-  ctx.strokeStyle = '#3a6a8a';
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = '#000000'; ctx.lineWidth = 1.5;
   ctx.strokeRect(PAD_L, PAD_T, plotW, plotH);
 
-  legendItems = [
-    { color: '#ff4444', label: 'Temp' },
-    { color: '#44ccff', label: 'Dewpt' },
-    { color: '#00cc77', label: '0°C' },
-    { color: '#2a8a3a', label: 'Moist' },
-    { color: '#8a4000', label: 'Dry' }
+  lgItems = [
+    { c: '#ff2200', l: 'Temperature' }, { c: '#00aa00', l: 'Dewpoint' },
+    { c: '#aa44aa', l: 'Wetbulb' }, { c: '#009966', l: '0°C isotherm' },
+    { c: '#8888cc', l: 'Pseudoadiabat' }, { c: '#cc8800', l: 'Dry Adiabat' }
   ];
-  ctx.textAlign = 'left';
-  ctx.font = '9px sans-serif';
-  lx = PAD_L + 4; ly = PAD_T + plotH - 8;
-  for(ii = 0; ii < legendItems.length; ii++) {
-    item = legendItems[ii];
-    ctx.fillStyle = item.color;
-    ctx.fillRect(lx, ly - 6, 18, 3);
-    ctx.fillStyle = '#c0d8f0';
-    ctx.fillText(item.label, lx + 22, ly);
-    lx += 72;
+  ctx.textAlign = 'left'; ctx.font = '8px sans-serif';
+  lgX = PAD_L + 4; lgY = PAD_T + 10;
+  for(ii = 0; ii < lgItems.length; ii++) {
+    ctx.fillStyle = lgItems[ii].c; ctx.fillRect(lgX, lgY + ii * 11 - 6, 14, 2.5);
+    ctx.fillStyle = '#333333'; ctx.fillText(lgItems[ii].l, lgX + 18, lgY + ii * 11);
   }
+
+  ctx.textAlign = 'right'; ctx.font = '7px sans-serif'; ctx.fillStyle = '#aaaaaa';
+  ctx.fillText('GFS / Open-Meteo', PAD_L + plotW - 2, PAD_T + plotH - 3);
 
   dataUrl = '';
   try { dataUrl = canvas.toDataURL('image/png'); } catch(e) { dataUrl = ''; }
@@ -4112,7 +4354,7 @@ function wxOfpOpenMeteoUrl(lat, lon, hourIso) {
     + '?latitude=' + lat + '&longitude=' + lon
     + '&hourly=' + vars.join(',')
     + '&start_date=' + dateStr + '&end_date=' + dateStr
-    + '&timezone=UTC&wind_speed_unit=kn';
+    + '&timezone=UTC';
 }
 
 function wxOfpFetchSelected() {
@@ -4427,7 +4669,7 @@ function wxBulkFetch() {
     return resolved && resolved.url ? resolved.url : null;
   };
 
-  wxFetchHtmlImage('kazan', 'https://www.data.jma.go.jp/vaac/data/indexj.html', function(ok) {
+  wxLoadKazan(function(ok) {
     if(ok) markOk('kazan'); else markErr('kazan');
   });
 
@@ -4435,6 +4677,7 @@ function wxBulkFetch() {
     var out = document.getElementById('wx-metar-output');
     var xhrM = new XMLHttpRequest();
     key = wxCheckwxKey();
+    wxFetchAtis(wxMetarIcao, 'wx-atis-box');
     xhrM.open('GET', 'https://api.checkwx.com/v2/metar/' + wxMetarIcao + '/decoded', true);
     xhrM.setRequestHeader('X-API-Key', key);
     xhrM.onload = function() {
@@ -4532,26 +4775,9 @@ function wxBulkFetch() {
   })();
 
   (function() {
-    var wmo = (typeof ICAO_TO_WMO !== 'undefined' && ICAO_TO_WMO[wxSkewtIcao]) ? ICAO_TO_WMO[wxSkewtIcao] : null;
-    var now, utcH, baseH, dateObj, wyUrl, probe;
-    if(!wmo) { markErr('skewt'); return; }
-    now = new Date();
-    utcH = now.getUTCHours();
-    baseH = utcH >= 12 ? 12 : 0;
-    dateObj = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), baseH, 0, 0));
-    wyUrl = (typeof buildSkewTUrl === 'function')
-      ? buildSkewTUrl(wmo, dateObj, true)
-      : ('https://weather.uwyo.edu/wsgi/sounding?datetime=' + dateObj.getUTCFullYear() + '-' + wxPad2(dateObj.getUTCMonth() + 1) + '-' + wxPad2(dateObj.getUTCDate()) + '+' + wxPad2(baseH) + ':00:00&id=' + wmo + '&type=PNG:SKEWT&src=FM35');
-    probe = new Image();
-    probe.onload = function() {
-      wxLoadSkewt(wxSkewtIcao);
-      markOk('skewt');
-    };
-    probe.onerror = function() {
-      wxLoadSkewt(wxSkewtIcao);
-      markErr('skewt');
-    };
-    probe.src = wxProxyUrl(wyUrl);
+    wxSkewtLoad(wxSkewtCode || 'SIN', function(ok) {
+      if(ok) markOk('skewt'); else markErr('skewt');
+    });
   })();
 }
 

@@ -32,7 +32,8 @@ async function handleRequest(request) {
     'www.bom.gov.au',
     'www.amecs.co.jp',
     'www3.metair.go.jp',
-    'rucsoundings.noaa.gov'
+    'rucsoundings.noaa.gov',
+    'atis.guru'
   ];
   var targetHostname;
   try { targetHostname = new URL(targetUrl).hostname; }
