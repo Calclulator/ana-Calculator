@@ -1313,6 +1313,7 @@
       <button type="button" onclick="showWxTab('kazan')" id="wx-btn-kazan" class="wx-tab-btn">火山<span class="wx-bulk-badge" id="wx-badge-kazan"></span></button>
       <button type="button" onclick="showWxTab('kaigai')" id="wx-btn-kaigai" class="wx-tab-btn">海外<span class="wx-bulk-badge" id="wx-badge-kaigai"></span></button>
       <button type="button" onclick="showWxTab('ofp')" id="wx-btn-ofp" class="wx-tab-btn">OFP<span class="wx-bulk-badge" id="wx-badge-ofp"></span></button>
+      <button type="button" onclick="showWxTab('hatsurai')" id="wx-btn-hatsurai" class="wx-tab-btn">発雷<span class="wx-bulk-badge" id="wx-badge-hatsurai"></span></button>
     </div>
 
     <div id="wx-panel-metar" class="wx-sub-panel">
@@ -1636,6 +1637,39 @@
             データソース: University of Wyoming (GFS モデルサウンディング) — 解析はプレブリーフィングの参考とし、必ず最新の SIGMET / SIGWX を確認すること。
           </p>
         </div>
+      </div>
+    </div>
+
+    <div id="wx-panel-hatsurai" class="wx-sub-panel" style="display:none;">
+      <div style="font-size:12px;font-weight:bold;color:#ccc;margin:6px 0 4px;border-bottom:1px solid #333;padding-bottom:2px;">
+        発雷確率
+      </div>
+      <div style="margin-bottom:6px;">
+        <span style="font-size:11px;color:#aaa;margin-right:4px;">エリア:</span>
+        <button type="button" id="wx-light-btn-jp" onclick="wxLightSetArea('jp')"
+                style="font-size:11px;padding:2px 8px;margin-right:4px;background:#2a6ebb;color:#fff;border:none;border-radius:3px;cursor:pointer;">
+          本州域
+        </button>
+        <button type="button" id="wx-light-btn-sjp" onclick="wxLightSetArea('sjp')"
+                style="font-size:11px;padding:2px 8px;background:#eee;color:#333;border:1px solid #ccc;border-radius:3px;cursor:pointer;">
+          南日本域
+        </button>
+      </div>
+      <div style="margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+        <button type="button" onclick="wxLightMove(-1)"
+                style="font-size:11px;padding:2px 8px;background:#555;color:#fff;border:none;border-radius:3px;cursor:pointer;">
+          ◀ 前
+        </button>
+        <span id="wx-light-label" style="font-size:11px;color:#ccc;font-weight:bold;min-width:80px;text-align:center;">実況</span>
+        <button type="button" onclick="wxLightMove(1)"
+                style="font-size:11px;padding:2px 8px;background:#555;color:#fff;border:none;border-radius:3px;cursor:pointer;">
+          次 ▶
+        </button>
+      </div>
+      <div id="wx-light-img-box" style="text-align:center;">
+        <img id="wx-light-img" src="" alt="発雷確率"
+             style="max-width:100%;border:1px solid #333;border-radius:3px;"
+             onerror="this.alt='画像読込エラー';">
       </div>
     </div>
   </div>
@@ -2748,6 +2782,65 @@ function showWxTab(tabId) {
     wxRefreshMetar();
   }
   if(tabId === 'kazan') wxLoadKazan();
+  if(tabId === 'hatsurai') wxLightInit();
+}
+
+var WX_LIGHT_AREAS = [
+  { code: 'jp',  label: '本州域'  },
+  { code: 'sjp', label: '南日本域' }
+];
+var WX_LIGHT_STEPS = [
+  { step: '00', label: '実況' },
+  { step: '01', label: '+3h予想' },
+  { step: '02', label: '+6h予想' },
+  { step: '03', label: '+9h予想' },
+  { step: '04', label: '+12h予想' },
+  { step: '05', label: '+15h予想' },
+  { step: '06', label: '+18h予想' }
+];
+var wxLightArea = 'jp';
+var wxLightStep = 0;
+
+function wxLightUpdate() {
+  var stepObj = WX_LIGHT_STEPS[wxLightStep];
+  var img = document.getElementById('wx-light-img');
+  var lbl = document.getElementById('wx-light-label');
+  var i, aBtn;
+  if(!img || !stepObj) return;
+  img.src = 'https://www.tono2.net/weather/light_' + wxLightArea + '_' + stepObj.step + '.png?v=' + new Date().getTime();
+  if(lbl) lbl.textContent = stepObj.label;
+  for(i = 0; i < WX_LIGHT_AREAS.length; i++) {
+    aBtn = document.getElementById('wx-light-btn-' + WX_LIGHT_AREAS[i].code);
+    if(!aBtn) continue;
+    if(WX_LIGHT_AREAS[i].code === wxLightArea) {
+      aBtn.style.background = '#2a6ebb';
+      aBtn.style.color = '#fff';
+      aBtn.style.border = 'none';
+    } else {
+      aBtn.style.background = '#eee';
+      aBtn.style.color = '#333';
+      aBtn.style.border = '1px solid #ccc';
+    }
+  }
+}
+
+function wxLightSetArea(area) {
+  wxLightArea = area;
+  wxLightUpdate();
+}
+
+function wxLightMove(dir) {
+  var next = wxLightStep + dir;
+  if(next < 0) next = 0;
+  if(next >= WX_LIGHT_STEPS.length) next = WX_LIGHT_STEPS.length - 1;
+  wxLightStep = next;
+  wxLightUpdate();
+}
+
+function wxLightInit() {
+  wxLightArea = 'jp';
+  wxLightStep = 0;
+  wxLightUpdate();
 }
 
 function wxProxyUrl(url) {
@@ -3386,6 +3479,15 @@ function wxFetchAtis(icao, containerId) {
         }
       }
       if(atisText) {
+        atisText = atisText
+          .replace(/&#xA;/gi, '\n')
+          .replace(/&#x9;/gi, '\t')
+          .replace(/&#xD;/gi, '')
+          .replace(/&amp;/gi, '&')
+          .replace(/&lt;/gi, '<')
+          .replace(/&gt;/gi, '>')
+          .replace(/&nbsp;/gi, ' ');
+        atisText = atisText.replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '');
         container.innerHTML =
           '<div style="font-family:monospace;font-size:11px;white-space:pre-wrap;'
           + 'background:#f5f5f0;border:1px solid #ccc;padding:6px;border-radius:3px;'
