@@ -10382,7 +10382,7 @@ function initApchGrid() {
     APCH_RADAR_MAP = null;
   }
   var titles = ['METAR/TAF', '断面図', '地上天気図', 'Radar', 'Skew-T', '悪天予想図'];
-  var i, cell, h, body;
+  var i, cell, h, hdr, body, btnM, btnA;
   apchClearEl(host);
   var grid = document.createElement('div');
   grid.className = 'apch-grid';
@@ -10390,9 +10390,33 @@ function initApchGrid() {
   for(i = 0; i < titles.length; i++) {
     cell = document.createElement('div');
     cell.className = 'apch-cell';
+    hdr = document.createElement('div');
+    hdr.style.cssText = 'display:flex;align-items:center;flex-wrap:wrap;margin:0 0 4px 0;';
     h = document.createElement('h3');
+    h.style.margin = '0';
     h.appendChild(document.createTextNode(titles[i]));
-    cell.appendChild(h);
+    hdr.appendChild(h);
+    if(i === 0) {
+      btnM = document.createElement('button');
+      btnM.type = 'button';
+      btnM.className = 'btn';
+      btnM.id = 'apch-reload-metar';
+      btnM.title = 'METAR/TAF を再取得';
+      btnM.textContent = '↻ METAR/TAF';
+      btnM.setAttribute('onclick', 'apchReloadMetarTaf()');
+      btnM.style.marginLeft = '8px';
+      hdr.appendChild(btnM);
+      btnA = document.createElement('button');
+      btnA.type = 'button';
+      btnA.className = 'btn';
+      btnA.id = 'apch-reload-atis';
+      btnA.title = 'ATIS を再取得';
+      btnA.textContent = '↻ ATIS';
+      btnA.setAttribute('onclick', 'apchReloadAtis()');
+      btnA.style.marginLeft = '8px';
+      hdr.appendChild(btnA);
+    }
+    cell.appendChild(hdr);
     body = document.createElement('div');
     body.className = 'apch-cell-body';
     body.id = 'apch-cell-' + (i + 1);
@@ -11195,6 +11219,56 @@ function formatApchTafRaw(raw) {
   if(typeof formatTafDisplayRaw === 'function') s = formatTafDisplayRaw(s);
   s = s.replace(/(FM\d{6}|TEMPO|BECMG|PROB\d+)/g, '\n  $1');
   return s.replace(/^\n+/, '').trim();
+}
+
+function apchReloadIcaos() {
+  var destIcao = '', altIcao = '', inp;
+  if(APCH_LAST) {
+    destIcao = APCH_LAST.destIcao || '';
+    altIcao = APCH_LAST.altIcao || '';
+  }
+  if(!destIcao && typeof getApchInputsFromNavlog === 'function') {
+    inp = getApchInputsFromNavlog();
+    if(inp) {
+      destIcao = inp.destIcao || '';
+      altIcao = inp.altIcao || '';
+    }
+  }
+  return {
+    destIcao: destIcao ? String(destIcao).toUpperCase() : '',
+    altIcao: altIcao ? String(altIcao).toUpperCase() : ''
+  };
+}
+
+function apchReloadMetarTaf() {
+  var icaos = apchReloadIcaos();
+  var cell = apchCell(1);
+  var btn = document.getElementById('apch-reload-metar');
+  if(!icaos.destIcao || !cell) return;
+  if(btn) { btn.disabled = true; btn.textContent = '...'; }
+  renderMetarTafText(icaos.destIcao, icaos.altIcao, cell);
+  setTimeout(function() {
+    if(btn) { btn.disabled = false; btn.textContent = '↻ METAR/TAF'; }
+  }, 1500);
+}
+
+function apchReloadAtis() {
+  var icaos = apchReloadIcaos();
+  var destIdx, altIdx;
+  var btn = document.getElementById('apch-reload-atis');
+  if(!icaos.destIcao && !icaos.altIcao) return;
+  if(btn) { btn.disabled = true; btn.textContent = '...'; }
+  destIdx = icaos.destIcao ? 0 : -1;
+  altIdx = icaos.altIcao ? (icaos.destIcao ? 1 : 0) : -1;
+  if(icaos.destIcao && destIdx >= 0) {
+    wxFetchAtis(icaos.destIcao, 'apch-atis-box-' + icaos.destIcao + '-' + destIdx);
+  }
+  if(icaos.altIcao && altIdx >= 0) {
+    wxFetchAtis(icaos.altIcao, 'apch-atis-box-' + icaos.altIcao + '-' + altIdx);
+  }
+  setTimeout(function() {
+    if(btn) { btn.disabled = false; btn.textContent = '↻ ATIS'; }
+  }, 1500);
 }
 
 function renderMetarTafText(destIcao, altIcao, cellEl) {
