@@ -1699,6 +1699,13 @@
     <span style="color:#4fc3f7;font-weight:bold;letter-spacing:.08em;">Flight Plan</span>
     <span id="fp-route-lbl" style="color:#546e7a;margin-left:10px;">----→----</span>
     <button class="btn" onclick="window.print()" style="margin-left:auto;">🖨 Print / PDF</button>
+    <button type="button" class="btn" id="flt-hl-btn"
+      onclick="fltToggleHighlightMode()"
+      title="ハイライトモード OFF（クリックで ON）"
+      style="padding:2px 8px;font-size:11px;cursor:pointer;margin-left:6px;">🖊 HL</button>
+    <button type="button" class="btn" onclick="fltClearHighlights()"
+      title="全ハイライトを消去"
+      style="padding:2px 8px;font-size:11px;cursor:pointer;margin-left:2px;">✕ HL</button>
   </div>
   <div id="fp-navlog">
     <div style="display:flex;gap:6px;align-items:flex-start;">
@@ -6754,6 +6761,73 @@ function closeFpNoteModal() {
   if(ov) ov.style.display = 'none';
   if(pan) pan.style.display = 'none';
 }
+
+// ============================================================
+// FLT PLN ハイライト機能
+// ============================================================
+var fltHighlightActive = false;
+
+function fltToggleHighlightMode() {
+  fltHighlightActive = !fltHighlightActive;
+  var btn = document.getElementById('flt-hl-btn');
+  if(btn) {
+    btn.style.background    = fltHighlightActive ? '#ffff00' : '';
+    btn.style.color         = fltHighlightActive ? '#000000' : '';
+    btn.style.fontWeight    = fltHighlightActive ? 'bold'    : 'normal';
+    btn.title = fltHighlightActive ? 'ハイライトモード ON（クリックで OFF）'
+                                   : 'ハイライトモード OFF（クリックで ON）';
+  }
+}
+
+function fltApplyHighlight() {
+  if(!fltHighlightActive) return;
+  var sel = window.getSelection ? window.getSelection() : null;
+  if(!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+
+  // FLT PLN パネル内（表・見出し）または「その他」モーダル内の選択のみ対象
+  var container = document.getElementById('fp-panel');
+  var notePan = document.getElementById('fp-note-panel');
+  if(!container) return;
+  var range = sel.getRangeAt(0);
+  var node = range.commonAncestorContainer;
+  var inFp = container.contains(node);
+  var inNote = notePan && notePan.contains(node);
+  if(!inFp && !inNote) return;
+
+  try {
+    var span = document.createElement('span');
+    span.className = 'flt-hl';
+    span.style.background = '#ffff00';
+    span.style.color      = '#000000';
+    range.surroundContents(span);
+  } catch(e) {
+    // 選択がタグ境界をまたぐ場合は無視（マルチ行の途中タグ跨ぎ等）
+  }
+  sel.removeAllRanges();
+}
+
+function fltClearHighlights() {
+  var spans = document.querySelectorAll('.flt-hl');
+  var i, sp, parent;
+  for(i = spans.length - 1; i >= 0; i--) {
+    sp = spans[i];
+    parent = sp.parentNode;
+    if(!parent) continue;
+    while(sp.firstChild) parent.insertBefore(sp.firstChild, sp);
+    parent.removeChild(sp);
+  }
+  fltHighlightActive = false;
+  var btn = document.getElementById('flt-hl-btn');
+  if(btn) {
+    btn.style.background = '';
+    btn.style.color      = '';
+    btn.style.fontWeight = 'normal';
+    btn.title = 'ハイライトモード OFF（クリックで ON）';
+  }
+}
+
+document.addEventListener('mouseup', fltApplyHighlight);
+document.addEventListener('touchend', fltApplyHighlight);
 
 // =====================================================================
 // FPL PANEL
