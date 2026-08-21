@@ -4440,23 +4440,22 @@ function wxOfpDrawSkewt(levels, title, cb) {
 }
 
 function wxOfpOpenMeteoUrl(lat, lon, hourIso) {
-  var dateStr = String(hourIso).slice(0, 10);
   var vars = [];
-  var i, levels;
-  levels = (typeof OM_PLEVELS !== 'undefined' && OM_PLEVELS.length)
-    ? OM_PLEVELS
-    : [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200];
+  var i;
+  var levels = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100];
   for(i = 0; i < levels.length; i++) {
-    vars.push('temperature_' + levels[i] + 'hPa');
-    vars.push('relative_humidity_' + levels[i] + 'hPa');
-    vars.push('windspeed_' + levels[i] + 'hPa');
-    vars.push('winddirection_' + levels[i] + 'hPa');
+    vars.push('temperature_'        + levels[i] + 'hPa');
+    vars.push('dewpoint_'           + levels[i] + 'hPa');
+    vars.push('relative_humidity_'  + levels[i] + 'hPa');
+    vars.push('windspeed_'          + levels[i] + 'hPa');
+    vars.push('winddirection_'      + levels[i] + 'hPa');
+    vars.push('geopotential_height_'+ levels[i] + 'hPa');
   }
   return 'https://api.open-meteo.com/v1/forecast'
-    + '?latitude=' + lat + '&longitude=' + lon
-    + '&hourly=' + vars.join(',')
-    + '&start_date=' + dateStr + '&end_date=' + dateStr
-    + '&timezone=UTC';
+    + '?latitude='  + Number(lat).toFixed(4)
+    + '&longitude=' + Number(lon).toFixed(4)
+    + '&hourly='    + vars.join(',')
+    + '&models=gfs_seamless&forecast_days=2&timezone=UTC';
 }
 
 function wxOfpFetchSelected() {
@@ -10592,8 +10591,19 @@ function loadFsas(etaDate, cellEl) {
 }
 
 function loadApchSigwx(destIcao, etaDate, cellEl) {
-  if(isJapanAirport(destIcao)) loadJmaSigwx(etaDate, cellEl);
-  else loadFsas(etaDate, cellEl);
+  if(!cellEl) return;
+  if(isJapanAirport(destIcao)) {
+    loadJmaSigwx(etaDate, cellEl);
+  } else {
+    apchClearEl(cellEl);
+    var msg = document.createElement('div');
+    msg.style.cssText = 'display:flex;flex-direction:column;align-items:center;' +
+      'justify-content:center;height:100%;color:#78909c;font-size:11px;text-align:center;padding:8px;';
+    msg.innerHTML = '<div style="font-size:20px;margin-bottom:6px;">🌐</div>' +
+      '<div>海外就航空港</div>' +
+      '<div style="font-size:10px;margin-top:3px;">悪天予想図は国内空港（RJ/RO）のみ表示</div>';
+    cellEl.appendChild(msg);
+  }
 }
 
 function loadJmaSigwx(etaDate, cellEl) {
@@ -10993,30 +11003,76 @@ function generateSkewTFromOpenMeteo(icao, etaDate, elOrId) {
   apchClearEl(el);
   var loading = document.createElement('div');
   loading.style.cssText = 'color:#aaa;font-size:11px;padding:8px;text-align:center;';
-  loading.appendChild(document.createTextNode('Skew-T 生成中（Open-Meteo）…'));
+  loading.appendChild(document.createTextNode('Skew-T 生成中（Open-Meteo GFS）…'));
   el.appendChild(loading);
 
-  fetchOpenMeteoSounding(latlon[0], latlon[1], etaDate).then(function(levels) {
-    if(!levels || !levels.length) throw new Error('データ0件');
-    var eta = (etaDate instanceof Date) ? etaDate : new Date(etaDate);
-    if(isNaN(eta.getTime())) eta = new Date();
-    var label = ic + '  ' +
-      eta.getUTCFullYear() + '/' +
-      apchPad2(eta.getUTCMonth() + 1) + '/' +
-      apchPad2(eta.getUTCDate()) + ' ' +
-      apchPad2(eta.getUTCHours()) + 'UTC  ※モデル';
+  // WX と同じ 12気圧面・dewpoint・geopotential_height を取得
+  var LEVELS = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100];
+  var vars = [];
+  var li, lp;
+  for(li = 0; li < LEVELS.length; li++) {
+    lp = LEVELS[li];
+    vars.push('temperature_'        + lp + 'hPa');
+    vars.push('dewpoint_'           + lp + 'hPa');
+    vars.push('relative_humidity_'  + lp + 'hPa');
+    vars.push('windspeed_'          + lp + 'hPa');
+    vars.push('winddirection_'      + lp + 'hPa');
+    vars.push('geopotential_height_'+ lp + 'hPa');
+  }
+
+  var eta = (etaDate instanceof Date) ? new Date(etaDate.getTime()) : new Date(etaDate);
+  if(isNaN(eta.getTime())) eta = new Date();
+  var dateStr = eta.getUTCFullYear() + '-' + apchPad2(eta.getUTCMonth() + 1) + '-' + apchPad2(eta.getUTCDate());
+  var hourIso  = dateStr + 'T' + apchPad2(eta.getUTCHours()) + ':00';
+  var now      = new Date();
+  var diffDays = (now.getTime() - eta.getTime()) / 86400000;
+  var base     = (diffDays > 7)
+    ? 'https://archive-api.open-meteo.com/v1/archive'
+    : 'https://api.open-meteo.com/v1/forecast';
+  var apiUrl = base
+    + '?latitude='  + latlon[0].toFixed(4)
+    + '&longitude=' + latlon[1].toFixed(4)
+    + '&hourly='    + vars.join(',')
+    + '&models=gfs_seamless&forecast_days=2&timezone=UTC';
+
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', apiUrl, true);
+  xhr.responseType = 'text';
+  xhr.onload = function() {
+    var json, levels, label;
+    if(xhr.status < 200 || xhr.status >= 300) {
+      apchSetError(el, 'Skew-T: Open-Meteo HTTP ' + xhr.status);
+      return;
+    }
+    try { json = JSON.parse(xhr.responseText); } catch(e) {
+      apchSetError(el, 'Skew-T: JSON 解析エラー');
+      return;
+    }
+    levels = wxOfpParseOpenMeteo(json, hourIso);
+    if(!levels || !levels.length) {
+      apchSetError(el, 'Skew-T: データなし (' + ic + ')');
+      return;
+    }
+    label = ic + '  ' + dateStr + ' ' + apchPad2(eta.getUTCHours()) + 'UTC  GFS ※モデル';
     apchClearEl(el);
-    var header = document.createElement('div');
-    header.style.cssText = 'font-size:10px;color:#9ca3af;padding:2px 6px;background:#111;white-space:nowrap;overflow:hidden;';
-    header.appendChild(document.createTextNode('Skew-T  ' + label));
-    el.appendChild(header);
-    var wrap = document.createElement('div');
-    wrap.style.cssText = 'height:calc(100% - 18px);min-height:180px;';
-    el.appendChild(wrap);
-    renderSkewTSvg(ic, levels, wrap);
-  }).catch(function(e) {
-    apchSetError(el, 'Skew-T生成失敗: ' + ((e && e.message) ? e.message : String(e)));
-  });
+    // Canvas 高品質描画（WX と同一関数）
+    wxOfpDrawSkewt(levels, label, function(dataUrl) {
+      if(!dataUrl) { apchSetError(el, 'Skew-T: 描画失敗'); return; }
+      apchClearEl(el);
+      var hdr = document.createElement('div');
+      hdr.style.cssText = 'font-size:10px;color:#9ca3af;padding:2px 6px;white-space:nowrap;overflow:hidden;';
+      hdr.textContent = 'Skew-T  ' + label;
+      el.appendChild(hdr);
+      var img = document.createElement('img');
+      img.src = dataUrl;
+      img.style.cssText = 'width:100%;height:calc(100% - 18px);object-fit:contain;display:block;';
+      el.appendChild(img);
+    });
+  };
+  xhr.onerror = function() {
+    apchSetError(el, 'Skew-T: 通信エラー');
+  };
+  xhr.send();
 }
 
 function trySkewTUrls(icao, wmo, candidates, idx, el, etaDate) {
@@ -11168,8 +11224,29 @@ function renderMetarTafText(destIcao, altIcao, cellEl) {
         bodyEl.innerHTML =
           '<div style="color:' + C.acc + ';font-weight:bold;margin-bottom:3px;">▍METAR ' + esc(t.icao) + '</div>' +
           '<div style="white-space:pre-wrap;margin-bottom:14px;color:' + C.hi + ';">' + esc(metarRaw) + '</div>' +
-          '<div style="color:#81c784;font-weight:bold;margin-bottom:3px;">▍TAF ' + esc(t.icao) + '</div>' +
-          '<div style="white-space:pre-wrap;color:#d0f0d0;">' + esc(tafFmt) + '</div>';
+          '<div style="color:#4caf50;font-weight:bold;margin-bottom:3px;">▍TAF ' + esc(t.icao) + '</div>' +
+          '<div style="white-space:pre-wrap;color:' + C.text + ';">' + esc(tafFmt) + '</div>';
+        // ATIS セクション追加
+        var atisWrapId = 'apch-atis-wrap-' + t.icao + '-' + bodyIdx;
+        var existingAtis = document.getElementById(atisWrapId);
+        if(!existingAtis) {
+          var atisWrap = document.createElement('div');
+          atisWrap.id = atisWrapId;
+          atisWrap.style.marginTop = '12px';
+          var atisHdr = document.createElement('div');
+          atisHdr.style.cssText = 'font-size:11px;font-weight:bold;color:' + C.acc + ';' +
+            'border-bottom:1px solid ' + C.bdr + ';padding-bottom:2px;margin-bottom:4px;';
+          atisHdr.textContent = '▍ATIS ' + t.icao;
+          atisWrap.appendChild(atisHdr);
+          var atisBox = document.createElement('div');
+          var atisBoxId = 'apch-atis-box-' + t.icao + '-' + bodyIdx;
+          atisBox.id = atisBoxId;
+          atisWrap.appendChild(atisBox);
+          bodyEl.appendChild(atisWrap);
+          if(typeof wxFetchAtis === 'function') {
+            wxFetchAtis(t.icao, atisBoxId);
+          }
+        }
       }).catch(function(e) {
         bodyEl.innerHTML = '<p style="color:#ef5350;font-size:11px;">Error: ' +
           ((e && e.message) ? e.message : String(e)) + '</p>';
