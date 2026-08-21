@@ -1448,6 +1448,7 @@
         <button type="button" class="wx-airport-btn" onclick="wxSkewtLoad('SYD')" id="wx-skewt-btn-SYD">SYD</button>
         <button type="button" class="wx-airport-btn" onclick="wxSkewtLoad('BKK')" id="wx-skewt-btn-BKK">BKK</button>
         <button type="button" class="wx-airport-btn" onclick="wxSkewtLoad('TSA')" id="wx-skewt-btn-TSA">TSA</button>
+        <button type="button" class="wx-airport-btn" onclick="wxSkewtLoad('HKG')" id="wx-skewt-btn-HKG">HKG</button>
         <button type="button" class="wx-refresh-btn" onclick="wxSkewtLoad(wxSkewtCode)">REFRESH</button>
       </div>
       <div class="wx-chart-wrapper">
@@ -3039,7 +3040,8 @@ var WX_SKEWT_STATIONS = [
   { code: 'SGN', name: 'Ho Chi Minh',     lat: 10.8188, lon: 106.6520 },
   { code: 'SYD', name: 'Sydney',          lat: -33.9399, lon: 151.1753 },
   { code: 'BKK', name: 'Bangkok',         lat: 13.6811, lon: 100.7479 },
-  { code: 'TSA', name: 'Taipei Songshan', lat: 25.0694, lon: 121.5525 }
+  { code: 'TSA', name: 'Taipei Songshan', lat: 25.0694, lon: 121.5525 },
+  { code: 'HKG', name: 'Hong Kong',       lat: 22.3080, lon: 113.9185 }
 ];
 
 var WX_WORKER_PROXY = 'https://ana-wx-proxy.nomadic-tamuzo00.workers.dev';
@@ -3767,6 +3769,9 @@ function wxSkewtLoad(code, doneFn) {
           if(meta) meta.textContent = ttl;
           wxOfpDrawSkewt(levels, ttl, function(dataUrl) {
             var img;
+            // APCH 転載用キャッシュに保存
+            if(!window.WX_SKEWT_CACHE) { window.WX_SKEWT_CACHE = {}; }
+            window.WX_SKEWT_CACHE[code] = dataUrl;
             if(container) {
               img = document.createElement('img');
               img.id = 'wx-skewt-img';
@@ -11075,10 +11080,43 @@ function generateSkewTFromOpenMeteo(icao, etaDate, elOrId) {
   xhr.send();
 }
 
+function apchLoadSkewt(icao, etaDate, containerEl) {
+  // ICAO → WX SKEWT ステーションコード (IATA) マッピング
+  var ICAO_TO_WX = {
+    'VHHH': 'HKG',
+    'WSSS': 'SIN',
+    'WMKK': 'KUL',
+    'VVTS': 'SGN',
+    'VVDN': 'SGN',
+    'VTBS': 'BKK',
+    'YSSY': 'SYD',
+    'RCSS': 'TSA'
+  };
+  var ic = String(icao || '').toUpperCase();
+  var wxCode = ICAO_TO_WX[ic] || null;
+  var el = (typeof containerEl === 'string') ? document.getElementById(containerEl) : containerEl;
+  var img;
+  if(!el) return;
+
+  // WX ページで描画済みの場合はキャッシュを転載
+  if(wxCode && window.WX_SKEWT_CACHE && window.WX_SKEWT_CACHE[wxCode]) {
+    el.innerHTML = '';
+    img = document.createElement('img');
+    img.src = window.WX_SKEWT_CACHE[wxCode];
+    img.style.maxWidth = '100%';
+    img.alt = 'Skew-T (' + wxCode + ')';
+    el.appendChild(img);
+    return;
+  }
+
+  // キャッシュなし → 従来の Open-Meteo フェッチにフォールバック
+  generateSkewTFromOpenMeteo(ic, etaDate, el);
+}
+
 function trySkewTUrls(icao, wmo, candidates, idx, el, etaDate) {
   if(!el) return;
   if(idx >= candidates.length) {
-    generateSkewTFromOpenMeteo(icao, etaDate || (candidates && candidates[0]) || new Date(), el);
+    apchLoadSkewt(icao, etaDate || (candidates && candidates[0]) || new Date(), el);
     return;
   }
 
@@ -11124,7 +11162,7 @@ function loadSkewT(icao, etaDate, cellEl) {
   var ic = String(icao || '').toUpperCase();
   var wmo = ICAO_TO_WMO[ic];
   if(!wmo) {
-    generateSkewTFromOpenMeteo(ic, etaDate, cellEl);
+    apchLoadSkewt(ic, etaDate, cellEl);
     return;
   }
   apchClearEl(cellEl);
@@ -11220,6 +11258,7 @@ function renderMetarTafText(destIcao, altIcao, cellEl) {
       ]).then(function(results) {
         var metarRaw = results[0] || '(METAR unavailable)';
         var tafFmt = formatApchTafRaw(results[1]);
+        tafFmt = tafFmt.replace(/\n{2,}/g, '\n');
         var esc = (typeof escH === 'function') ? escH : function(s) { return String(s); };
         bodyEl.innerHTML =
           '<div style="color:' + C.acc + ';font-weight:bold;margin-bottom:3px;">▍METAR ' + esc(t.icao) + '</div>' +
