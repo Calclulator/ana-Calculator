@@ -44,16 +44,23 @@ async function handleRequest(request) {
 
   try {
     var resp = await fetch(targetUrl, {
+      cache: targetHostname === 'atis.guru' ? 'no-store' : 'default',
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ANA-Calculator/1.0)' }
     });
     var body = await resp.arrayBuffer();
+    var outHeaders = {
+      'Content-Type': resp.headers.get('Content-Type') || 'application/pdf',
+      'Access-Control-Allow-Origin': '*'
+    };
+    if (targetHostname === 'atis.guru') {
+      outHeaders['Cache-Control'] = 'no-store, no-cache, must-revalidate';
+      outHeaders['Pragma'] = 'no-cache';
+    } else {
+      outHeaders['Cache-Control'] = 'public, max-age=300';
+    }
     return new Response(body, {
       status: resp.status,
-      headers: {
-        'Content-Type': resp.headers.get('Content-Type') || 'application/pdf',
-        'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'public, max-age=300'
-      }
+      headers: outHeaders
     });
   } catch(e) {
     return new Response('Proxy error: ' + e.message, { status: 502 });

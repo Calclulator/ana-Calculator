@@ -2198,6 +2198,8 @@ function saveFltPlnToStorage() {
       NAV_FOB_LBS: NAV_FOB_LBS,
       NAV_BT_STR: NAV_BT_STR,
       NAV_FT_STR: NAV_FT_STR,
+      NAV_SS_STR: NAV_SS_STR,
+      NAV_SR_STR: NAV_SR_STR,
       NAV_STEP_CLIMBS: NAV_STEP_CLIMBS,
       NAV_WINDS_ALOFT: NAV_WINDS_ALOFT
     };
@@ -2236,6 +2238,8 @@ function restoreFltPlnFromStorage() {
     NAV_FOB_LBS     = d.NAV_FOB_LBS     || null;
     NAV_BT_STR      = d.NAV_BT_STR      || null;
     NAV_FT_STR      = d.NAV_FT_STR      || null;
+    NAV_SS_STR      = d.NAV_SS_STR      || null;
+    NAV_SR_STR      = d.NAV_SR_STR      || null;
     NAV_STEP_CLIMBS = d.NAV_STEP_CLIMBS || [];
     NAV_WINDS_ALOFT = d.NAV_WINDS_ALOFT || {};
     return true;
@@ -2285,6 +2289,16 @@ var NAV_FT_STR = null;      // Flight Time 文字列 e.g. "08:49"
 var NAV_SS_STR = null;      // Sunset e.g. "17:22Z" or null
 var NAV_SR_STR = null;      // Sunrise e.g. "05:12Z" or null
 var NAV_EDCT_STR = null;    // EDCT e.g. "1234Z" or null
+
+function parseNavlogSsSr(txt) {
+  var s = String(txt || '');
+  var ssM = s.match(/\bSS\s*:?\s*(\d{2})\s*[:.]\s*(\d{2})\b/);
+  var srM = s.match(/\bSR\s*:?\s*(\d{2})\s*[:.]\s*(\d{2})\b/);
+  return {
+    ss: ssM ? (ssM[1] + ':' + ssM[2] + 'Z') : null,
+    sr: srM ? (srM[1] + ':' + srM[2] + 'Z') : null
+  };
+}
 var NAV_RSV_LBS = null;     // RSV fuel (lbs)
 var NAV_ALT_APT = null;     // ALT airport ICAO (larger fuel value)
 var NAV_ALT_LBS = null;     // ALT fuel (lbs, larger value)
@@ -3461,7 +3475,7 @@ function wxFetchAtis(icao, containerId) {
   if(!container) return;
   icao = String(icao || '').toUpperCase();
   container.innerHTML = '<span style="color:#888;font-size:11px;">ATIS 取得中...</span>';
-  url = 'https://atis.guru/atis/' + icao;
+  url = 'https://atis.guru/atis/' + icao + '?_=' + (new Date()).getTime();
   proxyUrl = wxProxyUrl(url);
   xhr = new XMLHttpRequest();
   xhr.open('GET', proxyUrl, true);
@@ -3915,7 +3929,7 @@ function wxOfpParsePdf(text) {
   var coordRe = /\b(\d{6}[NS]\d{7}[EW]|\d{5}[NS]\d{6,7}[EW]|\d{4}[NS]\d{5}[EW]|\d{2}[NS]\d{3}[EW]|[NS]\d{5}[EW]\d{6,7})\b/g;
   var seen = {};
   var result = [];
-  var m, raw, parsed;
+  var m, raw, parsed, ident;
   var matches = [];
   var latLongIdx;
   console.log('[OFP] probe ANA     :', (text.match(/\b[NS]\d{5}[EW]\d{6,7}\b/g) || []).slice(0, 20));
@@ -3934,7 +3948,14 @@ function wxOfpParsePdf(text) {
     seen[raw] = true;
     parsed = wxOfpParseCoord(raw);
     if(!parsed) continue;
-    result.push({ name: raw, lat: parsed.lat, lon: parsed.lon });
+    ident = wxOfpIdentNearCoord(text, m.index, raw);
+    if(!ident) ident = wxOfpLookupWpName(parsed.lat, parsed.lon);
+    result.push({
+      name: ident || raw,
+      ident: ident || '',
+      lat: parsed.lat,
+      lon: parsed.lon
+    });
   }
   console.log('[OFP] coord matches :', matches.length, matches.slice(0, 30));
   console.log('[OFP] unique WPs    :', result.length, result.slice(0, 10));
@@ -3978,17 +3999,75 @@ function wxOfpParseCoordParts(ns, latStr, ew, lonStr) {
   return { lat: lat.toFixed(2), lon: lon.toFixed(2) };
 }
 
+function wxOfpIsCoordLike(name) {
+  return /^(\d{2,6}[NS]\d{3,7}[EW]|[NS]\d{4,7}[EW]\d{3,7})$/.test(String(name || '').replace(/\s+/g, ''));
+}
+
+function wxOfpLookupWpName(lat, lon) {
+  var i, w, dLat, dLon, d, best, bestD, la, lo, wlat, wlon, id;
+  la = Number(lat);
+  lo = Number(lon);
+  if(isNaN(la) || isNaN(lo)) return '';
+  best = '';
+  bestD = 0.12;
+  if(typeof WP === 'undefined' || !WP || !WP.length) return '';
+  for(i = 0; i < WP.length; i++) {
+    w = WP[i];
+    if(!w) continue;
+    wlat = w.lat;
+    wlon = (w.lng != null) ? w.lng : w.lon;
+    if(wlat == null || wlon == null) continue;
+    dLat = Number(wlat) - la;
+    dLon = Number(wlon) - lo;
+    d = Math.sqrt(dLat * dLat + dLon * dLon);
+    if(d < bestD) {
+      bestD = d;
+      id = w.id || w.name || w.ident || w.wpt || w.fix || '';
+      if(id && !wxOfpIsCoordLike(id)) best = id;
+    }
+  }
+  return best;
+}
+
+function wxOfpIdentNearCoord(text, idx, raw) {
+  var nl, rest, nameM, ident;
+  nl = String(text || '').indexOf('\n', idx);
+  rest = (nl >= 0)
+    ? text.slice(nl + 1, nl + 90)
+    : String(text || '').slice(idx + String(raw || '').length, idx + String(raw || '').length + 90);
+  nameM = String(rest).match(/^\s*(-?[A-Z][A-Z0-9\-]{1,7}|\d{2}[ENW]\d{2})\b/);
+  if(!nameM) return '';
+  ident = nameM[1];
+  if(!ident || ident.charAt(0) === '-') return '';
+  if(ident === 'TOC' || ident === 'TOD' || ident === 'FIR') return '';
+  return ident;
+}
+
+function wxOfpWpLabel(wp) {
+  var n;
+  if(!wp) return '';
+  n = wp.ident || wp.name || wp.wpt || wp.fix || '';
+  if(n && !wxOfpIsCoordLike(n)) return n;
+  n = wxOfpLookupWpName(wp.lat, wp.lon);
+  if(n) return n;
+  if(wp.lat != null && wp.lon != null && wp.lat !== '') {
+    return Number(wp.lat).toFixed(1) + '/' + Number(wp.lon).toFixed(1);
+  }
+  return String(wp.name || '');
+}
+
 function wxOfpRenderWpTable(wps) {
   var tbody = document.getElementById('wx-ofp-wp-tbody');
-  var i, wp, html;
+  var i, wp, html, label;
   if(!tbody) return;
   html = '';
   for(i = 0; i < wps.length; i++) {
     wp = wps[i];
+    label = wxOfpWpLabel(wp);
     html += '<tr>'
       + '<td><input type="checkbox" checked data-idx="' + i + '"></td>'
       + '<td>' + (i + 1) + '</td>'
-      + '<td>' + wp.name + '</td>'
+      + '<td>' + label + '</td>'
       + '<td>' + wp.lat + '</td>'
       + '<td>' + wp.lon + '</td>'
       + '</tr>';
@@ -4492,8 +4571,9 @@ function wxOfpFetchSelected() {
   statusEl.textContent = '取得中... 0/' + total + '  ' + hourLabel;
 
   function finishOne(wp, omUrl, dataUrl) {
-    wxOfpImages.push({ name: wp.name, lat: wp.lat, lon: wp.lon, url: omUrl, dataUrl: dataUrl });
-    wxOfpSaveToDb(wp.name, omUrl, dataUrl, function() {
+    var label = wxOfpWpLabel(wp);
+    wxOfpImages.push({ name: label, lat: wp.lat, lon: wp.lon, url: omUrl, dataUrl: dataUrl });
+    wxOfpSaveToDb(label, omUrl, dataUrl, function() {
       done++;
       statusEl.textContent = '取得中... ' + done + '/' + total + '  ' + hourLabel;
       if(done >= total) {
@@ -4531,7 +4611,7 @@ function wxOfpFetchSelected() {
       }
       wxOfpDrawSkewt(
         levels,
-        wp.name + '  ' + wp.lat + ', ' + wp.lon + '  ' + hourLabel,
+        wxOfpWpLabel(wp) + '  ' + hourLabel,
         function(pngUrl) { finishOne(wp, omUrl, pngUrl || ''); }
       );
     };
@@ -4674,8 +4754,7 @@ function wxOfpShowSlide(idx) {
   img.alt = entry.name;
   if(label) {
     label.textContent = (idx + 1) + ' / ' + wxOfpImages.length
-      + '  ' + entry.name
-      + (entry.lat ? '  (' + entry.lat + ', ' + entry.lon + ')' : '');
+      + '  ' + (entry.name || wxOfpWpLabel(entry));
   }
 }
 
@@ -5725,11 +5804,10 @@ function runParse() {
   var ftM = txt.match(/F\/T\s+(\d{2})HR(\d{2})MIN/);
   NAV_FT_STR = ftM ? (ftM[1] + ':' + ftM[2]) : null;
 
-  // SS / SR  例: "SS 17:22 / T SR05:12/099T"
-  var ssM = txt.match(/\bSS\s+(\d{2}):(\d{2})/);
-  NAV_SS_STR = ssM ? (ssM[1] + ':' + ssM[2] + 'Z') : null;
-  var srM = txt.match(/\bSR(\d{2}):(\d{2})/);
-  NAV_SR_STR = srM ? (srM[1] + ':' + srM[2] + 'Z') : null;
+  // SS / SR  例: "SS 17:22 / T SR05:12/099T"  "SS : / T SR17:33/099T"  "SR 17:33"
+  var ssSr = parseNavlogSsSr(txt);
+  NAV_SS_STR = ssSr.ss;
+  NAV_SR_STR = ssSr.sr;
 
   // EDCT (値がある場合のみ)
   var edctM = txt.match(/EDCT:\s*(\d{4}Z?)/);
@@ -9356,7 +9434,10 @@ function buildMemoText() {
     var d = (parseInt(bp[0])*60+parseInt(bp[1])) - (parseInt(fp2[0])*60+parseInt(fp2[1]));
     diffStr = ' (' + d + 'min)';
   }
-  var ssStr = 'SS: ' + (NAV_SS_STR || '—') + ' / SR: ' + (NAV_SR_STR || '—');
+  var ssSr = parseNavlogSsSr((document.getElementById('fpl-txt') && document.getElementById('fpl-txt').value) || '');
+  var ssVal = NAV_SS_STR || ssSr.ss || '----';
+  var srVal = NAV_SR_STR || ssSr.sr || '----';
+  var ssStr = 'SS: ' + ssVal + ' / SR: ' + srVal;
   lines.push(btStr + '\t' + ftStr + diffStr + '\t\t\t' + ssStr);
 
   // 4行目: ALT空港 タブ RSV+ALT合計(RSV:x/ALT:y) [EDCT]
