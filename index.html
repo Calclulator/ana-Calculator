@@ -14677,7 +14677,19 @@ function parseNotamText(rawText) {
       // TIL行が取れない場合は座標末尾から最大 300文字
       endOffset = Math.min(300, after.length);
     }
-    fullText = rawText.substring(Math.max(0, firstIdx - 400), lastIdx + endOffset).trim();
+    // ── fullText 開始点: 直前の NOTAM 終端 "(ICAO)" を境界とする ──────
+    var ftLookback = rawText.substring(Math.max(0, firstIdx - 800), firstIdx);
+    var ftEndPat = /\([A-Z]{2,6}\)[ \t]*(?:\r?\n|$)/g;
+    var ftM, ftLastEnd = -1;
+    while((ftM = ftEndPat.exec(ftLookback)) !== null) {
+      ftLastEnd = ftM.index + ftM[0].length;
+    }
+    var ftStart = (ftLastEnd >= 0)
+      ? (Math.max(0, firstIdx - 800) + ftLastEnd)
+      : Math.max(0, firstIdx - 150);
+    fullText = rawText.substring(ftStart, lastIdx + endOffset).trim();
+    // NOTAM シリアル番号行を除去 (例: "RJJZ1527/2 6 (ERTJ)")
+    fullText = fullText.replace(/[A-Z]{4}\d{4,5}\/\d+\s+\d+\s+\([A-Z]{2,6}\)[ \t]*/g, '').trim();
 
     // 座標変換
     coords = [];
