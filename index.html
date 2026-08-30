@@ -2163,9 +2163,9 @@ var SATS = {
   'himawari-fd-sandwich':{jma:true,area:'fd',band:'SND',prod:'ETC',label:'Himawari-9 雲頂強調'}
 };
 var BASES = {
-  dark:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  dark:'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
   sat:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  light:'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+  light:'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'
 };
 
 // ── FLT PLN 永続化 ──────────────────────────────
@@ -10841,7 +10841,7 @@ function drawRainViewerMiniMap(lat, lon, cellEl, overlayKind) {
   cellEl.appendChild(mapDiv);
   var baseUrl = (typeof DAY_MODE !== 'undefined' && DAY_MODE)
     ? (BASES && BASES.light) : (BASES && BASES.dark);
-  if(!baseUrl) baseUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  if(!baseUrl) baseUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
   var mini = L.map(mapDiv, { zoomControl: true, attributionControl: false });
   APCH_RADAR_MAP = mini;
   L.tileLayer(baseUrl, { maxZoom: 12 }).addTo(mini);
