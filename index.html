@@ -1406,7 +1406,8 @@
           <pre id="wx-metar-output" style="font-family:monospace;font-size:12px;color:#ccc;background:#0a0a0a;border:1px solid #333;border-radius:4px;padding:8px;min-height:200px;white-space:pre-wrap;line-height:1.5;margin:0;">LOADING...</pre>
           <div class="wx-atis-sec-lbl" style="font-size:11px;font-weight:bold;color:#aaa;margin:8px 0 2px;border-bottom:1px solid #333;display:flex;align-items:center;justify-content:space-between;">
             <span>ATIS</span>
-            <button type="button" class="btn" style="font-size:10px;padding:2px 8px;" onclick="openAtisLive(document.getElementById('wx-metar-icao').value)">🔴 Live ATIS</button>
+            <button type="button" class="btn" id="wx-atis-live-btn" style="font-size:10px;padding:2px 8px;"
+              onclick="toggleAtisLive(document.getElementById('wx-metar-icao').value, 'wx-atis-box', 'wx-atis-live-btn')">🔴 Live ATIS</button>
           </div>
           <div id="wx-atis-box"></div>
         </div>
@@ -1926,10 +1927,11 @@
   <div class="cr-inputs" id="cr-inputs-common">
     <div class="cr-inp-grp">
       <span class="cr-inp-lbl">FLT TIME</span>
-      <input class="cr-num" id="cr-flt-h" type="number" min="0" max="20" value="8" oninput="crCompute()">
+      <input class="cr-num" id="cr-flt-h" type="number" min="0" max="20" value="8" oninput="onCrFltFieldInput()">
       <span class="cr-sep">H</span>
-      <input class="cr-num" id="cr-flt-m" type="number" min="0" max="59" value="0" oninput="crCompute()">
+      <input class="cr-num" id="cr-flt-m" type="number" min="0" max="59" value="0" oninput="onCrFltFieldInput()">
       <span class="cr-sep">M</span>
+      <span id="cr-flt-status" class="cr-field-status" title="" style="margin-left:2px;font-size:12px;"></span>
     </div>
     <div class="cr-inp-grp">
       <span class="cr-inp-lbl">DELAY AFTER T/O</span>
@@ -1943,9 +1945,10 @@
     </div>
     <div class="cr-inp-grp">
       <span class="cr-inp-lbl">TAKEOFF (LCL)</span>
-      <input class="cr-num wide" id="cr-tko-h" type="number" min="0" max="23" value="12" oninput="crCompute()">
+      <input class="cr-num wide" id="cr-tko-h" type="number" min="0" max="23" value="12" oninput="onCrTkoFieldInput()">
       <span class="cr-sep">:</span>
-      <input class="cr-num" id="cr-tko-m" type="number" min="0" max="59" value="0" oninput="crCompute()">
+      <input class="cr-num" id="cr-tko-m" type="number" min="0" max="59" value="0" oninput="onCrTkoFieldInput()">
+      <span id="cr-tko-status" class="cr-field-status" title="" style="margin-left:2px;font-size:12px;"></span>
     </div>
     <!-- 3PLT専用: 1ST HALF -->
     <div class="cr-inp-grp" id="cr-grp-half">
@@ -2274,6 +2277,7 @@ function saveFltPlnToStorage() {
       NAV_FLT_NO: NAV_FLT_NO,
       NAV_STD: NAV_STD,
       NAV_STA: NAV_STA,
+      NAV_STD_LCL: NAV_STD_LCL,
       DEP_STD_MIN: DEP_STD_MIN,
       DEP_ATO_MIN: DEP_ATO_MIN,
       NAV_TAXI_OUT: NAV_TAXI_OUT,
@@ -2314,6 +2318,7 @@ function restoreFltPlnFromStorage() {
     NAV_FLT_NO      = d.NAV_FLT_NO      || null;
     NAV_STD         = d.NAV_STD         || null;
     NAV_STA         = d.NAV_STA         || null;
+    NAV_STD_LCL     = d.NAV_STD_LCL     || null;
     DEP_STD_MIN     = d.DEP_STD_MIN     || null;
     DEP_ATO_MIN     = d.DEP_ATO_MIN     || null;
     NAV_TAXI_OUT    = d.NAV_TAXI_OUT    || null;
@@ -2765,7 +2770,10 @@ function navTo(tab){
   if(tab === 'curfew') renderCurfewPanel();
   if(tab === 'holding') renderHoldingPanel();
   if(tab === 'apch') renderApchPanel();
-  if(tab === 'crew-rest' && typeof crCompute === 'function') crCompute();
+  if(tab === 'crew-rest') {
+    if(typeof crSyncFromNavlog === 'function') crSyncFromNavlog();
+    else if(typeof crCompute === 'function') crCompute();
+  }
   if(tab === 'docs') showDocsTab('docs-wx-mnm');
   if(tab === 'wxbrief') showWxTab('metar');
 }
@@ -3529,7 +3537,13 @@ wxRenderMetarStationButtons();
 
 function wxSetMetarAirport(icao, btn) {
   var allBtns, i, match;
+  var wxAtisLiveWrap, wxAtisLiveBtn;
   if(!icao || icao.length < 3) return;
+  // 空港切り替え時、開いていればLive ATISのインライン表示を閉じる
+  wxAtisLiveWrap = document.getElementById('wx-atis-box-live-wrap');
+  if(wxAtisLiveWrap) wxAtisLiveWrap.style.display = 'none';
+  wxAtisLiveBtn = document.getElementById('wx-atis-live-btn');
+  if(wxAtisLiveBtn) wxAtisLiveBtn.textContent = '🔴 Live ATIS';
   wxMetarIcao = String(icao).toUpperCase();
   allBtns = document.querySelectorAll('#wx-panel-metar .wx-airport-btn');
   for(i = 0; i < allBtns.length; i++) { allBtns[i].classList.remove('wx-airport-active'); }
@@ -3645,43 +3659,51 @@ function wxFetchAtis(icao, containerId) {
   xhr.send();
 }
 
-function openAtisLive(icao) {
-  var modal = document.getElementById('atis-live-modal');
-  var iframe = document.getElementById('atis-live-iframe');
-  var hint = document.getElementById('atis-live-icao-hint');
-  if(!modal || !iframe) return;
+// Live ATIS(atisview.com)をモーダルではなく、呼び出し元のATIS欄の直下にインライン表示する（トグル式）。
+// WX画面・APCH Preparationページ共通で使う。
+// icao: 検索欄に貼り付けるICAOコード（自動コピー用）
+// atisBoxId: 直下に挿入したい基準要素のid（WXは 'wx-atis-box'、APCHは 'apch-atis-box-XXXX-N' 形式）
+// btnId: 呼び出し元ボタンのid（開閉に応じてラベルを切り替えるため）
+function toggleAtisLive(icao, atisBoxId, btnId) {
+  var wrapId = atisBoxId + '-live-wrap';
+  var wrap = document.getElementById(wrapId);
+  var btn = document.getElementById(btnId);
   icao = String(icao || '').replace(/^\s+|\s+$/g, '').toUpperCase();
-  // atisview.comは空港別の直リンクに対応していないため、サイトを開いたうえで
-  // ICAOをクリップボードにコピーし、検索ボックスに貼り付けてもらう
+
+  // 既に開いている場合は閉じるだけ
+  if(wrap && wrap.style.display !== 'none') {
+    wrap.style.display = 'none';
+    if(btn) btn.textContent = '🔴 Live ATIS';
+    return;
+  }
+
+  if(!wrap) {
+    var atisBox = document.getElementById(atisBoxId);
+    if(!atisBox || !atisBox.parentNode) return;
+    wrap = document.createElement('div');
+    wrap.id = wrapId;
+    wrap.style.cssText = 'margin-top:8px;border:1px solid #445566;border-radius:4px;overflow:hidden;';
+    wrap.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;background:#1a2a3a;color:#fff;padding:4px 8px;font-size:11px;">' +
+        '<span>🔴 Live ATIS（atisview.com）<span id="' + wrapId + '-hint" style="font-weight:normal;color:#9fd3ff;margin-left:6px;"></span></span>' +
+        '<a href="https://atisview.com" target="_blank" rel="noopener" style="color:#9fd3ff;font-size:11px;">新しいタブで開く ↗</a>' +
+      '</div>' +
+      '<iframe id="' + wrapId + '-iframe" src="" style="width:100%;height:480px;border:none;display:block;background:#fff;"></iframe>';
+    atisBox.parentNode.insertBefore(wrap, atisBox.nextSibling);
+  }
+
+  wrap.style.display = 'block';
+  if(btn) btn.textContent = '▲ Live ATIS を閉じる';
+
+  var hint = document.getElementById(wrapId + '-hint');
   if(icao && hint) hint.textContent = '検索欄に「' + icao + '」を貼り付けてください（コピー済み）';
   if(icao && navigator.clipboard && navigator.clipboard.writeText) {
     try { navigator.clipboard.writeText(icao); } catch(e) {}
   }
+
   // src="" だと iframe.src が自ページURLになるため、属性値で初回判定する
-  if(!iframe.getAttribute('src')) iframe.src = 'https://atisview.com';
-  modal.style.display = 'block';
-}
-
-function closeAtisLive() {
-  var modal = document.getElementById('atis-live-modal');
-  if(modal) modal.style.display = 'none';
-}
-
-function wxUpdateJmaAsf(icao) {
-  var url = 'https://www.data.jma.go.jp/airinfo/data/pict/taf/QMCD98_' + icao + '.png';
-  var img = document.getElementById('wx-metar-jma-img');
-  var lnk = document.getElementById('wx-metar-jma-link');
-  var err = document.getElementById('wx-metar-jma-err');
-  if(!img) return;
-  img.style.display = 'block';
-  if(err) err.style.display = 'none';
-  img.src = wxProxyUrl(url + '?t=' + new Date().getTime());
-  if(lnk) lnk.href = url;
-}
-
-function wxCheckwxKey() {
-  if(typeof CHECKWX_API_KEY === 'string' && CHECKWX_API_KEY) return CHECKWX_API_KEY;
-  return 'eb52e4c6ca254584842adb8dc574b4f8';
+  var iframe = document.getElementById(wrapId + '-iframe');
+  if(iframe && !iframe.getAttribute('src')) iframe.src = 'https://atisview.com';
 }
 
 function wxFetchMetarTaf(icao) {
@@ -3731,6 +3753,12 @@ function wxFetchMetarTaf(icao) {
 }
 
 function wxRefreshMetar() {
+  var wxAtisLiveWrap, wxAtisLiveBtn;
+  // 空港切り替え時、開いていればLive ATISのインライン表示を閉じる
+  wxAtisLiveWrap = document.getElementById('wx-atis-box-live-wrap');
+  if(wxAtisLiveWrap) wxAtisLiveWrap.style.display = 'none';
+  wxAtisLiveBtn = document.getElementById('wx-atis-live-btn');
+  if(wxAtisLiveBtn) wxAtisLiveBtn.textContent = '🔴 Live ATIS';
   wxUpdateJmaAsf(wxMetarIcao);
   wxFetchMetarTaf(wxMetarIcao);
 }
@@ -5360,6 +5388,74 @@ function crBuild4pltSet(label, divCap, divCop, tkoMin, fltMin, firstRest, lastRe
   return html;
 }
 
+// ── Crew Rest: NAVLOGオート入力 ⇄ 手動編集ステータス ─────────────
+function crUpdateFieldStatus(groupId, hEl) {
+  var statusEl = document.getElementById(groupId + '-status');
+  if(!statusEl || !hEl) return;
+  if(hEl.dataset.userEdited === 'true') {
+    statusEl.textContent = '✏️';
+    statusEl.title = '手動編集';
+  } else if(hEl.dataset.autoFilled === 'true') {
+    statusEl.textContent = '🔄';
+    statusEl.title = 'NAVLOGから自動入力';
+  } else {
+    statusEl.textContent = '';
+    statusEl.title = '';
+  }
+}
+
+function onCrFltFieldInput() {
+  var hEl = document.getElementById('cr-flt-h');
+  var mEl = document.getElementById('cr-flt-m');
+  if(hEl) { hEl.dataset.userEdited = 'true'; hEl.dataset.autoFilled = 'false'; }
+  if(mEl) { mEl.dataset.userEdited = 'true'; mEl.dataset.autoFilled = 'false'; }
+  crUpdateFieldStatus('cr-flt', hEl);
+  crCompute();
+}
+
+function onCrTkoFieldInput() {
+  var hEl = document.getElementById('cr-tko-h');
+  var mEl = document.getElementById('cr-tko-m');
+  if(hEl) { hEl.dataset.userEdited = 'true'; hEl.dataset.autoFilled = 'false'; }
+  if(mEl) { mEl.dataset.userEdited = 'true'; mEl.dataset.autoFilled = 'false'; }
+  crUpdateFieldStatus('cr-tko', hEl);
+  crCompute();
+}
+
+// NAVLOGパース結果からFLT TIME / TAKEOFF(LCL)を自動入力する。
+// 既にユーザーが手動編集済みの欄は上書きしない。
+function crSyncFromNavlog() {
+  var fltH = document.getElementById('cr-flt-h');
+  var fltM = document.getElementById('cr-flt-m');
+  var tkoH = document.getElementById('cr-tko-h');
+  var tkoM = document.getElementById('cr-tko-m');
+  if(!fltH || !fltM || !tkoH || !tkoM) return;
+
+  if(typeof NAV_FT_STR === 'string' && NAV_FT_STR && fltH.dataset.userEdited !== 'true') {
+    var ftParts = NAV_FT_STR.split(':');
+    if(ftParts.length === 2) {
+      fltH.value = parseInt(ftParts[0], 10);
+      fltM.value = parseInt(ftParts[1], 10);
+      fltH.dataset.autoFilled = 'true';
+      fltM.dataset.autoFilled = 'true';
+      crUpdateFieldStatus('cr-flt', fltH);
+    }
+  }
+
+  if(typeof NAV_STD_LCL === 'string' && NAV_STD_LCL && tkoH.dataset.userEdited !== 'true') {
+    var tkoParts = NAV_STD_LCL.split(':');
+    if(tkoParts.length === 2) {
+      tkoH.value = parseInt(tkoParts[0], 10);
+      tkoM.value = parseInt(tkoParts[1], 10);
+      tkoH.dataset.autoFilled = 'true';
+      tkoM.dataset.autoFilled = 'true';
+      crUpdateFieldStatus('cr-tko', tkoH);
+    }
+  }
+
+  crCompute();
+}
+
 function crCompute() {
   var resultArea = document.getElementById('cr-result-area');
   if(!resultArea) return;
@@ -5398,7 +5494,8 @@ function crCompute() {
 }
 
 function crInit() {
-  if(typeof crCompute === 'function') crCompute();
+  if(typeof crSyncFromNavlog === 'function') crSyncFromNavlog();
+  else if(typeof crCompute === 'function') crCompute();
 }
 if(document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', crInit);
@@ -5939,6 +6036,13 @@ function runParse() {
   if (!staM) staM = txt.match(/STA\s+(\d{2})(\d{2})Z\/(\d{2})(\d{2})L/); // フォールバック
   NAV_STA = staM ? (staM[1]+staM[2]) : null;
 
+  // 離陸現地時刻（Crew Rest Calculator の TAKEOFF(LCL) 自動入力用）
+  // NAVLOGヘッダー行の "STD hhmmZ/hhmmL" 形式からL側（現地時刻）を抽出する。
+  // navHeaderLine 側にL表記が無い場合は文書全体からのフォールバックにも同じ形式で当たる。
+  var stdLclM = navHeaderLine ? navHeaderLine.match(/STD\s+\d{2}\d{2}Z\/(\d{2})(\d{2})L/) : null;
+  if (!stdLclM) stdLclM = txt.match(/STD\s+\d{2}\d{2}Z\/(\d{2})(\d{2})L/);
+  NAV_STD_LCL = stdLclM ? (stdLclM[1] + ':' + stdLclM[2]) : null;
+
   // B/T (Block Time)
   var btM = txt.match(/B\/T\s+(\d{2})HR(\d{2})MIN/);
   NAV_BT_STR = btM ? (btM[1] + ':' + btM[2]) : null;
@@ -6417,6 +6521,7 @@ function runParse() {
   if(typeof renderHoldingPanel === 'function') renderHoldingPanel();
   frameRoute();
   if(typeof syncFdpFromNavlog === 'function') syncFdpFromNavlog();
+  if(typeof crSyncFromNavlog === 'function') crSyncFromNavlog();
   saveFltPlnToStorage();
 }
 
@@ -11659,6 +11764,9 @@ function renderMetarTafText(destIcao, altIcao, cellEl) {
           var atisWrap = document.createElement('div');
           atisWrap.id = atisWrapId;
           atisWrap.style.marginTop = '12px';
+          var atisBoxId = 'apch-atis-box-' + t.icao + '-' + bodyIdx;
+          var atisLiveBtnId = 'apch-atis-live-btn-' + t.icao + '-' + bodyIdx;
+
           var atisHdr = document.createElement('div');
           atisHdr.style.cssText = 'font-size:11px;font-weight:bold;color:' + C.acc + ';' +
             'border-bottom:1px solid ' + C.bdr + ';padding-bottom:2px;margin-bottom:4px;' +
@@ -11668,14 +11776,15 @@ function renderMetarTafText(destIcao, altIcao, cellEl) {
           atisHdr.appendChild(atisHdrLabel);
           var atisLiveBtn = document.createElement('button');
           atisLiveBtn.type = 'button';
+          atisLiveBtn.id = atisLiveBtnId;
           atisLiveBtn.className = 'btn';
           atisLiveBtn.style.cssText = 'font-size:10px;padding:2px 8px;';
           atisLiveBtn.textContent = '🔴 Live ATIS';
-          atisLiveBtn.setAttribute('onclick', "openAtisLive('" + t.icao + "')");
+          atisLiveBtn.setAttribute('onclick',
+            "toggleAtisLive('" + t.icao + "', '" + atisBoxId + "', '" + atisLiveBtnId + "')");
           atisHdr.appendChild(atisLiveBtn);
           atisWrap.appendChild(atisHdr);
           var atisBox = document.createElement('div');
-          var atisBoxId = 'apch-atis-box-' + t.icao + '-' + bodyIdx;
           atisBox.id = atisBoxId;
           atisWrap.appendChild(atisBox);
           bodyEl.appendChild(atisWrap);
@@ -12834,12 +12943,22 @@ function clearFpl() {
   if(typeof NAV_FLT_NO !== 'undefined') NAV_FLT_NO = null;
   if(typeof NAV_STD !== 'undefined') NAV_STD = null;
   if(typeof NAV_STA !== 'undefined') NAV_STA = null;
+  if(typeof NAV_STD_LCL !== 'undefined') NAV_STD_LCL = null;
   if(typeof NAV_MLDW !== 'undefined') NAV_MLDW = null;
   if(typeof NAV_PZFW !== 'undefined') NAV_PZFW = null;
   if(typeof NAV_PZFW !== 'undefined') NAV_PZFW = null;
   if(typeof NAV_FOB !== 'undefined') NAV_FOB = null;
   if(typeof NAV_TAXI_OUT !== 'undefined') NAV_TAXI_OUT = null;
   NAV_BT_STR = null; NAV_FT_STR = null;
+  // Crew Rest Calculator の手動編集フラグもリセット（次のNAVLOGで再び自動入力されるように）
+  ['cr-flt-h', 'cr-flt-m', 'cr-tko-h', 'cr-tko-m'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if(el) { delete el.dataset.userEdited; delete el.dataset.autoFilled; }
+  });
+  if(typeof crUpdateFieldStatus === 'function') {
+    crUpdateFieldStatus('cr-flt', document.getElementById('cr-flt-h'));
+    crUpdateFieldStatus('cr-tko', document.getElementById('cr-tko-h'));
+  }
   NAV_SS_STR = null; NAV_SR_STR = null; NAV_EDCT_STR = null;
   NAV_RSV_LBS = null; NAV_ALT_APT = null; NAV_ALT_LBS = null;
   NAV_FOB_LBS = null; NAV_FOD_LBS = null;
@@ -14124,6 +14243,7 @@ function preloadGfsRadarPoints(routePts, options, done) {
 drawRoute();
 var NAV_DEP = null, NAV_DEST = null, NAV_STD = null, NAV_STA = null;
 var NAV_FLT_NO = null;
+var NAV_STD_LCL = null;   // 離陸現地時刻 "HH:MM"（NAVLOGヘッダー行の "STD hhmmZ/hhmmL" のL側）。無ければ null
 
 if (restoreFltPlnFromStorage()) {
   syncWpEtoUtcFromSchedule();
@@ -14142,6 +14262,7 @@ if (restoreFltPlnFromStorage()) {
     }
   }, 300);
   console.log('[FltPln] FLT PLN を localStorage から復元しました');
+  if(typeof crSyncFromNavlog === 'function') crSyncFromNavlog();
 }
 
 // Intl.DateTimeFormat を使ってタイムゾーンの現在オフセット(時間)と略称を取得
@@ -17022,19 +17143,6 @@ if(WX_GFS_WIND_ON && typeof applyGfsWindLayer === 'function') applyGfsWindLayer(
   <div class="mp-body">
     <div class="mp-left" id="mp-left"></div>
     <div class="mp-right" id="mp-right"></div>
-  </div>
-</div>
-<!-- ===== ATIS LIVE MODAL (atisview.com iframe) ===== -->
-<div id="atis-live-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:9999;">
-  <div style="position:absolute;top:2%;left:2%;width:96%;height:96%;background:#fff;border-radius:6px;overflow:hidden;display:flex;flex-direction:column;">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#1a2a3a;color:#fff;">
-      <span style="font-weight:bold;font-size:13px;">🔴 Live ATIS（atisview.com）<span id="atis-live-icao-hint" style="font-weight:normal;font-size:11px;color:#9fd3ff;margin-left:8px;"></span></span>
-      <span>
-        <a href="https://atisview.com" target="_blank" rel="noopener" style="color:#9fd3ff;font-size:11px;margin-right:12px;">新しいタブで開く ↗</a>
-        <button type="button" onclick="closeAtisLive()" style="background:#c62828;color:#fff;border:none;border-radius:3px;padding:4px 10px;font-size:12px;cursor:pointer;">✕ 閉じる</button>
-      </span>
-    </div>
-    <iframe id="atis-live-iframe" src="" style="flex:1;border:none;width:100%;"></iframe>
   </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
