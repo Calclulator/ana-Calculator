@@ -251,7 +251,7 @@
   .ws-method-help-btn{min-width:44px;min-height:36px;padding:6px 12px!important;display:inline-flex;align-items:center;justify-content:center;}
   .ws-method-help-ico{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;border:1.5px solid #4fc3f7;color:#4fc3f7;font-size:15px;font-weight:bold;font-style:italic;font-family:Georgia,'Times New Roman',serif;line-height:1;}
   /* ===== CREW REST CALCULATOR ===== */
-  #crew-rest-panel { display:flex; flex-direction:column; overflow:auto; }
+  #crew-rest-panel.active { display:flex; flex-direction:column; overflow:auto; }
   #crew-rest-panel .cr-topbar {
     display:flex; flex-wrap:wrap; align-items:center;
     gap:8px; padding:8px 12px; border-bottom:1px solid #1e2a38;
@@ -328,34 +328,15 @@
     overflow:hidden;
   }
   #crew-rest-panel .cr-tl-rest.alt { background:#2e7d32; }
-  #crew-rest-panel .cr-share-wrap {
-    padding:10px 12px; border-top:1px solid #1e2a38;
-  }
-  #crew-rest-panel .cr-share-lbl {
-    font-size:12px; color:#546e7a; margin-bottom:4px;
-  }
-  #crew-rest-panel .cr-share-ta {
-    width:100%; box-sizing:border-box;
-    background:#080a12; border:1px solid #1e2a38; border-radius:3px;
-    color:#cfd8dc; font-family:monospace; font-size:12px;
-    padding:8px; resize:vertical; min-height:90px;
-  }
-  #crew-rest-panel .cr-copy-btn {
-    margin-top:6px; padding:4px 14px; font-size:13px;
-    background:#1565c0; border:none; color:#fff; border-radius:3px;
-    cursor:pointer;
-  }
   body.day-mode #crew-rest-panel .cr-mode-btn{background:#ffffff;color:#546e7a;border-color:#d0d8e4;}
   body.day-mode #crew-rest-panel .cr-mode-btn.active{background:#ff6d00;color:#fff;border-color:#ff6d00;}
   body.day-mode #crew-rest-panel .cr-num{background:#ffffff;border-color:#c8d0da;color:#1a2a3a;}
   body.day-mode #crew-rest-panel .cr-tl-bar{background:#f5f7fa;border-color:#d0d8e4;}
-  body.day-mode #crew-rest-panel .cr-share-ta{background:#ffffff;border-color:#d0d8e4;color:#1a2a3a;}
   body.day-mode #crew-rest-panel .cr-meta{color:#546e7a;}
   body.day-mode #crew-rest-panel .cr-meta b{color:#1a2a3a;}
   body.day-mode #crew-rest-panel .cr-topbar,
   body.day-mode #crew-rest-panel .cr-inputs,
-  body.day-mode #crew-rest-panel .cr-section,
-  body.day-mode #crew-rest-panel .cr-share-wrap{border-color:#d0d8e4;}
+  body.day-mode #crew-rest-panel .cr-section{border-color:#d0d8e4;}
   #fdp-panel{overflow:auto;}
   #fdp-panel .fdp-wrap{padding:12px 14px;font-size:15px;max-width:720px;}
   #fdp-panel .fdp-wrap h2{margin:0 0 14px;font-size:1.05em;color:#4fc3f7;letter-spacing:.04em;font-weight:bold;}
@@ -399,7 +380,6 @@
       )!important;
     }
     #crew-rest-panel .cr-tl-rest { background:#aaa!important; color:#000!important; }
-    #crew-rest-panel .cr-share-wrap { display:none; }
     body{background:white!important;color:black!important;}
     .fp-table th{background:#eee!important;color:#333!important;}
     .fp-table td{color:#000!important;}
@@ -1986,13 +1966,6 @@
   <!-- 結果エリア -->
   <div id="cr-result-area" style="flex:1;overflow:auto;">
     <div style="padding:20px;color:#546e7a;font-size:13px;">入力値を確認すると自動計算されます。</div>
-  </div>
-
-  <!-- 共有テーブル -->
-  <div class="cr-share-wrap">
-    <div class="cr-share-lbl">▼ 共有テーブル（タップして全選択 → コピー）</div>
-    <textarea id="cr-share-ta" class="cr-share-ta" readonly onclick="this.select()"></textarea>
-    <button type="button" class="cr-copy-btn" onclick="crCopyTable()">📋 コピー</button>
   </div>
 </div><!-- crew-rest-panel -->
 <!-- ===== FDP CALC ===== -->
@@ -5214,22 +5187,28 @@ function crBuildTimeline(containerEl, tkoMin, fltMin, delay, awake, rows) {
   var i;
   for(i = 0; i < rows.length; i++) {
     var row = rows[i];
-    var rs = row.restStart;
-    var re = row.restEnd;
-    var pre  = Math.max(0, rs);
-    var rest = re - rs;
-    var post = Math.max(0, totalMin - re);
-    var prePct  = (pre  / totalMin * 100).toFixed(2);
-    var restPct = (rest / totalMin * 100).toFixed(2);
-    var postPct = (post / totalMin * 100).toFixed(2);
-    var restLabel = crFmtMin(rest);
+    // row.rests: [{start,end}, ...] を優先。無ければ従来の単一区間(restStart/restEnd)を使う
+    var segs = row.rests ? row.rests : [{ start: row.restStart, end: row.restEnd }];
     var altClass = (i % 2 === 1) ? ' alt' : '';
     html += '<div class="cr-tl-row">';
     html += '<span class="cr-tl-name">' + row.name + '</span>';
     html += '<div class="cr-tl-bar">';
-    html += '<div class="cr-tl-duty" style="width:' + prePct + '%"></div>';
-    html += '<div class="cr-tl-rest' + altClass + '" style="width:' + restPct + '%">' + restLabel + '</div>';
-    html += '<div class="cr-tl-duty" style="width:' + postPct + '%"></div>';
+    var cursor = 0;
+    var s;
+    for(s = 0; s < segs.length; s++) {
+      var rs = segs[s].start;
+      var re = segs[s].end;
+      var dutyLen = Math.max(0, rs - cursor);
+      var dutyPct = (dutyLen / totalMin * 100).toFixed(2);
+      if(dutyLen > 0) html += '<div class="cr-tl-duty" style="width:' + dutyPct + '%"></div>';
+      var restLen = re - rs;
+      var restPct = (restLen / totalMin * 100).toFixed(2);
+      html += '<div class="cr-tl-rest' + altClass + '" style="width:' + restPct + '%">' + crFmtMin(restLen) + '</div>';
+      cursor = re;
+    }
+    var tailLen = Math.max(0, totalMin - cursor);
+    var tailPct = (tailLen / totalMin * 100).toFixed(2);
+    if(tailLen > 0) html += '<div class="cr-tl-duty" style="width:' + tailPct + '%"></div>';
     html += '</div></div>';
   }
   containerEl.innerHTML = html;
@@ -5251,13 +5230,26 @@ function crBuild3pltSection(divCount, tkoMin, fltMin, delay, awake, crews, pillC
   html += '<span class="cr-est-arrival">EST ARRIVAL <span>' + crLclStr(estMin) + '</span></span>';
   html += '</div>';
 
-  var rows = [];
+  // divCount 回のスロットを PIC→CAPM→COP→PIC… の順でローテーション。
+  // divCount===crews.length（3分割）なら従来通り1人1ブロック、
+  // divCount>crews.length（6分割）なら1人あたり複数ブロックになる。
+  var order = [];
+  var rowsByName = {};
   var c;
-  for(c = 0; c < divCount && c < crews.length; c++) {
+  for(c = 0; c < divCount; c++) {
+    var crewIdx = c % crews.length;
+    var name = crews[crewIdx];
     var rs = delay + c * each;
     var re = rs + each;
-    rows.push({ name: crews[c], restStart: rs, restEnd: re });
+    if(!rowsByName[name]) {
+      rowsByName[name] = { name: name, rests: [] };
+      order.push(name);
+    }
+    rowsByName[name].rests.push({ start: rs, end: re });
   }
+  var rows = [];
+  var k;
+  for(k = 0; k < order.length; k++) rows.push(rowsByName[order[k]]);
   var tlDiv = document.createElement('div');
   tlDiv.className = 'cr-tl-wrap';
   crBuildTimeline(tlDiv, tkoMin, fltMin, delay, awake, rows);
@@ -5271,7 +5263,7 @@ function crBuild3pltSection(divCount, tkoMin, fltMin, delay, awake, crews, pillC
   return html;
 }
 
-function crBuild4pltSet(label, divCap, divCop, tkoMin, fltMin, firstRest, lastRest, shareOut) {
+function crBuild4pltSet(label, divCap, divCop, tkoMin, fltMin, firstRest, lastRest) {
   var window4 = fltMin - firstRest - lastRest;
   if(window4 <= 0) return '<div class="cr-section"><span style="color:#ef5350;">1ST REST + LAST REST が FLT TIME を超えています</span></div>';
 
@@ -5313,40 +5305,11 @@ function crBuild4pltSet(label, divCap, divCop, tkoMin, fltMin, firstRest, lastRe
   crBuildTimeline(tlDiv, tkoMin, fltMin, firstRest, lastRest, rows);
   html += tlDiv.outerHTML;
   html += '</div>';
-  if(shareOut) {
-    shareOut.push({ label: label, rows: rows });
-  }
   return html;
-}
-
-function crBuildShareText(tkoMin, fltMin, delay, awake, mode, sections) {
-  var lines = [];
-  var estMin = tkoMin + fltMin;
-  lines.push('【CREW REST SCHEDULE】');
-  lines.push('FLT TIME : ' + crFmtMin(fltMin) +
-    '  |  T/O: ' + crLclStr(tkoMin) + ' LCL' +
-    '  |  ETA: ' + crLclStr(estMin) + ' LCL');
-  lines.push('--------------------------------');
-  var i;
-  for(i = 0; i < sections.length; i++) {
-    var sec = sections[i];
-    lines.push(sec.label + ':');
-    var j;
-    for(j = 0; j < sec.rows.length; j++) {
-      var row = sec.rows[j];
-      var rs = crLclStr(tkoMin + row.restStart);
-      var re = crLclStr(tkoMin + row.restEnd);
-      var dur = crFmtMin(row.restEnd - row.restStart);
-      lines.push('  ' + (row.name + '     ').slice(0, 5) +
-        ' REST ' + rs + ' - ' + re + ' (' + dur + ')');
-    }
-  }
-  return lines.join('\n');
 }
 
 function crCompute() {
   var resultArea = document.getElementById('cr-result-area');
-  var shareTa = document.getElementById('cr-share-ta');
   if(!resultArea) return;
 
   var fltH = crGetInt('cr-flt-h', 8);
@@ -5364,49 +5327,22 @@ function crCompute() {
   }
 
   var html = '';
-  var shareSections = [];
 
   if(CR_MODE === '3plt') {
     var crews = ['PIC', 'CAPM', 'COP'];
-    var avail = fltMin - delay - awake;
-    var each3 = avail > 0 ? Math.floor(avail / 3) : 0;
-    var each6 = avail > 0 ? Math.floor(avail / 6) : 0;
-
     html += crBuild3pltSection(3, tkoMin, fltMin, delay, awake, crews, '');
     html += crBuild3pltSection(6, tkoMin, fltMin, delay, awake, crews, 'green');
-
-    var sec3rows = [];
-    var sec6rows = [];
-    var c;
-    for(c = 0; c < 3; c++) {
-      sec3rows.push({ name: crews[c], restStart: delay + c * each3, restEnd: delay + (c + 1) * each3 });
-      sec6rows.push({ name: crews[c], restStart: delay + c * each6, restEnd: delay + (c + 1) * each6 });
-    }
-    shareSections.push({ label: '3 DIVISIONS', rows: sec3rows });
-    shareSections.push({ label: '6 DIVISIONS', rows: sec6rows });
-
   } else {
     var firstRest = crGetInt('cr-1st-rest', 120);
     var lastRest  = crGetInt('cr-last-rest', 120);
 
     html += '<div class="cr-section" style="font-size:13px;color:#4fc3f7;font-weight:bold;padding:6px 12px;">SET 1</div>';
-    html += crBuild4pltSet('SET 1', 4, 5, tkoMin, fltMin, firstRest, lastRest, shareSections);
+    html += crBuild4pltSet('SET 1', 4, 5, tkoMin, fltMin, firstRest, lastRest);
     html += '<div class="cr-section" style="font-size:13px;color:#4fc3f7;font-weight:bold;padding:6px 12px;">SET 2</div>';
-    html += crBuild4pltSet('SET 2', 6, 7, tkoMin, fltMin, firstRest, lastRest, shareSections);
+    html += crBuild4pltSet('SET 2', 6, 7, tkoMin, fltMin, firstRest, lastRest);
   }
 
   resultArea.innerHTML = html;
-
-  if(shareTa) {
-    shareTa.value = crBuildShareText(tkoMin, fltMin, delay, awake, CR_MODE, shareSections);
-  }
-}
-
-function crCopyTable() {
-  var ta = document.getElementById('cr-share-ta');
-  if(!ta) return;
-  ta.select();
-  try { document.execCommand('copy'); } catch(e) {}
 }
 
 function crInit() {
@@ -14421,14 +14357,13 @@ function toggleMode() {
     #crew-rest-panel .cr-mode-btn{background:#ffffff!important;color:#546e7a!important;border-color:#d0d8e4!important;}
     #crew-rest-panel .cr-mode-btn.active{background:#ff6d00!important;color:#fff!important;border-color:#ff6d00!important;}
     #crew-rest-panel .cr-num{background:#ffffff!important;border-color:#c8d0da!important;color:#1a2a3a!important;}
-    #crew-rest-panel .cr-inp-lbl,#crew-rest-panel .cr-sep,#crew-rest-panel .cr-tl-tick,#crew-rest-panel .cr-share-lbl{color:#546e7a!important;}
+    #crew-rest-panel .cr-inp-lbl,#crew-rest-panel .cr-sep,#crew-rest-panel .cr-tl-tick{color:#546e7a!important;}
     #crew-rest-panel .cr-tl-name,#crew-rest-panel .cr-est-arrival{color:#546e7a!important;}
     #crew-rest-panel .cr-est-arrival span{color:#1565c0!important;}
     #crew-rest-panel .cr-tl-bar{background:#f5f7fa!important;border-color:#d0d8e4!important;}
-    #crew-rest-panel .cr-share-ta{background:#ffffff!important;border-color:#d0d8e4!important;color:#1a2a3a!important;}
     #crew-rest-panel .cr-meta{color:#546e7a!important;}
     #crew-rest-panel .cr-meta b{color:#1a2a3a!important;}
-    #crew-rest-panel .cr-topbar,#crew-rest-panel .cr-inputs,#crew-rest-panel .cr-section,#crew-rest-panel .cr-share-wrap{border-color:#d0d8e4!important;}
+    #crew-rest-panel .cr-topbar,#crew-rest-panel .cr-inputs,#crew-rest-panel .cr-section{border-color:#d0d8e4!important;}
     #fdp-panel{background:#f5f5f5!important;}
     #fdp-panel .bar{background:#f0f4f8!important;border-bottom-color:#dde3ea!important;}
     #fdp-panel .fdp-wrap h2{color:#1565c0!important;}
