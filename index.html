@@ -4113,8 +4113,12 @@ function wxOfpParsePdf(text) {
     seen[raw] = true;
     parsed = wxOfpParseCoord(raw);
     if(!parsed) continue;
-    ident = wxOfpIdentNearCoord(text, m.index, raw);
-    if(!ident) ident = wxOfpLookupWpName(parsed.lat, parsed.lon);
+    // Waypoint情報だけを確実に表示したいので、まずNAVLOGの実ルート座標(WP配列)との
+    // 近傍マッチ(確実な照合)を優先する。座標直後のテキストを推測する
+    // wxOfpIdentNearCoord() は、コース・距離・マッハ数・時刻等、ウェイポイント名ではない
+    // 文字列を誤って拾うことがあるため、確実な照合が失敗した場合の最終フォールバックとしてのみ使う。
+    ident = wxOfpLookupWpName(parsed.lat, parsed.lon);
+    if(!ident) ident = wxOfpIdentNearCoord(text, m.index, raw);
     result.push({
       name: ident || raw,
       ident: ident || '',
@@ -4196,15 +4200,24 @@ function wxOfpLookupWpName(lat, lon) {
 
 function wxOfpIdentNearCoord(text, idx, raw) {
   var nl, rest, nameM, ident;
+  // ウェイポイント名ではない、OFPによく出る見出し語・略語のブラックリスト
+  var NON_WP_TOKENS = {
+    TOC: 1, TOD: 1, FIR: 1, MORA: 1, DIST: 1, WIND: 1, TAS: 1, GS: 1,
+    ZT: 1, FUEL: 1, ETA: 1, ETO: 1, ATO: 1, ALT: 1, TEMP: 1, ISA: 1,
+    STA: 1, STD: 1, MSA: 1, RTE: 1
+  };
   nl = String(text || '').indexOf('\n', idx);
   rest = (nl >= 0)
     ? text.slice(nl + 1, nl + 90)
     : String(text || '').slice(idx + String(raw || '').length, idx + String(raw || '').length + 90);
-  nameM = String(rest).match(/^\s*(-?[A-Z][A-Z0-9\-]{1,7}|\d{2}[ENW]\d{2})\b/);
+  // ウェイポイント名らしい文字列（英字始まり・英数字2〜8桁）だけを許可する。
+  // 「2桁数字+E/N/W+2桁数字」のような座標もどきパターンは、コースや距離等の
+  // 数値列を誤って拾いやすいため対象から外す。
+  nameM = String(rest).match(/^\s*([A-Z][A-Z0-9]{1,7})\b/);
   if(!nameM) return '';
   ident = nameM[1];
-  if(!ident || ident.charAt(0) === '-') return '';
-  if(ident === 'TOC' || ident === 'TOD' || ident === 'FIR') return '';
+  if(!ident) return '';
+  if(NON_WP_TOKENS[ident]) return '';
   return ident;
 }
 
