@@ -10041,17 +10041,32 @@ function renderDumpResult(containerId, fobLbs, toRemainLbs, params, label, skipG
   if(!dumpNeeded) {
     html += '<div style="font-size:28px;font-weight:bold;color:#66bb6a;margin:12px 0;">ダンプ不要</div>';
   } else if(res) {
+    var formulaLines = [];
+    if(res.centerLbs > 0) {
+      formulaLines.push(
+        'センター: ' + res.centerLbs.toLocaleString() + ' lbs ÷ 3,000 lbs/min = ' + res.centerMin.toFixed(1) + ' 分'
+      );
+    }
+    if(res.mainLbs > 0) {
+      formulaLines.push(
+        'メイン: ' + res.mainLbs.toLocaleString() + ' lbs ÷ 1,250 lbs/min = ' + res.mainMin.toFixed(1) + ' 分'
+      );
+    }
+    var formulaHtml = formulaLines.join('<br>');
+    if(res.centerLbs > 0 && res.mainLbs > 0) {
+      formulaHtml += '<br>合計: ' + res.centerMin.toFixed(1) + ' + ' + res.mainMin.toFixed(1) + ' = ' + res.totalMin.toFixed(1) + ' 分';
+    }
+
     html +=
       '<div style="font-size:32px;font-weight:bold;color:'+C.hi+';margin:12px 0;">' +
         res.totalMin.toFixed(1) + ' min' +
       '</div>' +
       '<div style="color:'+C.lbl+';font-size:12px;line-height:1.8;">' +
         'ダンプ量: ' + res.dumpLbs.toLocaleString() + ' lbs<br>' +
-        'ダンプ後残燃料: ' + res.afterLbs.toLocaleString() + ' lbs<br>' +
-        (res.centerLbs > 0
-          ? 'セ ' + res.centerLbs.toLocaleString() + ' @3,000lbs/min'
-            + (res.mainLbs > 0 ? '、メ ' + res.mainLbs.toLocaleString() + ' @1,250lbs/min' : '')
-          : 'メイン ' + res.mainLbs.toLocaleString() + ' @1,250lbs/min') +
+        'ダンプ後残燃料: ' + res.afterLbs.toLocaleString() + ' lbs' +
+      '</div>' +
+      '<div style="color:'+C.dim+';font-size:11px;line-height:1.7;margin-top:8px;padding-top:8px;border-top:1px dashed '+C.bdr+';">' +
+        '計算式:<br>' + formulaHtml +
       '</div>';
   }
 
