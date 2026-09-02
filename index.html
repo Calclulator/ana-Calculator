@@ -10812,7 +10812,7 @@ function initApchGrid() {
     try { APCH_RADAR_MAP.remove(); } catch(e) {}
     APCH_RADAR_MAP = null;
   }
-  var titles = ['METAR/TAF', '断面図', '地上天気図', 'Radar', 'Skew-T', '悪天予想図'];
+  var titles = ['METAR/TAF', '断面図', '地上天気図', 'Radar', '到着空港ライブ (FlightAware)', '悪天予想図'];
   var i, cell, h, hdr, body, btnM, btnA;
   apchClearEl(host);
   var grid = document.createElement('div');
@@ -11611,6 +11611,50 @@ function trySkewTUrls(icao, wmo, candidates, idx, el, etaDate) {
   img.src = urlWithSrc;
 }
 
+// APCH Preparationページ 左下セル: 目的地空港のFlightAwareライブ状況をiframeで表示する。
+// Skew-Tの代わりにこちらを表示する。
+function loadApchFaAirport(icao, containerEl) {
+  var el = (typeof containerEl === 'string') ? document.getElementById(containerEl) : containerEl;
+  if(!el) return;
+  var ic = String(icao || '').replace(/^\s+|\s+$/g, '').toUpperCase();
+  apchClearEl(el);
+  if(!ic || !/^[A-Z]{4}$/.test(ic)) {
+    apchSetError(el, 'DEST ICAOが未確定です');
+    return;
+  }
+  var url = 'https://ja.flightaware.com/live/airport/' + ic;
+
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;height:100%;';
+
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#888;margin-bottom:4px;flex-shrink:0;';
+  var lbl = document.createElement('span');
+  lbl.appendChild(document.createTextNode(ic + ' Live'));
+  hdr.appendChild(lbl);
+  var link = document.createElement('a');
+  link.href = url;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.style.cssText = 'color:#4fc3f7;font-size:10px;';
+  link.appendChild(document.createTextNode('新しいタブで開く ↗'));
+  hdr.appendChild(link);
+  wrap.appendChild(hdr);
+
+  var iframe = document.createElement('iframe');
+  iframe.src = url;
+  iframe.title = ic + ' FlightAware';
+  iframe.style.cssText = 'flex:1;width:100%;border:none;background:#fff;min-height:180px;';
+  wrap.appendChild(iframe);
+
+  var faNote = document.createElement('div');
+  faNote.style.cssText = 'color:#888;font-size:10px;margin-top:4px;flex-shrink:0;';
+  faNote.appendChild(document.createTextNode('埋め込みが表示されない場合（FlightAware側の制限）は「新しいタブで開く」を使ってください。'));
+  wrap.appendChild(faNote);
+
+  el.appendChild(wrap);
+}
+
 function loadSkewT(icao, etaDate, cellEl) {
   if(typeof cellEl === 'string') cellEl = document.getElementById(cellEl);
   if(!cellEl) return;
@@ -11876,7 +11920,7 @@ function replayApchBrief() {
   drawCrossSection({ destIcao: APCH_LAST.destIcao, arrivalTC: APCH_LAST.arrivalTC }, apchCell(2));
   loadSurfaceChart(APCH_LAST.destIcao, APCH_LAST.etaDate, apchCell(3));
   drawRadar(APCH_LAST.destIcao, APCH_LAST.lat, APCH_LAST.lon, apchCell(4));
-  loadSkewT(APCH_LAST.destIcao, APCH_LAST.etaDate, apchCell(5));
+  loadApchFaAirport(APCH_LAST.destIcao, apchCell(5));
   loadApchSigwx(APCH_LAST.destIcao, APCH_LAST.etaDate, apchCell(6));
 }
 
@@ -11952,15 +11996,14 @@ function renderCrossSection(wxData, points, hostEl) {
   var H = topPad + nRow * cellH + botPad;
   var r, c, x, y, cell, spd, dir, cloudy, rot, lbl, fill;
   var g, g2, svg, upper, lower, dAlt, vws;
-  var shearCell = [];
-  var shearBound = [];
+  var cellVws = [];
+  var vwsHere, txtColor, arrColor;
+  var legendWrap, legendDefs, sw, item;
 
   for(c = 0; c < nCol; c++) {
-    shearCell[c] = [];
-    shearBound[c] = [];
+    cellVws[c] = [];
     for(r = 0; r < nRow; r++) {
-      shearCell[c][r] = false;
-      shearBound[c][r] = false;
+      cellVws[c][r] = 0;
     }
     for(r = 0; r < nRow - 1; r++) {
       upper = (wxData && wxData[c] && wxData[c][r]) ? wxData[c][r] : null;
@@ -11969,11 +12012,8 @@ function renderCrossSection(wxData, points, hostEl) {
       if(isNaN(upper.windspeed) || isNaN(lower.windspeed)) continue;
       dAlt = LAYER_ALT_FT[r] - LAYER_ALT_FT[r + 1];
       vws = calcVws(upper.windspeed, lower.windspeed, dAlt);
-      if(vws >= VWS_THRESHOLD) {
-        shearBound[c][r] = true;
-        shearCell[c][r] = true;
-        shearCell[c][r + 1] = true;
-      }
+      if(vws > cellVws[c][r]) cellVws[c][r] = vws;
+      if(vws > cellVws[c][r + 1]) cellVws[c][r + 1] = vws;
     }
   }
 
@@ -11997,8 +12037,11 @@ function renderCrossSection(wxData, points, hostEl) {
       x = leftPad + c * cellW;
       cell = (wxData && wxData[c] && wxData[c][r]) ? wxData[c][r] : null;
       cloudy = cell && cell.cloudcover > 50;
-      if(shearCell[c] && shearCell[c][r]) {
-        fill = 'rgba(255,140,0,0.25)';
+      vwsHere = (cellVws[c] && cellVws[c][r]) || 0;
+      // SMT(0-4kt/1000ft)は「ほぼ平坦」として無色のまま、L-(5-6)以上のみ既存パレットで着色する。
+      // ANA WSCP標準の6段階（SMT/L-/L/L+/MOD/SEV）は WX Turbulence 画面と共通。
+      if(vwsHere > 4 && typeof wsPaletteColor === 'function') {
+        fill = wsPaletteColor(vwsHere, 'vws');
       } else if(cloudy) {
         fill = (typeof DAY_MODE !== 'undefined' && DAY_MODE) ? 'rgba(120,128,140,.28)' : 'rgba(180,190,200,.22)';
       } else {
@@ -12011,13 +12054,15 @@ function renderCrossSection(wxData, points, hostEl) {
         spd = Math.round(Number(cell.windspeed));
         dir = (cell.winddir != null && !isNaN(cell.winddir)) ? Number(cell.winddir) : 0;
         rot = dir;
+        txtColor = (vwsHere > 4) ? '#111' : C.hi;
+        arrColor = (vwsHere > 4) ? '#111' : C.acc;
         g = apchSvgEl('g', { transform: 'translate(' + (x + cellW / 2) + ',' + (y + cellH / 2) + ')' });
         g.appendChild(apchSvgEl('text', {
-          y: -7, 'text-anchor': 'middle', fill: C.hi, 'font-size': 11, 'font-weight': 'bold'
+          y: -7, 'text-anchor': 'middle', fill: txtColor, 'font-size': 11, 'font-weight': 'bold'
         }, spd));
         g2 = apchSvgEl('g', { transform: 'rotate(' + rot + ')' });
         g2.appendChild(apchSvgEl('text', {
-          y: 14, 'text-anchor': 'middle', fill: C.acc, 'font-size': 12
+          y: 14, 'text-anchor': 'middle', fill: arrColor, 'font-size': 12
         }, '▲'));
         g.appendChild(g2);
         svg.appendChild(g);
@@ -12031,22 +12076,6 @@ function renderCrossSection(wxData, points, hostEl) {
   }
 
   for(c = 0; c < nCol; c++) {
-    for(r = 0; r < nRow - 1; r++) {
-      if(!shearBound[c][r]) continue;
-      y = topPad + (r + 1) * cellH;
-      svg.appendChild(apchSvgEl('line', {
-        x1: leftPad + c * cellW,
-        y1: y,
-        x2: leftPad + (c + 1) * cellW,
-        y2: y,
-        stroke: '#FF8C00',
-        'stroke-width': 2.5,
-        'stroke-dasharray': '4,2'
-      }));
-    }
-  }
-
-  for(c = 0; c < nCol; c++) {
     x = leftPad + c * cellW + cellW / 2;
     lbl = (points && points[c] && points[c].dist === 0) ? 'APT' : ((points && points[c] && points[c].dist != null) ? (points[c].dist + 'NM') : (APCH_DISTS[c] + 'NM'));
     svg.appendChild(apchSvgEl('text', {
@@ -12054,23 +12083,32 @@ function renderCrossSection(wxData, points, hostEl) {
     }, lbl));
   }
 
-  y = topPad + nRow * cellH + 36;
-  svg.appendChild(apchSvgEl('line', {
-    x1: leftPad, y1: y, x2: leftPad + 22, y2: y,
-    stroke: '#FF8C00', 'stroke-width': 2.5, 'stroke-dasharray': '4,2'
-  }));
-  svg.appendChild(apchSvgEl('rect', {
-    x: leftPad + 28, y: y - 6, width: 12, height: 12,
-    fill: 'rgba(255,140,0,0.25)', stroke: '#FF8C00', 'stroke-width': 1
-  }));
-  svg.appendChild(apchSvgEl('text', {
-    x: leftPad + 44, y: y + 4, fill: C.lbl, 'font-size': 10
-  }, '垂直風速シアー 7kt/1000ft以上'));
-
   host.appendChild(svg);
+
+  legendWrap = document.createElement('div');
+  legendWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:6px;font-size:10px;color:' + C.lbl + ';align-items:center;';
+  legendDefs = [
+    { val: 5,  label: 'L- (5-6)' },
+    { val: 8,  label: 'L (7-9)' },
+    { val: 11, label: 'L+ (10-12)' },
+    { val: 15, label: 'MOD (13-17)' },
+    { val: 20, label: 'SEV (18+)' }
+  ];
+  legendDefs.forEach(function(d) {
+    sw = document.createElement('span');
+    sw.style.cssText = 'display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:3px;vertical-align:middle;background:' +
+      wsPaletteColor(d.val, 'vws') + ';';
+    item = document.createElement('span');
+    item.style.cssText = 'display:inline-flex;align-items:center;margin-right:8px;';
+    item.appendChild(sw);
+    item.appendChild(document.createTextNode(d.label));
+    legendWrap.appendChild(item);
+  });
+  host.appendChild(legendWrap);
+
   var note = document.createElement('div');
   note.style.cssText = 'color:' + C.dim + ';font-size:10px;margin-top:4px;';
-  note.appendChild(document.createTextNode('風速 kt ／ ▲ は風の吹いてくる方向（FROM）。NavLog WINDS/TEMP ALOFT。'));
+  note.appendChild(document.createTextNode('風速 kt ／ ▲ は風の吹いてくる方向（FROM）。VWS(kt/1000ft)による乱気流強度色分け。NavLog WINDS/TEMP ALOFT。'));
   host.appendChild(note);
 }
 
@@ -12243,7 +12281,7 @@ function runApchBrief() {
   renderMetarTafText(inp.destIcao, inp.altIcao, apchCell(1));
   drawCrossSection(inp, apchCell(2));
   loadSurfaceChart(inp.destIcao, etaDate, apchCell(3));
-  loadSkewT(inp.destIcao, etaDate, apchCell(5));
+  loadApchFaAirport(inp.destIcao, apchCell(5));
   loadApchSigwx(inp.destIcao, etaDate, apchCell(6));
 
   var coordsP = fetchAirportCoords(inp.destIcao).catch(function() {
