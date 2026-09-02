@@ -5929,10 +5929,26 @@ function runParse() {
   NAV_FLT_NO = fltM ? fltM[1] : null;
 
   // STD / STA
-  var stdM = txt.match(/STD\s+(\d{2})(\d{2})Z/);
+  // 自便のNAVLOGヘッダー行（例: "ANA0890/52/01 YSSY-RJTT  RJAA/  STD 0145Z/1145L STA 1135Z/2035L"）
+  // だけを対象に抽出する。COMPANY AIRPORT REPORTの「PREV ON BAY: AA72 STD 2310Z」（前方機の時刻）や
+  // CONX PAX INFOの他便TETA情報（例: "NH0116 (YVR/STD 1255Z)"）に誤マッチしないようにするため。
+  // NAVLOGヘッダー行は「4文字空港コード-4文字空港コード（ハイフン直結）」と「STD」を同じ行に含む点で
+  // 他の行と区別できる。
+  var navHeaderLine = null;
+  for (var __li = 0; __li < lines.length; __li++) {
+    if (/\b[A-Z]{4}-[A-Z]{4}\b/.test(lines[__li]) && /STD\s+\d{4}Z/.test(lines[__li])) {
+      navHeaderLine = lines[__li];
+      break;
+    }
+  }
+
+  var stdM = navHeaderLine ? navHeaderLine.match(/STD\s+(\d{2})(\d{2})Z/) : null;
+  if (!stdM) stdM = txt.match(/STD\s+(\d{2})(\d{2})Z\/(\d{2})(\d{2})L/); // フォールバック（Z/L併記形式のみ許可）
   DEP_STD_MIN = stdM ? parseInt(stdM[1])*60+parseInt(stdM[2]) : null;
   NAV_STD = stdM ? (stdM[1]+stdM[2]) : null;
-  var staM = txt.match(/STA\s+(\d{2})(\d{2})Z/);
+
+  var staM = navHeaderLine ? navHeaderLine.match(/STA\s+(\d{2})(\d{2})Z/) : null;
+  if (!staM) staM = txt.match(/STA\s+(\d{2})(\d{2})Z\/(\d{2})(\d{2})L/); // フォールバック
   NAV_STA = staM ? (staM[1]+staM[2]) : null;
 
   // B/T (Block Time)
