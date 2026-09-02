@@ -3571,92 +3571,31 @@ function wxCheckwxKey() {
   return 'eb52e4c6ca254584842adb8dc574b4f8';
 }
 
+// 旧: atis.guruを生HTML取得してパースしていたが、atis.guruがBlazor Server化され
+// JavaScript実行なしでは本文を取得できなくなった（プレーンHTTP取得は常に空/エラー）。
+// また atis.guru 自体もX-Frame-Optionsによりiframe埋め込みができない。
+// そのため、この関数は「Live ATIS(atisview.com)のiframeを最初から開いた状態で表示する」
+// 処理に置き換える。呼び出し元(icao, containerId)のシグネチャは変更しない。
 function wxFetchAtis(icao, containerId) {
   var container = document.getElementById(containerId);
-  var url, proxyUrl, xhr;
+  var btnId, existing;
   if(!container) return;
-  icao = String(icao || '').toUpperCase();
-  container.innerHTML = '<span style="color:#888;font-size:11px;">ATIS 取得中...</span>';
-  url = 'https://atis.guru/atis/' + icao + '?_=' + (new Date()).getTime();
-  proxyUrl = wxProxyUrl(url);
-  xhr = new XMLHttpRequest();
-  xhr.open('GET', proxyUrl, true);
-  xhr.responseType = 'text';
-  xhr.onload = function() {
-    var html, preMatch, divMatch, bodyMatch, atisLine, atisText, re;
-    if(xhr.status === 200 && xhr.responseText) {
-      html = xhr.responseText;
-      atisText = '';
-      preMatch = html.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
-      if(preMatch) atisText = String(preMatch[1]).replace(/<[^>]+>/g, '').replace(/^\s+|\s+$/g, '');
-      if(!atisText) {
-        divMatch = html.match(/class="atis[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-        if(divMatch) atisText = String(divMatch[1]).replace(/<[^>]+>/g, '').replace(/^\s+|\s+$/g, '');
-      }
-      if(!atisText) {
-        bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-        if(bodyMatch) {
-          html = String(bodyMatch[1]).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
-          re = new RegExp('(' + icao + '[\\s\\S]{20,600})', 'i');
-          atisLine = html.match(re);
-          if(atisLine) atisText = String(atisLine[1]).replace(/^\s+|\s+$/g, '');
-          else atisText = html.substring(0, 600);
-        }
-      }
-      if(atisText) {
-        atisText = atisText
-          .replace(/&#xA;/gi, '\n')
-          .replace(/&#x9;/gi, '\t')
-          .replace(/&#xD;/gi, '')
-          .replace(/&amp;/gi, '&')
-          .replace(/&lt;/gi, '<')
-          .replace(/&gt;/gi, '>')
-          .replace(/&nbsp;/gi, ' ');
-        atisText = atisText.replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '');
-
-        // ATIS本文から発行時刻（例: "INFO Q 1451Z" / "1234Z"）を抽出し、鮮度を判定する
-        var freshHtml = '';
-        var timeM = atisText.match(/\b(\d{2})(\d{2})Z\b/);
-        if(timeM) {
-          var atHH = parseInt(timeM[1], 10);
-          var atMM = parseInt(timeM[2], 10);
-          if(atHH >= 0 && atHH <= 23 && atMM >= 0 && atMM <= 59) {
-            var nowD = new Date();
-            var nowMin = nowD.getUTCHours() * 60 + nowD.getUTCMinutes();
-            var atMin = atHH * 60 + atMM;
-            var diffMin = nowMin - atMin;
-            if(diffMin < 0) diffMin += 1440; // 日付またぎ
-            var isStale = diffMin >= 90; // 90分以上前なら警告
-            var freshColor = isStale ? '#e65100' : '#2e7d32';
-            var freshBg = isStale ? '#fff3e0' : '#e8f5e9';
-            freshHtml = '<div style="font-size:11px;font-weight:bold;color:' + freshColor + ';'
-              + 'background:' + freshBg + ';border:1px solid ' + freshColor + ';'
-              + 'padding:3px 6px;border-radius:3px;margin-bottom:4px;">'
-              + (isStale ? '⚠ ' : '✓ ')
-              + 'ATIS報時刻 ' + ('0'+atHH).slice(-2) + ':' + ('0'+atMM).slice(-2) + 'Z'
-              + '（約' + diffMin + '分前）'
-              + (isStale ? ' — 古い可能性があります。右上の「🔴 Live ATIS」で確認してください' : '')
-              + '</div>';
-          }
-        }
-
-        container.innerHTML = freshHtml +
-          '<div style="font-family:monospace;font-size:11px;white-space:pre-wrap;'
-          + 'background:#f5f5f0;border:1px solid #ccc;padding:6px;border-radius:3px;'
-          + 'color:#111;line-height:1.5;">'
-          + atisText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-          + '</div>';
-      } else {
-        container.innerHTML = '<span style="color:#888;font-size:11px;">ATIS データなし (' + icao + ')。「🔴 Live ATIS」ボタンで確認してください。</span>';
-      }
-    } else {
-      container.innerHTML = '<span style="color:#f66;font-size:11px;">ATIS 取得エラー HTTP ' + xhr.status + '</span>';
-    }
-  };
-  xhr.onerror = function() {
-    container.innerHTML = '<span style="color:#f66;font-size:11px;">ATIS 通信エラー</span>';
-  };
-  xhr.send();
+  icao = String(icao || '').replace(/^\s+|\s+$/g, '').toUpperCase();
+  if(!icao) {
+    container.innerHTML = '<span style="color:#888;font-size:11px;">ICAO未確定</span>';
+    return;
+  }
+  btnId = containerId + '-live-auto-btn';
+  container.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#888;margin-bottom:2px;">' +
+      '<span>atis.guruは現在この方式では取得できないため、Live ATISを自動表示しています</span>' +
+      '<button type="button" class="btn" id="' + btnId + '" style="font-size:10px;padding:2px 8px;" ' +
+        'onclick="toggleAtisLive(\'' + icao + '\', \'' + containerId + '\', \'' + btnId + '\')">▲ 閉じる</button>' +
+    '</div>';
+  // 再取得時に既に開いているとトグルが閉じてしまうため、いったん閉じてから開く
+  existing = document.getElementById(containerId + '-live-wrap');
+  if(existing && existing.style.display !== 'none') existing.style.display = 'none';
+  toggleAtisLive(icao, containerId, btnId);
 }
 
 // Live ATIS(atisview.com)をモーダルではなく、呼び出し元のATIS欄の直下にインライン表示する（トグル式）。
@@ -10812,7 +10751,7 @@ function initApchGrid() {
     try { APCH_RADAR_MAP.remove(); } catch(e) {}
     APCH_RADAR_MAP = null;
   }
-  var titles = ['METAR/TAF', '断面図', '地上天気図', 'Radar', '到着空港ライブ (FlightAware)', '悪天予想図'];
+  var titles = ['METAR/TAF', '断面図', '地上天気図', 'Radar', '到着空港ライブ (ADS-B Exchange)', '悪天予想図'];
   var i, cell, h, hdr, body, btnM, btnA;
   apchClearEl(host);
   var grid = document.createElement('div');
@@ -11611,8 +11550,7 @@ function trySkewTUrls(icao, wmo, candidates, idx, el, etaDate) {
   img.src = urlWithSrc;
 }
 
-// APCH Preparationページ 左下セル: 目的地空港のFlightAwareライブ状況をiframeで表示する。
-// Skew-Tの代わりにこちらを表示する。
+// APCH Preparationページ 左下セル: 目的地空港のADS-B Exchangeライブマップをiframeで表示する。
 function loadApchFaAirport(icao, containerEl) {
   var el = (typeof containerEl === 'string') ? document.getElementById(containerEl) : containerEl;
   if(!el) return;
@@ -11622,7 +11560,9 @@ function loadApchFaAirport(icao, containerEl) {
     apchSetError(el, 'DEST ICAOが未確定です');
     return;
   }
-  var url = 'https://ja.flightaware.com/live/airport/' + ic;
+  // FlightAware(ja.flightaware.com)はX-Frame-Options:SAMEORIGINでiframe埋め込みがブロックされるため、
+  // 埋め込み可能なADS-B Exchangeのライブマップに変更。?airport=ICAOで直接その空港にズームできる。
+  var mapUrl = 'https://globe.adsbexchange.com/?airport=' + ic + '&zoom=9';
 
   var wrap = document.createElement('div');
   wrap.style.cssText = 'display:flex;flex-direction:column;height:100%;';
@@ -11630,10 +11570,10 @@ function loadApchFaAirport(icao, containerEl) {
   var hdr = document.createElement('div');
   hdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#888;margin-bottom:4px;flex-shrink:0;';
   var lbl = document.createElement('span');
-  lbl.appendChild(document.createTextNode(ic + ' Live'));
+  lbl.appendChild(document.createTextNode(ic + ' Live (ADS-B Exchange)'));
   hdr.appendChild(lbl);
   var link = document.createElement('a');
-  link.href = url;
+  link.href = mapUrl;
   link.target = '_blank';
   link.rel = 'noopener';
   link.style.cssText = 'color:#4fc3f7;font-size:10px;';
@@ -11642,15 +11582,10 @@ function loadApchFaAirport(icao, containerEl) {
   wrap.appendChild(hdr);
 
   var iframe = document.createElement('iframe');
-  iframe.src = url;
-  iframe.title = ic + ' FlightAware';
-  iframe.style.cssText = 'flex:1;width:100%;border:none;background:#fff;min-height:180px;';
+  iframe.src = mapUrl;
+  iframe.title = ic + ' ADS-B Exchange';
+  iframe.style.cssText = 'flex:1;width:100%;border:none;background:#1a1a2e;min-height:220px;';
   wrap.appendChild(iframe);
-
-  var faNote = document.createElement('div');
-  faNote.style.cssText = 'color:#888;font-size:10px;margin-top:4px;flex-shrink:0;';
-  faNote.appendChild(document.createTextNode('埋め込みが表示されない場合（FlightAware側の制限）は「新しいタブで開く」を使ってください。'));
-  wrap.appendChild(faNote);
 
   el.appendChild(wrap);
 }
