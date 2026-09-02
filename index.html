@@ -1404,7 +1404,10 @@
         <div style="flex:1;min-width:280px;" id="wx-metar-container">
           <div class="wx-metar-sec-lbl" style="font-size:11px;font-weight:bold;color:#aaa;margin-bottom:2px;border-bottom:1px solid #333;">METAR / TAF</div>
           <pre id="wx-metar-output" style="font-family:monospace;font-size:12px;color:#ccc;background:#0a0a0a;border:1px solid #333;border-radius:4px;padding:8px;min-height:200px;white-space:pre-wrap;line-height:1.5;margin:0;">LOADING...</pre>
-          <div class="wx-atis-sec-lbl" style="font-size:11px;font-weight:bold;color:#aaa;margin:8px 0 2px;border-bottom:1px solid #333;">ATIS</div>
+          <div class="wx-atis-sec-lbl" style="font-size:11px;font-weight:bold;color:#aaa;margin:8px 0 2px;border-bottom:1px solid #333;display:flex;align-items:center;justify-content:space-between;">
+            <span>ATIS</span>
+            <button type="button" class="btn" style="font-size:10px;padding:2px 8px;" onclick="openAtisLive(document.getElementById('wx-metar-icao').value)">🔴 Live ATIS</button>
+          </div>
           <div id="wx-atis-box"></div>
         </div>
         <div style="flex:1;min-width:280px;">
@@ -3596,14 +3599,41 @@ function wxFetchAtis(icao, containerId) {
           .replace(/&gt;/gi, '>')
           .replace(/&nbsp;/gi, ' ');
         atisText = atisText.replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '');
-        container.innerHTML =
+
+        // ATIS本文から発行時刻（例: "INFO Q 1451Z" / "1234Z"）を抽出し、鮮度を判定する
+        var freshHtml = '';
+        var timeM = atisText.match(/\b(\d{2})(\d{2})Z\b/);
+        if(timeM) {
+          var atHH = parseInt(timeM[1], 10);
+          var atMM = parseInt(timeM[2], 10);
+          if(atHH >= 0 && atHH <= 23 && atMM >= 0 && atMM <= 59) {
+            var nowD = new Date();
+            var nowMin = nowD.getUTCHours() * 60 + nowD.getUTCMinutes();
+            var atMin = atHH * 60 + atMM;
+            var diffMin = nowMin - atMin;
+            if(diffMin < 0) diffMin += 1440; // 日付またぎ
+            var isStale = diffMin >= 90; // 90分以上前なら警告
+            var freshColor = isStale ? '#e65100' : '#2e7d32';
+            var freshBg = isStale ? '#fff3e0' : '#e8f5e9';
+            freshHtml = '<div style="font-size:11px;font-weight:bold;color:' + freshColor + ';'
+              + 'background:' + freshBg + ';border:1px solid ' + freshColor + ';'
+              + 'padding:3px 6px;border-radius:3px;margin-bottom:4px;">'
+              + (isStale ? '⚠ ' : '✓ ')
+              + 'ATIS報時刻 ' + ('0'+atHH).slice(-2) + ':' + ('0'+atMM).slice(-2) + 'Z'
+              + '（約' + diffMin + '分前）'
+              + (isStale ? ' — 古い可能性があります。右上の「🔴 Live ATIS」で確認してください' : '')
+              + '</div>';
+          }
+        }
+
+        container.innerHTML = freshHtml +
           '<div style="font-family:monospace;font-size:11px;white-space:pre-wrap;'
           + 'background:#f5f5f0;border:1px solid #ccc;padding:6px;border-radius:3px;'
           + 'color:#111;line-height:1.5;">'
           + atisText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
           + '</div>';
       } else {
-        container.innerHTML = '<span style="color:#888;font-size:11px;">ATIS データなし (' + icao + ')</span>';
+        container.innerHTML = '<span style="color:#888;font-size:11px;">ATIS データなし (' + icao + ')。「🔴 Live ATIS」ボタンで確認してください。</span>';
       }
     } else {
       container.innerHTML = '<span style="color:#f66;font-size:11px;">ATIS 取得エラー HTTP ' + xhr.status + '</span>';
@@ -3613,6 +3643,28 @@ function wxFetchAtis(icao, containerId) {
     container.innerHTML = '<span style="color:#f66;font-size:11px;">ATIS 通信エラー</span>';
   };
   xhr.send();
+}
+
+function openAtisLive(icao) {
+  var modal = document.getElementById('atis-live-modal');
+  var iframe = document.getElementById('atis-live-iframe');
+  var hint = document.getElementById('atis-live-icao-hint');
+  if(!modal || !iframe) return;
+  icao = String(icao || '').replace(/^\s+|\s+$/g, '').toUpperCase();
+  // atisview.comは空港別の直リンクに対応していないため、サイトを開いたうえで
+  // ICAOをクリップボードにコピーし、検索ボックスに貼り付けてもらう
+  if(icao && hint) hint.textContent = '検索欄に「' + icao + '」を貼り付けてください（コピー済み）';
+  if(icao && navigator.clipboard && navigator.clipboard.writeText) {
+    try { navigator.clipboard.writeText(icao); } catch(e) {}
+  }
+  // src="" だと iframe.src が自ページURLになるため、属性値で初回判定する
+  if(!iframe.getAttribute('src')) iframe.src = 'https://atisview.com';
+  modal.style.display = 'block';
+}
+
+function closeAtisLive() {
+  var modal = document.getElementById('atis-live-modal');
+  if(modal) modal.style.display = 'none';
 }
 
 function wxUpdateJmaAsf(icao) {
@@ -11594,8 +11646,18 @@ function renderMetarTafText(destIcao, altIcao, cellEl) {
           atisWrap.style.marginTop = '12px';
           var atisHdr = document.createElement('div');
           atisHdr.style.cssText = 'font-size:11px;font-weight:bold;color:' + C.acc + ';' +
-            'border-bottom:1px solid ' + C.bdr + ';padding-bottom:2px;margin-bottom:4px;';
-          atisHdr.textContent = '▍ATIS ' + t.icao;
+            'border-bottom:1px solid ' + C.bdr + ';padding-bottom:2px;margin-bottom:4px;' +
+            'display:flex;align-items:center;justify-content:space-between;';
+          var atisHdrLabel = document.createElement('span');
+          atisHdrLabel.textContent = '▍ATIS ' + t.icao;
+          atisHdr.appendChild(atisHdrLabel);
+          var atisLiveBtn = document.createElement('button');
+          atisLiveBtn.type = 'button';
+          atisLiveBtn.className = 'btn';
+          atisLiveBtn.style.cssText = 'font-size:10px;padding:2px 8px;';
+          atisLiveBtn.textContent = '🔴 Live ATIS';
+          atisLiveBtn.setAttribute('onclick', "openAtisLive('" + t.icao + "')");
+          atisHdr.appendChild(atisLiveBtn);
           atisWrap.appendChild(atisHdr);
           var atisBox = document.createElement('div');
           var atisBoxId = 'apch-atis-box-' + t.icao + '-' + bodyIdx;
@@ -16945,6 +17007,19 @@ if(WX_GFS_WIND_ON && typeof applyGfsWindLayer === 'function') applyGfsWindLayer(
   <div class="mp-body">
     <div class="mp-left" id="mp-left"></div>
     <div class="mp-right" id="mp-right"></div>
+  </div>
+</div>
+<!-- ===== ATIS LIVE MODAL (atisview.com iframe) ===== -->
+<div id="atis-live-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:9999;">
+  <div style="position:absolute;top:2%;left:2%;width:96%;height:96%;background:#fff;border-radius:6px;overflow:hidden;display:flex;flex-direction:column;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#1a2a3a;color:#fff;">
+      <span style="font-weight:bold;font-size:13px;">🔴 Live ATIS（atisview.com）<span id="atis-live-icao-hint" style="font-weight:normal;font-size:11px;color:#9fd3ff;margin-left:8px;"></span></span>
+      <span>
+        <a href="https://atisview.com" target="_blank" rel="noopener" style="color:#9fd3ff;font-size:11px;margin-right:12px;">新しいタブで開く ↗</a>
+        <button type="button" onclick="closeAtisLive()" style="background:#c62828;color:#fff;border:none;border-radius:3px;padding:4px 10px;font-size:12px;cursor:pointer;">✕ 閉じる</button>
+      </span>
+    </div>
+    <iframe id="atis-live-iframe" src="" style="flex:1;border:none;width:100%;"></iframe>
   </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
