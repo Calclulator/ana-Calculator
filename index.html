@@ -156,12 +156,16 @@
   .apch-err{color:#ff9800;font-size:12px;padding:8px 4px;}
   .apch-metar-raw{font-family:inherit;font-size:11px;white-space:pre-wrap;word-break:break-word;line-height:1.45;margin:0 0 8px;padding:6px;border-radius:4px;background:rgba(0,0,0,.25);color:#cfd8dc;}
   .apch-chart-img{width:100%;height:auto;max-height:280px;object-fit:contain;display:block;background:#000;}
+  .apch-chart-img.apch-brake-img{max-height:none;background:#fff;}
+  .apch-brake-note{font-size:11px;color:#b0bec5;margin-top:6px;line-height:1.5;}
   .apch-ext-link{display:inline-block;margin-top:6px;font-size:10px;color:#4fc3f7;text-decoration:none;}
   .apch-radar-map{width:100%;height:200px;border-radius:4px;}
   body.day-mode .apch-cell{background:#ffffff;border-color:#d0d8e4;}
   body.day-mode .apch-cell h3{color:#1565c0;}
   body.day-mode .apch-metar-raw{background:#f5f7fa;color:#1a2a3a;}
   body.day-mode .apch-chart-img{background:#eef1f5;}
+  body.day-mode .apch-chart-img.apch-brake-img{background:#fff;}
+  body.day-mode .apch-brake-note{color:#546e7a;}
   body.day-mode .apch-ext-link{color:#1565c0;}
   @media (max-width:700px){.apch-grid{grid-template-columns:1fr;}}
   .docs-nav-btn{padding:4px 10px;border:1px solid #555;background:#1a1a2e;color:#ccc;border-radius:4px;cursor:pointer;font-size:12px;font-family:inherit;touch-action:manipulation;}
@@ -620,6 +624,7 @@
       <button type="button" onclick="showDocsTab('docs-erg')" class="docs-nav-btn" id="dnav-erg">ERG CODE</button>
       <button type="button" onclick="showDocsTab('docs-pax')" class="docs-nav-btn" id="dnav-pax">配慮を要する旅客</button>
       <button type="button" onclick="showDocsTab('docs-tarmac')" class="docs-nav-btn" id="dnav-tarmac">TARMAC DELAY</button>
+      <button type="button" onclick="showDocsTab('docs-seatconfig')" class="docs-nav-btn" id="dnav-seatconfig">座席コンフィグ</button>
     </div>
     <div id="docs-wx-mnm" class="docs-tab-content">
       <div class="section-title">出発地・目的地・代替 WX MNM Below 判定フロー</div>
@@ -1362,6 +1367,38 @@
       <p style="font-size:11px;color:#aaa;">
         * 米国・カナダ・中国については、計画上当該国外を発着地とする便が当該国内にダイバートした場合は適用除外となります。
       </p>
+    </div>
+    <div id="docs-seatconfig" class="docs-tab-content" style="display:none;">
+      <div class="section-title">ボーイング787 座席コンフィグ（ANA公式サイトへリンク）</div>
+      <p style="font-size:11px;color:#aaa;">
+        座席図はANA公式サイトの著作物のため、このアプリには保存・埋め込みしていません。
+        ボタンを押すとANA公式サイトのシートマップページが新しいタブで開きます。
+        787-8・787-9は国際線/国内線・就航時期により複数コンフィグが存在するため、
+        詳細な座席数・配置は各リンク先で確認してください。
+      </p>
+
+      <h3>ボーイング787-8（788）</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+        <a class="btn" href="https://www.ana.co.jp/ja/us/travel-information/seat-map/b787-8/" target="_blank" rel="noopener">国際線シートマップ ↗</a>
+        <a class="btn" href="https://www.ana.co.jp/ja/jp/guide/prepare/seatmap/domestic/b787_8/" target="_blank" rel="noopener">国内線シートマップ ↗</a>
+      </div>
+
+      <h3>ボーイング787-9（789）</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+        <a class="btn" href="https://www.ana.co.jp/ja/us/travel-information/seat-map/b787-9/" target="_blank" rel="noopener">国際線シートマップ ↗</a>
+        <a class="btn" href="https://www.ana.co.jp/ja/jp/guide/prepare/seatmap/domestic/b787_9/" target="_blank" rel="noopener">国内線シートマップ ↗</a>
+      </div>
+
+      <h3>ボーイング787-10（781）</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+        <a class="btn" href="https://www.ana.co.jp/ja/us/travel-information/seat-map/b787-10/" target="_blank" rel="noopener">国際線シートマップ ↗</a>
+      </div>
+
+      <h3>機種一覧ページ（全機材まとめて確認したい場合）</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        <a class="btn" href="https://www.ana.co.jp/ja/us/international/departure/inflight/seatmap/" target="_blank" rel="noopener">国際線 機種一覧 ↗</a>
+        <a class="btn" href="https://www.ana.co.jp/ja/jp/guide/prepare/seatmap/domestic/b787/" target="_blank" rel="noopener">国内線 787一覧 ↗</a>
+      </div>
     </div>
   </div>
 </div>
@@ -10751,7 +10788,7 @@ function initApchGrid() {
     try { APCH_RADAR_MAP.remove(); } catch(e) {}
     APCH_RADAR_MAP = null;
   }
-  var titles = ['METAR/TAF', '断面図', '地上天気図', 'Radar', '到着空港ライブ (ADS-B Exchange)', '悪天予想図'];
+  var titles = ['METAR/TAF', '断面図', 'Brake Cooling Time', 'Radar', '到着空港ライブ (ADS-B Exchange)', '悪天予想図'];
   var i, cell, h, hdr, body, btnM, btnA;
   apchClearEl(host);
   var grid = document.createElement('div');
@@ -10958,6 +10995,41 @@ function loadJmaSurfaceChart(etaDate, cellEl, captionOverride) {
   }).catch(function() {
     apchSetError(cellEl, '地上天気図: 取得失敗');
   });
+}
+
+function apchBrakeCoolingImagePath() {
+  var code = NAV_ACFT_CODE || '';
+  if(/^NH8/.test(code)) return 'assets/brake_cooling/2577.jpg';
+  if(/^NH9/.test(code)) return 'assets/brake_cooling/2578.jpg';
+  if(/^NHX/.test(code)) return 'assets/brake_cooling/2579.jpg';
+  return null;
+}
+
+function loadApchBrakeCooling(cellEl) {
+  if(!cellEl) return;
+  var imgPath = apchBrakeCoolingImagePath();
+  apchClearEl(cellEl);
+  if(!imgPath) {
+    apchSetError(cellEl, '機材コード未確定のため Brake Cooling Time 表が表示できません（FLT PLN読込後に表示されます）');
+    return;
+  }
+  var img = document.createElement('img');
+  img.className = 'apch-chart-img apch-brake-img';
+  img.alt = 'Brake Cooling Time';
+  img.src = imgPath;
+  img.onerror = function() {
+    apchSetError(cellEl, 'Brake Cooling Time 画像の読み込みに失敗しました: ' + imgPath);
+  };
+  cellEl.appendChild(img);
+
+  var note = document.createElement('div');
+  note.className = 'apch-brake-note';
+  note.innerHTML =
+    '<b>One ENG Taxi考慮:</b> Taxi-inでOne ENG Taxiを実施する場合、通常よりTaxi時間が延伸するため、' +
+    'その分ブレーキの自然冷却が進み、上表のBrake Cooling Timeに対して有利に働く可能性がある。' +
+    'ただし冷却効果を正確に数値化することはできないため、あくまで参考情報とし、' +
+    'Table記載の値を基準に次便の定時性への影響を判断すること。';
+  cellEl.appendChild(note);
 }
 
 function isJapanAirport(icao) {
@@ -11853,7 +11925,7 @@ function replayApchBrief() {
   initApchGrid();
   renderMetarTafText(APCH_LAST.destIcao, APCH_LAST.altIcao, apchCell(1));
   drawCrossSection({ destIcao: APCH_LAST.destIcao, arrivalTC: APCH_LAST.arrivalTC }, apchCell(2));
-  loadSurfaceChart(APCH_LAST.destIcao, APCH_LAST.etaDate, apchCell(3));
+  loadApchBrakeCooling(apchCell(3));
   drawRadar(APCH_LAST.destIcao, APCH_LAST.lat, APCH_LAST.lon, apchCell(4));
   loadApchFaAirport(APCH_LAST.destIcao, apchCell(5));
   loadApchSigwx(APCH_LAST.destIcao, APCH_LAST.etaDate, apchCell(6));
@@ -12215,7 +12287,7 @@ function runApchBrief() {
 
   renderMetarTafText(inp.destIcao, inp.altIcao, apchCell(1));
   drawCrossSection(inp, apchCell(2));
-  loadSurfaceChart(inp.destIcao, etaDate, apchCell(3));
+  loadApchBrakeCooling(apchCell(3));
   loadApchFaAirport(inp.destIcao, apchCell(5));
   loadApchSigwx(inp.destIcao, etaDate, apchCell(6));
 
