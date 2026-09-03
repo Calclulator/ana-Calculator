@@ -11024,11 +11024,7 @@ function loadApchBrakeCooling(cellEl) {
 
   var note = document.createElement('div');
   note.className = 'apch-brake-note';
-  note.innerHTML =
-    '<b>One ENG Taxi考慮:</b> Taxi-inでOne ENG Taxiを実施する場合、通常よりTaxi時間が延伸するため、' +
-    'その分ブレーキの自然冷却が進み、上表のBrake Cooling Timeに対して有利に働く可能性がある。' +
-    'ただし冷却効果を正確に数値化することはできないため、あくまで参考情報とし、' +
-    'Table記載の値を基準に次便の定時性への影響を判断すること。';
+  note.textContent = 'One ENG Taxi考慮';
   cellEl.appendChild(note);
 }
 
