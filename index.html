@@ -103,6 +103,10 @@
   #atm-gfs-panel table td:first-child{color:#90a4ae;}
   .fp-in:focus{outline:none;border-bottom-color:#4fc3f7;background:#060a14;}
   .fp-in::placeholder{color:#2a3a4e;}
+  .fp-etp-row, .fp-etp-row td,
+  .fp-table tr.fp-etp-row td,
+  .fp-table tr.fp-etp-row:hover td { background:#ffff00 !important; color:#000000 !important; }
+  .fp-etp-row input.fp-in { background:#fffde7 !important; color:#000000 !important; border-color:#e0c200 !important; }
   .fp-note{width:90px;}
   .dp{color:#66bb6a;}
   .dn{color:#ef5350;}
@@ -6326,7 +6330,7 @@ function runParse() {
   }
 
   // ウェイポイント座標パース
-  var skipWords = {FL:1,DEC:1,CLM:1,TOC:1,TOD:1,MLDW:1,R:1,RMG:1,P:1,ETP:1,ETP1:1,ETP2:1,ETP3:1,ETP4:1,EEP:1,EEP1:1,EEP2:1,EEP3:1,EXP:1,EXP1:1,EXP2:1,EXP3:1,PLAN:1,NML:1,STD:1,STA:1,BOF:1,CON:1,RSV:1,ALT:1,TAX:1,REQ:1,PCF:1,EXT:1,FOB:1,FOD:1,NM:1,POSITION:1,WX:1,DATA:1,TURB:1,INFOR:1,BELT:1,COND:1,SVC:1,WIND:1,TEMP:1,ICE:1,CLOUD:1,REMARKS:1,ACARSN:1,ACARSY:1};
+  var skipWords = {FL:1,DEC:1,CLM:1,TOC:1,TOD:1,MLDW:1,R:1,RMG:1,P:1,ETP:1,EEP:1,EEP1:1,EEP2:1,EEP3:1,EXP:1,EXP1:1,EXP2:1,EXP3:1,PLAN:1,NML:1,STD:1,STA:1,BOF:1,CON:1,RSV:1,ALT:1,TAX:1,REQ:1,PCF:1,EXT:1,FOB:1,FOD:1,NM:1,POSITION:1,WX:1,DATA:1,TURB:1,INFOR:1,BELT:1,COND:1,SVC:1,WIND:1,TEMP:1,ICE:1,CLOUD:1,REMARKS:1,ACARSN:1,ACARSY:1};
   var coordRe = /([NS]\d{5}[EW]\d{6,7})/;
   var seen = {};
   var phaseForNextWp = 'climb';
@@ -6387,8 +6391,9 @@ function runParse() {
       newVWS[wid] = Math.abs(ws2-ws1)/2;
     }
 
+    var isEtpWp = /^ETP\d+$/.test(wid);
     console.log('[parse] WP found:', wid, c.lat.toFixed(2), c.lng.toFixed(2), 'ctme:', ctmeMin);
-    newWP.push({id:wid,lat:c.lat,lng:c.lng,t:false,ctme:ctmeMin,fuel:wfuel,alt:walt,phase:phaseForNextWp,navTc:navTc});
+    newWP.push({id:wid,lat:c.lat,lng:c.lng,t:false,ctme:ctmeMin,fuel:wfuel,alt:walt,phase:phaseForNextWp,navTc:navTc,etp:isEtpWp});
   }
   console.log('[parse] newWP total:', newWP.length, '| newAlts:', newAlts.length, '| newEtps:', newEtps.length);
 
@@ -6528,7 +6533,7 @@ function buildFpRows(dep, depFuel) {
       if(WP[j].ctme!==null){prevCtme=WP[j].ctme||0;break;}
     }
     var ztme = (w.ctme!==null) ? Math.max(0,w.ctme-prevCtme) : null;
-    FP_ROWS.push({id:w.id,ctme:w.ctme,ztme:ztme,fuel:w.fuel,alt:w.alt,ato:'',actualFuel:'',crossAt:'',note:'',phase:(w.phase||'climb')});
+    FP_ROWS.push({id:w.id,ctme:w.ctme,ztme:ztme,fuel:w.fuel,alt:w.alt,ato:'',actualFuel:'',crossAt:'',note:'',phase:(w.phase||'climb'),etp: !!w.etp});
   }
 }
 
@@ -6759,6 +6764,9 @@ function renderFpTable() {
     tr.style.background = isFirBoundary ? pal.hi : pal.bg;
     if(prevRowFirName !== undefined && rowFirName !== prevRowFirName) {
       tr.style.borderTop = DAY_MODE ? '3px double #1565c0' : '3px double #ffa726';
+    }
+    if(row.etp) {
+      tr.className = 'fp-etp-row';
     }
 
     var eto = calcEto(row.ctme);
@@ -14591,6 +14599,8 @@ function toggleMode() {
     .fp-table th{background:#f0f4f8!important;color:#546e7a!important;border-bottom-color:#d0d8e4!important;}
     .fp-table td{background:#ffffff!important;border-bottom-color:#e8ecf0!important;color:#2a3a4e!important;}
     .fp-table tr:hover td{background:#eef1f5!important;}
+    .fp-table tr.fp-etp-row td,.fp-table tr.fp-etp-row:hover td{background:#ffff00!important;color:#000000!important;}
+    .fp-etp-row input.fp-in{background:#fffde7!important;color:#000000!important;border-color:#e0c200!important;}
     .fp-in{background:#ffffff!important;border-bottom-color:#b0bec5!important;color:#1a2a3a!important;}
     #fp-navlog{background:#f0f4f8!important;border-bottom-color:#d0d8e4!important;}
     #fp-navlog textarea{background:#ffffff!important;border-color:#c8d0da!important;color:#2a3a4e!important;}
