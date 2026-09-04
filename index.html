@@ -10860,11 +10860,12 @@ function apchPickAloft(wpData, targetFt) {
 function buildCrossSectionFromNavlog(destIcao, arrivalTC) {
   var aloft = (typeof NAV_WINDS_ALOFT !== 'undefined' && NAV_WINDS_ALOFT) ? NAV_WINDS_ALOFT : {};
   var ordered = [];
-  var i, w, last5, destLat, destLon, apt, col, distNm, pts;
+  var i, w, cols, destLat, destLon, apt, col, distNm, pts;
   if(typeof WP !== 'undefined' && WP) {
     for(i = 0; i < WP.length; i++) {
       w = WP[i];
       if(!w || !w.id) continue;
+      if(w.phase !== 'descent') continue;
       if(aloft[w.id]) ordered.push({ id: w.id, data: aloft[w.id], wp: w });
     }
   }
@@ -10874,8 +10875,7 @@ function buildCrossSectionFromNavlog(destIcao, arrivalTC) {
       ordered.push({ id: keys[i], data: aloft[keys[i]], wp: null });
     }
   }
-  last5 = ordered.slice(-5);
-  while(last5.length < 5 && last5.length > 0) last5.unshift(last5[0]);
+  cols = ordered;
   destLat = null;
   destLon = null;
   if(destIcao && typeof APT !== 'undefined' && APT[destIcao]) {
@@ -10885,24 +10885,24 @@ function buildCrossSectionFromNavlog(destIcao, arrivalTC) {
       destLon = apt.lon;
     }
   }
-  if(destLat == null && last5.length && last5[last5.length - 1].wp) {
-    w = last5[last5.length - 1].wp;
+  if(destLat == null && cols.length && cols[cols.length - 1].wp) {
+    w = cols[cols.length - 1].wp;
     if(typeof w.lat === 'number') {
       destLat = w.lat;
       destLon = (typeof w.lon === 'number') ? w.lon : w.lng;
     }
   }
   pts = [];
-  for(i = 0; i < last5.length; i++) {
-    col = last5[i];
-    distNm = APCH_DISTS[i];
+  for(i = 0; i < cols.length; i++) {
+    col = cols[i];
+    distNm = null;
     w = col.wp;
     if(w && typeof w.lat === 'number' && destLat != null) {
       distNm = Math.round(apchHaversineNm(w.lat, (typeof w.lon === 'number' ? w.lon : w.lng), destLat, destLon));
     }
     pts.push({ id: col.id, dist: distNm });
   }
-  return { cols: last5, points: pts };
+  return { cols: cols, points: pts };
 }
 
 function parseJmaTime(str) {
@@ -11618,6 +11618,23 @@ function trySkewTUrls(icao, wmo, candidates, idx, el, etaDate) {
   img.src = urlWithSrc;
 }
 
+// Web Mercator図法の縮尺 (156543.03392 m/px at zoom0, 赤道上) を使い、
+// 指定した緯度・コンテナ幅(px)・表示したい半幅(NM)から近似的なzoom値(1-20の整数)を算出する。
+// ※ ADS-B Exchange(tar1090)にはNM単位で範囲指定するURLパラメータが無いための近似計算。
+//   実際の見え方は埋め込み先ページのUI(コントロール等の余白)により多少前後する。
+function apchLiveMapZoomForRangeNm(destIcao, containerWidthPx, rangeNm) {
+  var apt = (typeof APT !== 'undefined' && APT) ? APT[destIcao] : null;
+  var latDeg = (apt && typeof apt.lat === 'number') ? apt.lat : 35;
+  var latRad = latDeg * Math.PI / 180;
+  var wPx = containerWidthPx || 400;
+  var halfWidthM = (rangeNm || 50) * 1852;
+  var z = Math.log((wPx / 2 * 156543.03392 * Math.cos(latRad)) / halfWidthM) / Math.LN2;
+  z = Math.round(z);
+  if(z < 1) z = 1;
+  if(z > 20) z = 20;
+  return z;
+}
+
 // APCH Preparationページ 左下セル: 目的地空港のADS-B Exchangeライブマップをiframeで表示する。
 function loadApchFaAirport(icao, containerEl) {
   var el = (typeof containerEl === 'string') ? document.getElementById(containerEl) : containerEl;
@@ -11630,7 +11647,9 @@ function loadApchFaAirport(icao, containerEl) {
   }
   // FlightAware(ja.flightaware.com)はX-Frame-Options:SAMEORIGINでiframe埋め込みがブロックされるため、
   // 埋め込み可能なADS-B Exchangeのライブマップに変更。?airport=ICAOで直接その空港にズームできる。
-  var mapUrl = 'https://globe.adsbexchange.com/?airport=' + ic + '&zoom=9';
+  var containerWidthPx = el.clientWidth || (el.parentNode && el.parentNode.clientWidth) || 400;
+  var liveMapZoom = apchLiveMapZoomForRangeNm(ic, containerWidthPx, 50);
+  var mapUrl = 'https://globe.adsbexchange.com/?airport=' + ic + '&zoom=' + liveMapZoom;
 
   var wrap = document.createElement('div');
   wrap.style.cssText = 'display:flex;flex-direction:column;height:100%;';
@@ -11991,7 +12010,7 @@ function renderCrossSection(wxData, points, hostEl) {
   var host = hostEl || document.getElementById('apch-cell-2') || document.getElementById('apch-section');
   if(!host) return;
   var C = getDayColors();
-  var nCol = APCH_DISTS.length;
+  var nCol = (wxData && wxData.length) ? wxData.length : 0;
   var nRow = APCH_LEVELS.length;
   var leftPad = 44, topPad = 8, botPad = 48, rightPad = 8;
   var cellW = 56, cellH = 30;
@@ -12028,7 +12047,6 @@ function renderCrossSection(wxData, points, hostEl) {
     viewBox: '0 0 ' + W + ' ' + H
   });
   svg.style.display = 'block';
-  svg.style.maxWidth = '100%';
 
   for(r = 0; r < nRow; r++) {
     y = topPad + r * cellH;
@@ -12080,7 +12098,8 @@ function renderCrossSection(wxData, points, hostEl) {
 
   for(c = 0; c < nCol; c++) {
     x = leftPad + c * cellW + cellW / 2;
-    lbl = (points && points[c] && points[c].dist === 0) ? 'APT' : ((points && points[c] && points[c].dist != null) ? (points[c].dist + 'NM') : (APCH_DISTS[c] + 'NM'));
+    lbl = (points && points[c] && points[c].dist === 0) ? 'APT' :
+      ((points && points[c] && points[c].dist != null) ? (points[c].dist + 'NM') : '—');
     svg.appendChild(apchSvgEl('text', {
       x: x, y: topPad + nRow * cellH + 14, 'text-anchor': 'middle', fill: C.lbl, 'font-size': 10
     }, lbl));
